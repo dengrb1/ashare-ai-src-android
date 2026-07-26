@@ -41,27 +41,16 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
         }
     }
 
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(date) { load() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(title = "候选池")
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("交易日") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            TextButton(onClick = { scope.launch { load() } }) { Text("查询") }
-        }
+        DateSelectorField(
+            value = date,
+            onValueChange = { date = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        )
 
         error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
 
@@ -71,7 +60,7 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
             EmptyPlaceholder("该交易日暂无候选股")
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(candidates, key = { it.symbol }) { c ->

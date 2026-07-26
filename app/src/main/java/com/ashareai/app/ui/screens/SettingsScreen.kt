@@ -1,5 +1,12 @@
 package com.ashareai.app.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -7,11 +14,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.ashareai.app.island.MonitorService
+import com.ashareai.app.island.FocusCapabilities
+import com.ashareai.app.island.FocusNotification
 import com.ashareai.app.data.normalizeServerUrl
 import com.ashareai.app.ui.AppViewModel
 import com.ashareai.app.ui.components.AppCard
+import com.ashareai.app.ui.components.KeyValueRow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** 设置：服务器地址、行情刷新间隔、深浅色、超级岛监控开关。 */
 @Composable
@@ -24,9 +38,28 @@ fun SettingsScreen(appViewModel: AppViewModel) {
 
     var baseUrl by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
+    var notificationsGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsGranted = granted
+        if (granted) {
+            scope.launch {
+                appViewModel.settings.setIslandEnabled(true)
+                MonitorService.start(context)
+            }
+        } else {
+            message = "通知权限未开启，监控不会在后台运行"
+        }
+    }
 
     LaunchedEffect(Unit) {
         baseUrl = appViewModel.settings.currentBaseUrl()
+        focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -107,10 +140,10 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("超级岛持仓监控", style = MaterialTheme.typography.titleSmall)
+                            Text("行情与研究通知", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "在小米 HyperOS 超级岛常驻显示持仓盈亏；卖出/止损预警会以焦点通知弹出。其他设备显示为普通常驻通知。",
+                                "后台监控持仓、交易预警和研究进度。所有设备使用标准通知；系统允许时自动增强为焦点通知或超级岛。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -118,17 +151,40 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                         Switch(
                             checked = islandEnabled,
                             onCheckedChange = { enabled ->
-                                scope.launch {
-                                    appViewModel.settings.setIslandEnabled(enabled)
-                                    if (enabled) {
-                                        MonitorService.start(context)
-                                    } else {
+                                if (!enabled) {
+                                    scope.launch {
+                                        appViewModel.settings.setIslandEnabled(false)
                                         MonitorService.stop(context)
+                                    }
+                                } else if (Build.VERSION.SDK_INT >= 33 && !notificationsGranted) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    scope.launch {
+                                        appViewModel.settings.setIslandEnabled(true)
+                                        MonitorService.start(context)
                                     }
                                 }
                             },
                         )
                     }
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                    KeyValueRow("普通通知", if (notificationsGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()) "可用" else "未授权")
+                    val capabilities = focusCapabilities
+                    KeyValueRow("HyperOS 焦点协议", capabilities?.protocolVersion?.takeIf { it > 0 }?.let { "v$it" } ?: "不支持")
+                    KeyValueRow("焦点通知权限", if (capabilities?.focusPermission == true) "已开通" else "未开通")
+                    KeyValueRow("小米超级岛", if (capabilities?.superIslandReady == true) "可用" else "当前不可用")
+                    Text(
+                        "超级岛仅在 HyperOS 3、系统支持岛且小米已为应用包名和通知渠道开通焦点权限时生效。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            },
+                        )
+                    }) { Text("打开系统通知设置") }
                 }
             }
 

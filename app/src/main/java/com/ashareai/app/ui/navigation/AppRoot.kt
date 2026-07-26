@@ -1,6 +1,7 @@
 package com.ashareai.app.ui.navigation
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,6 +22,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ashareai.app.ui.AppViewModel
 import com.ashareai.app.ui.screens.*
+import com.ashareai.app.island.NotificationNavigation
+import kotlinx.coroutines.flow.StateFlow
 
 object Routes {
     const val LOGIN = "login"
@@ -58,28 +62,46 @@ private val bottomTabs = listOf(
 )
 
 @Composable
-fun AppRoot(appViewModel: AppViewModel) {
+fun AppRoot(
+    appViewModel: AppViewModel,
+    pendingRoute: StateFlow<String?>,
+    onRouteConsumed: () -> Unit,
+) {
     val authState by appViewModel.authState.collectAsState()
 
     when (authState) {
         is AppViewModel.AuthState.Loading -> SplashScreen()
         is AppViewModel.AuthState.LoggedOut -> LoginScreen(appViewModel)
-        is AppViewModel.AuthState.LoggedIn -> MainScaffold(appViewModel)
+        is AppViewModel.AuthState.LoggedIn -> MainScaffold(appViewModel, pendingRoute, onRouteConsumed)
     }
 }
 
 @Composable
-private fun MainScaffold(appViewModel: AppViewModel) {
+private fun MainScaffold(
+    appViewModel: AppViewModel,
+    pendingRoute: StateFlow<String?>,
+    onRouteConsumed: () -> Unit,
+) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val requestedRoute by pendingRoute.collectAsState()
+
+    LaunchedEffect(requestedRoute) {
+        requestedRoute?.let { untrusted ->
+            NotificationNavigation.sanitize(untrusted)?.let { route ->
+                navController.navigate(route) { launchSingleTop = true }
+            }
+            onRouteConsumed()
+        }
+    }
 
     val showBottomBar = currentRoute in bottomTabs.map { it.route }
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
+                NavigationBar(modifier = Modifier.height(64.dp)) {
                     bottomTabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
@@ -92,6 +114,7 @@ private fun MainScaffold(appViewModel: AppViewModel) {
                             },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
                             label = { Text(tab.label) },
+                            alwaysShowLabel = false,
                         )
                     }
                 }

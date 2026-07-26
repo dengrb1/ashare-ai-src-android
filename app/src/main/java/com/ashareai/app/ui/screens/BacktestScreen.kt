@@ -149,8 +149,8 @@ private fun SubmitBacktestDialog(
     onSubmit: (BacktestRequest) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf("") }
-    var endDate by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(java.time.LocalDate.now().minusYears(1).toString()) }
+    var endDate by remember { mutableStateOf(todayTradingDate()) }
     var selectedSnapshots by remember { mutableStateOf<Set<String>>(emptySet()) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -160,16 +160,8 @@ private fun SubmitBacktestDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, singleLine = true)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = startDate, onValueChange = { startDate = it },
-                        label = { Text("开始 yyyy-MM-dd") }, singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = endDate, onValueChange = { endDate = it },
-                        label = { Text("结束 yyyy-MM-dd") }, singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                }
+                DateSelectorField(startDate, { startDate = it }, modifier = Modifier.fillMaxWidth(), label = "开始日期")
+                DateSelectorField(endDate, { endDate = it }, modifier = Modifier.fillMaxWidth(), label = "结束日期")
                 if (snapshots.isNotEmpty()) {
                     Text("选择快照（${selectedSnapshots.size}）", style = MaterialTheme.typography.labelLarge)
                     snapshots.take(8).forEach { s ->
@@ -195,6 +187,10 @@ private fun SubmitBacktestDialog(
             TextButton(onClick = {
                 if (name.isBlank() || startDate.isBlank() || endDate.isBlank()) {
                     error = "请填写名称与起止日期"
+                    return@TextButton
+                }
+                if (startDate > endDate) {
+                    error = "开始日期不能晚于结束日期"
                     return@TextButton
                 }
                 onSubmit(

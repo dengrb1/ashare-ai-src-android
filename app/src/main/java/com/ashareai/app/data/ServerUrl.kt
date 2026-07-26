@@ -1,5 +1,6 @@
 package com.ashareai.app.data
 
+import com.ashareai.app.BuildConfig
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.URI
 
@@ -17,6 +18,15 @@ fun normalizeServerUrl(input: String): Result<String> = runCatching {
         ?: throw IllegalArgumentException("服务器地址格式不正确")
     require(parsed.scheme == "http" || parsed.scheme == "https") {
         "服务器地址仅支持 http 或 https"
+    }
+    require(BuildConfig.DEBUG || parsed.scheme == "https") {
+        "正式版本仅允许 HTTPS 服务器"
+    }
+    require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
+        "服务器地址不能包含用户名或密码"
+    }
+    require(parsed.query == null && parsed.fragment == null) {
+        "服务器地址不能包含查询参数或片段"
     }
 
     val uri = URI(withScheme)

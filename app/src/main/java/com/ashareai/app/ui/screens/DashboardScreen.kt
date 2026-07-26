@@ -112,8 +112,8 @@ fun TopAppBarSimple(
     unread: Int = 0,
     onNotifications: (() -> Unit)? = null,
 ) {
-    CenterAlignedTopAppBar(
-        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+    CompactTopBar(
+        title = title,
         actions = {
             if (onNotifications != null) {
                 BadgedBox(
@@ -122,7 +122,7 @@ fun TopAppBarSimple(
                             Badge { Text(if (unread > 99) "99+" else "$unread") }
                         }
                     },
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier.padding(end = 4.dp),
                 ) {
                     IconButton(onClick = onNotifications) {
                         Icon(Icons.Outlined.Notifications, contentDescription = "通知")

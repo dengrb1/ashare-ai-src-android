@@ -38,6 +38,7 @@ fun ReportsScreen(
 ) {
     val scope = rememberCoroutineScope()
     var date by remember { mutableStateOf(initialDate ?: todayTradingDate()) }
+    var runId by remember { mutableStateOf(initialRunId) }
     var report by remember { mutableStateOf<Report?>(null) }
     var content by remember { mutableStateOf<String?>(null) }
     var symbols by remember { mutableStateOf<List<ReportSymbol>>(emptyList()) }
@@ -51,7 +52,7 @@ fun ReportsScreen(
         loading = true
         error = null
         try {
-            val r = ApiClient.api.report(date, runId = initialRunId)
+            val r = ApiClient.api.report(date, runId = runId)
             report = r
             val reportId = r.report_id
             if (reportId != null) {
@@ -98,9 +99,9 @@ fun ReportsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        CenterAlignedTopAppBar(
-            title = { Text("研究报告", style = MaterialTheme.typography.titleMedium) },
-            navigationIcon = {
+        CompactTopBar(
+            title = "研究报告",
+            navigation = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                 }
@@ -108,22 +109,11 @@ fun ReportsScreen(
         )
 
         // 日期选择
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("交易日") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            TextButton(onClick = { scope.launch { load() } }) { Text("查询") }
-        }
+        DateSelectorField(
+            value = date,
+            onValueChange = { date = it; runId = null },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        )
 
         error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
 

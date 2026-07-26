@@ -35,7 +35,6 @@ class MonitorService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var loop: Job? = null
-    private val seenNotificationIds = HashSet<String>()
     private val df = DecimalFormat("#,##0.00")
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -47,7 +46,10 @@ class MonitorService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            stopSelf()
+            scope.launch {
+                (application as AShareApp).settings.setIslandEnabled(false)
+                stopSelf()
+            }
             return START_NOT_STICKY
         }
         if (loop == null) {
@@ -62,11 +64,7 @@ class MonitorService : Service() {
     }
 
     private fun startForegroundCompat(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFY_ID_MONITOR, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFY_ID_MONITOR, notification)
-        }
+        startForeground(NOTIFY_ID_MONITOR, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
     private suspend fun monitorLoop() {
@@ -120,13 +118,20 @@ class MonitorService : Service() {
         // 2) 预警通知（卖出建议 / 止损 / 高风险）
         try {
             val summary = api.notificationSummary()
+            val unseen = settings.claimUnseenNotificationIds(
+                summary.latest.filter { it.read_at == null }.map { it.notification_id },
+            )
             summary.latest
-                .filter { it.read_at == null && it.notification_id !in seenNotificationIds }
+                .filter { it.read_at == null && it.notification_id in unseen }
                 .filter { it.severity.uppercase() in setOf("HIGH", "CRITICAL", "WARNING") }
                 .take(3)
                 .forEach { n ->
-                    seenNotificationIds.add(n.notification_id)
-                    notifyAlert(n.notification_id.hashCode(), n.title, n.body)
+                    notifyAlert(
+                        n.notification_id.hashCode(),
+                        n.title,
+                        n.body,
+                        NotificationNavigation.forNotification(n),
+                    )
                 }
         } catch (_: Exception) {
         }
@@ -146,9 +151,19 @@ class MonitorService : Service() {
         return interval
     }
 
-    private fun contentIntent(): PendingIntent = PendingIntent.getActivity(
-        this, 0,
-        Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP },
+    private fun contentIntent(route: String = "home"): PendingIntent = PendingIntent.getActivity(
+        this, route.hashCode(),
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_ROUTE, route)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun stopIntent(): PendingIntent = PendingIntent.getService(
+        this,
+        0,
+        Intent(this, MonitorService::class.java).setAction(ACTION_STOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
@@ -161,15 +176,19 @@ class MonitorService : Service() {
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent())
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .addAction(0, "停止监控", stopIntent())
         return FocusNotification.decorate(
-            builder,
+            context = this,
+            builder = builder,
             title = title,
             content = content,
             subContent = subContent,
             colorContent = color,
             ticker = content,
             enableFloat = false,
-            timeoutSeconds = 3600,
+            timeoutMinutes = 720,
+            islandTimeoutSeconds = 3_600,
         )
     }
 
@@ -178,22 +197,26 @@ class MonitorService : Service() {
             .notify(NOTIFY_ID_MONITOR, buildMonitorNotification(title, content, subContent, color))
     }
 
-    private fun notifyAlert(id: Int, title: String, body: String) {
+    private fun notifyAlert(id: Int, title: String, body: String, route: String) {
         val builder = NotificationCompat.Builder(this, AShareApp.CHANNEL_ALERT)
             .setSmallIcon(R.drawable.ic_stat_trend)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(contentIntent())
+            .setContentIntent(contentIntent(route))
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
         val notification = FocusNotification.decorate(
-            builder,
+            context = this,
+            builder = builder,
             title = title,
             content = body.take(40),
             ticker = title,
             enableFloat = true,
-            timeoutSeconds = 600,
+            timeoutMinutes = 10,
+            islandTimeoutSeconds = 600,
         )
         getSystemService(NotificationManager::class.java).notify(id, notification)
     }
@@ -206,15 +229,18 @@ class MonitorService : Service() {
             .setProgress(100, progress, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(contentIntent())
+            .setContentIntent(contentIntent("research"))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
         val notification = FocusNotification.decorate(
-            builder,
+            context = this,
+            builder = builder,
             title = "每日研究",
             content = "$progress%",
             subContent = phase,
             ticker = "研究 $progress%",
             enableFloat = false,
-            timeoutSeconds = 1800,
+            timeoutMinutes = 30,
+            islandTimeoutSeconds = 1_800,
         )
         getSystemService(NotificationManager::class.java).notify(NOTIFY_ID_PROGRESS, notification)
     }
@@ -232,6 +258,7 @@ class MonitorService : Service() {
             context.startForegroundService(Intent(context, MonitorService::class.java))
         }
 
+        @android.annotation.SuppressLint("ImplicitSamInstance")
         fun stop(context: Context) {
             context.stopService(Intent(context, MonitorService::class.java))
         }

@@ -1,11 +1,17 @@
 package com.ashareai.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -13,6 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import com.ashareai.app.ui.theme.changeColor
 
 /** 简约卡片：白底、圆角、细描边，无阴影堆叠。 */
@@ -27,7 +38,99 @@ fun AppCard(
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(modifier = Modifier.padding(16.dp), content = content)
+        Column(modifier = Modifier.padding(12.dp), content = content)
+    }
+}
+
+/** 48dp 内容区的紧凑顶栏；状态栏 inset 仍由系统安全区域保留。 */
+@Composable
+fun CompactTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    navigation: (@Composable () -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(48.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (navigation != null) {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { navigation() }
+            } else {
+                Spacer(Modifier.width(12.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            actions()
+        }
+    }
+}
+
+/** 只读日期字段，避免无效格式输入；允许历史日期且禁止未来日期。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateSelectorField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "交易日",
+    maxDate: LocalDate = LocalDate.now(),
+) {
+    var open by remember { mutableStateOf(false) }
+    val selected = runCatching { LocalDate.parse(value) }.getOrDefault(maxDate)
+
+    Surface(
+        modifier = modifier
+            .heightIn(min = 54.dp)
+            .clickable { open = true },
+        shape = MaterialTheme.shapes.small,
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value.ifBlank { "选择日期" }, style = MaterialTheme.typography.bodyMedium)
+            }
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = "选择$label", tint = MaterialTheme.colorScheme.primary)
+        }
+    }
+
+    if (open) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = selected.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate() <= maxDate
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        onValueChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    open = false
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("取消") } },
+        ) { DatePicker(state = state, showModeToggle = false) }
     }
 }
 

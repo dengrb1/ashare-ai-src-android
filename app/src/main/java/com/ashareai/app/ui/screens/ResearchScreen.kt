@@ -1,42 +1,67 @@
 package com.ashareai.app.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.ResearchRequest
-import com.ashareai.app.data.model.Run
 import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.toUserMessage
+import com.ashareai.app.data.model.*
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** 每日研究：发起研究任务 + 最近运行进度（活动任务 2.5s 轮询）。 */
-@OptIn(ExperimentalMaterial3Api::class)
+internal val researchScopes = listOf(
+    "MARKET" to "全市场",
+    "WATCHLIST" to "自选与持仓",
+    "CUSTOM" to "指定股票",
+)
+
+/** 每日研究：手动研究、A/B 自动报告和运行状态集中在一个工作台。 */
 @Composable
 fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val scope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
     val assets by appViewModel.assets.collectAsState()
+    val quotes by appViewModel.quotes.collectAsState()
+    val assetSymbols = remember(assets) {
+        ((assets?.watchlist ?: emptyList()) + (assets?.positions?.map { it.symbol } ?: emptyList())).distinct()
+    }
 
     var runs by remember { mutableStateOf<List<Run>>(emptyList()) }
+    var settings by remember { mutableStateOf<ResearchSettings?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var showSubmit by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var cancelTarget by remember { mutableStateOf<Run?>(null) }
+
+    var date by remember { mutableStateOf(todayTradingDate()) }
+    var researchScope by remember { mutableStateOf("MARKET") }
+    var customSymbols by remember { mutableStateOf("") }
+    var assetSearch by remember { mutableStateOf("") }
+    var excludedSymbols by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var totalBudget by remember { mutableStateOf("1000000") }
+    var perSymbolBudget by remember { mutableStateOf("80000") }
+    var maxStockPrice by remember { mutableStateOf("") }
 
     suspend fun refresh() {
         try {
             runs = ApiClient.api.researchRuns(limit = 20, mine = true)
+            settings = runCatching { ApiClient.api.researchSettings() }.getOrElse { settings }
             error = null
         } catch (e: Exception) {
             error = e.toUserMessage()
@@ -46,237 +71,285 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
     }
 
     LaunchedEffect(Unit) { refresh() }
-
-    // 有活动任务时轮询
     LaunchedEffect(runs.any { isActiveStatus(it.status) }) {
         while (runs.any { isActiveStatus(it.status) }) {
-            delay(2500)
+            delay(2_500)
             refresh()
         }
     }
 
+    val parsedCustom = remember(customSymbols) { parseResearchSymbols(customSymbols) }
+    val selectedAssets = remember(assetSymbols, excludedSymbols) { assetSymbols.filterNot(excludedSymbols::contains) }
+    val visibleAssets = remember(assetSymbols, assetSearch, quotes) {
+        val query = assetSearch.trim().uppercase()
+        if (query.isBlank()) assetSymbols else assetSymbols.filter {
+            it.contains(query) || quotes[it]?.name.orEmpty().uppercase().contains(query)
+        }
+    }
+    val selectedSymbols = when (researchScope) {
+        "WATCHLIST" -> selectedAssets
+        "CUSTOM" -> parsedCustom
+        else -> emptyList()
+    }
+
     Column(Modifier.fillMaxSize()) {
-        CenterAlignedTopAppBar(
-            title = { Text("每日研究", style = MaterialTheme.typography.titleMedium) },
-            navigationIcon = {
+        CompactTopBar(
+            title = "每日研究",
+            navigation = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                 }
             },
             actions = {
-                TextButton(onClick = { showSubmit = true }) { Text("发起研究") }
+                IconButton(onClick = { settingsOpen = true }, enabled = settings != null) {
+                    Icon(Icons.Outlined.Settings, contentDescription = "自动研究设置")
+                }
             },
         )
 
-        error?.let { Box(Modifier.padding(horizontal = 16.dp)) { ErrorBanner(it) { scope.launch { refresh() } } } }
-
-        if (loading) {
-            LoadingBox()
-        } else if (runs.isEmpty()) {
-            EmptyPlaceholder("暂无研究记录\n点击右上角发起研究")
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                AutomaticResearchSummary(settings = settings, onOpen = { settingsOpen = true })
+            }
+            item { SectionTitle("发起研究") }
+            item {
+                DateSelectorField(value = date, onValueChange = { date = it }, modifier = Modifier.fillMaxWidth())
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    researchScopes.forEach { (value, label) ->
+                        FilterChip(
+                            selected = researchScope == value,
+                            onClick = { researchScope = value },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            if (researchScope == "CUSTOM") {
+                item {
+                    OutlinedTextField(
+                        value = customSymbols,
+                        onValueChange = { customSymbols = it.take(2_000) },
+                        label = { Text("A股代码") },
+                        supportingText = { Text("已识别 ${parsedCustom.size} 只，可用逗号、空格或换行分隔") },
+                        placeholder = { Text("600519.SH, 000001.SZ") },
+                        minLines = 2,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            if (researchScope == "WATCHLIST") {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("已选 ${selectedAssets.size}/${assetSymbols.size} 只", style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { excludedSymbols = emptySet() }) { Text("全选") }
+                            TextButton(onClick = { excludedSymbols = assetSymbols.toSet() }) { Text("清空") }
+                        }
+                        OutlinedTextField(
+                            value = assetSearch,
+                            onValueChange = { assetSearch = it.take(80) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                            placeholder = { Text("搜索名称或代码") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (assetSymbols.isEmpty()) {
+                            EmptyPlaceholder("自选与持仓为空，请先添加股票")
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                            ) {
+                                items(visibleAssets, key = { it }) { symbol ->
+                                    val checked = symbol !in excludedSymbols
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = {
+                                                excludedSymbols = if (checked) excludedSymbols + symbol else excludedSymbols - symbol
+                                            },
+                                        )
+                                        Column {
+                                            Text(quotes[symbol]?.name ?: symbol, style = MaterialTheme.typography.bodyMedium)
+                                            Text(symbol, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                ResearchBudgetFields(
+                    totalBudget = totalBudget,
+                    onTotalBudget = { totalBudget = it },
+                    perSymbolBudget = perSymbolBudget,
+                    onPerSymbolBudget = { perSymbolBudget = it },
+                    maxStockPrice = maxStockPrice,
+                    onMaxStockPrice = { maxStockPrice = it },
+                )
+            }
+            item {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text("冻结快照由系统强制开启", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "研究范围、预算和数据来源会写入 Manifest；实时行情只用于预览。少于 ${settings?.portfolio_target_count ?: 15} 只仍生成个股报告，但不生成整体组合。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            error?.let { message -> item { ErrorBanner(message) { coroutineScope.launch { refresh() } } } }
+            item {
+                Button(
+                    enabled = !submitting,
+                    onClick = {
+                        val total = positiveNumber(totalBudget)
+                        val perSymbol = positiveNumber(perSymbolBudget)
+                        val maxPrice = optionalPositiveNumber(maxStockPrice)
+                        error = validateResearchInput(
+                            scope = researchScope,
+                            availableAssetCount = assetSymbols.size,
+                            selectedSymbols = selectedSymbols,
+                            total = total,
+                            perSymbol = perSymbol,
+                            maxText = maxStockPrice,
+                            maxPrice = maxPrice,
+                        )
+                        if (error != null) return@Button
+                        submitting = true
+                        coroutineScope.launch {
+                            try {
+                                ApiClient.api.submitResearch(
+                                    newIdempotencyKey(),
+                                    ResearchRequest(
+                                        trading_date = date,
+                                        scope = researchScope,
+                                        symbols = selectedSymbols.takeIf { researchScope != "MARKET" },
+                                        total_budget = total,
+                                        per_symbol_budget = perSymbol,
+                                        max_stock_price = maxPrice,
+                                    ),
+                                )
+                                refresh()
+                            } catch (e: Exception) {
+                                error = e.toUserMessage()
+                            } finally {
+                                submitting = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (submitting) "正在提交" else "启动每日研究")
+                }
+            }
+            item { SectionTitle("最近运行") }
+            if (loading && runs.isEmpty()) {
+                item { LoadingBox() }
+            } else if (runs.isEmpty()) {
+                item { EmptyPlaceholder("暂无研究记录") }
+            } else {
                 items(runs, key = { it.run_id }) { run ->
                     RunCard(
                         run = run,
-                        onCancel = {
-                            scope.launch {
-                                try {
-                                    ApiClient.api.cancelResearch(run.run_id)
-                                    refresh()
-                                } catch (e: Exception) {
-                                    error = e.toUserMessage()
-                                }
-                            }
-                        },
-                        onOpenReport = {
-                            run.trading_date?.let { date ->
-                                navController.navigate("reports?date=$date&run_id=${run.run_id}")
-                            }
-                        },
+                        onCancel = if (isActiveStatus(run.status)) ({ cancelTarget = run }) else null,
+                        onOpenReport = if (run.report_id != null && run.trading_date != null) ({
+                            navController.navigate("reports?date=${run.trading_date}&run_id=${run.run_id}")
+                        }) else null,
                     )
                 }
             }
         }
     }
 
-    if (showSubmit) {
-        SubmitResearchDialog(
-            watchlist = assets?.watchlist ?: emptyList(),
-            submitting = submitting,
-            onDismiss = { showSubmit = false },
-            onSubmit = { request ->
-                submitting = true
-                scope.launch {
-                    try {
-                        ApiClient.api.submitResearch(newIdempotencyKey(), request)
-                        showSubmit = false
-                        refresh()
-                    } catch (e: Exception) {
-                        error = e.toUserMessage()
-                        showSubmit = false
-                    } finally {
-                        submitting = false
+    cancelTarget?.let { run ->
+        AlertDialog(
+            onDismissRequest = { cancelTarget = null },
+            title = { Text("停止研究任务？") },
+            text = { Text("当前阶段会安全结束后停止。运行 ${run.run_id.take(18)} 不会被立即强制中断。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    cancelTarget = null
+                    coroutineScope.launch {
+                        try {
+                            ApiClient.api.cancelResearch(run.run_id)
+                            refresh()
+                        } catch (e: Exception) {
+                            error = e.toUserMessage()
+                        }
                     }
-                }
+                }) { Text("确认停止", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { cancelTarget = null }) { Text("继续运行") } },
+        )
+    }
+
+    if (settingsOpen && settings != null) {
+        AutomaticResearchDialog(
+            settings = requireNotNull(settings),
+            onDismiss = { settingsOpen = false },
+            onSaved = {
+                settings = it
+                settingsOpen = false
             },
         )
     }
 }
 
 @Composable
-fun RunCard(run: Run, onCancel: (() -> Unit)? = null, onOpenReport: (() -> Unit)? = null) {
+private fun AutomaticResearchSummary(settings: ResearchSettings?, onOpen: () -> Unit) {
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
+                Text("自动每日研究", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "${run.trading_date ?: "--"} · ${scopeLabel(run.research_scope)}",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    run.run_id.take(18),
-                    style = MaterialTheme.typography.labelSmall,
+                    when {
+                        settings == null -> "正在读取设置"
+                        settings.auto_enabled -> "已启用 ${settings.automatic_reports.count { it.enabled }} 个报告 · 每日 ${settings.schedule_time} 检查"
+                        else -> "当前未启用 · 每日 15:05 检查"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            StatusChip(statusLabel(run.status), statusColor(run.status))
-        }
-
-        if (isActiveStatus(run.status)) {
-            Spacer(Modifier.height(10.dp))
-            val progress = (run.progress ?: 0) / 100f
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${run.phase ?: "处理中"} · ${run.progress ?: 0}%",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        run.error_message?.let {
-            Spacer(Modifier.height(6.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        }
-
-        Spacer(Modifier.height(6.dp))
-        Row {
-            if (isActiveStatus(run.status) && onCancel != null) {
-                TextButton(onClick = onCancel, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("取消", color = MaterialTheme.colorScheme.error)
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            if (run.report_id != null && onOpenReport != null) {
-                TextButton(onClick = onOpenReport, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("查看报告")
-                }
-            }
+            TextButton(onClick = onOpen, enabled = settings != null) { Text("设置") }
         }
     }
 }
 
-private fun scopeLabel(scope: String?): String = when (scope?.uppercase()) {
-    "MARKET" -> "全市场"
-    "WATCHLIST" -> "自选股"
-    "CUSTOM" -> "自定义"
-    else -> scope ?: "研究"
-}
-
 @Composable
-private fun SubmitResearchDialog(
-    watchlist: List<String>,
-    submitting: Boolean,
-    onDismiss: () -> Unit,
-    onSubmit: (ResearchRequest) -> Unit,
+private fun ResearchBudgetFields(
+    totalBudget: String,
+    onTotalBudget: (String) -> Unit,
+    perSymbolBudget: String,
+    onPerSymbolBudget: (String) -> Unit,
+    maxStockPrice: String,
+    onMaxStockPrice: (String) -> Unit,
 ) {
-    var scope by remember { mutableStateOf("WATCHLIST") }
-    var customSymbols by remember { mutableStateOf("") }
-    var totalBudget by remember { mutableStateOf("") }
-    var perSymbolBudget by remember { mutableStateOf("") }
-    var maxPrice by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("发起研究") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("交易日：${todayTradingDate()}", style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("WATCHLIST" to "自选", "MARKET" to "全市场", "CUSTOM" to "自定义").forEach { (v, label) ->
-                        FilterChip(selected = scope == v, onClick = { scope = v }, label = { Text(label) })
-                    }
-                }
-                if (scope == "WATCHLIST") {
-                    Text(
-                        "将研究 ${watchlist.size} 只自选股",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (scope == "CUSTOM") {
-                    OutlinedTextField(
-                        value = customSymbols,
-                        onValueChange = { customSymbols = it },
-                        label = { Text("股票代码（逗号分隔）") },
-                        placeholder = { Text("600000.SH, 000001.SZ") },
-                    )
-                }
-                OutlinedTextField(
-                    value = totalBudget, onValueChange = { totalBudget = it },
-                    label = { Text("总资金预算（可选）") }, singleLine = true,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = perSymbolBudget, onValueChange = { perSymbolBudget = it },
-                        label = { Text("单股投入") }, singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = maxPrice, onValueChange = { maxPrice = it },
-                        label = { Text("最高股价") }, singleLine = true, modifier = Modifier.weight(1f),
-                    )
-                }
-                error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !submitting,
-                onClick = {
-                    val symbols = if (scope == "CUSTOM") {
-                        val parsed = customSymbols.split(Regex("[,，\\s]+"))
-                            .filter { it.isNotBlank() }
-                            .mapNotNull { com.ashareai.app.data.normalizeSymbol(it) }
-                        if (parsed.isEmpty()) {
-                            error = "请输入有效的股票代码"
-                            return@TextButton
-                        }
-                        parsed
-                    } else null
-                    onSubmit(
-                        ResearchRequest(
-                            trading_date = todayTradingDate(),
-                            scope = scope,
-                            symbols = symbols,
-                            total_budget = totalBudget.toDoubleOrNull(),
-                            per_symbol_budget = perSymbolBudget.toDoubleOrNull(),
-                            max_stock_price = maxPrice.toDoubleOrNull(),
-                        )
-                    )
-                },
-            ) {
-                if (submitting) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                else Text("提交")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+    val numeric = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(totalBudget, { onTotalBudget(it.take(18)) }, label = { Text("总资金预算（元）") }, keyboardOptions = numeric, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(perSymbolBudget, { onPerSymbolBudget(it.take(18)) }, label = { Text("单股最高投入（元）") }, keyboardOptions = numeric, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(maxStockPrice, { onMaxStockPrice(it.take(18)) }, label = { Text("最高可接受股价（可选）") }, keyboardOptions = numeric, singleLine = true, modifier = Modifier.fillMaxWidth())
+    }
 }

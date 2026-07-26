@@ -59,9 +59,9 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        CenterAlignedTopAppBar(
-            title = { Text("自选与持仓", style = MaterialTheme.typography.titleMedium) },
-            navigationIcon = {
+        CompactTopBar(
+            title = "自选与持仓",
+            navigation = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                 }

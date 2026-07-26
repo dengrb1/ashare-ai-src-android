@@ -140,7 +140,7 @@ interface ApiService {
     suspend fun researchSettings(): ResearchSettings
 
     @PUT("api/v1/research/settings")
-    suspend fun saveResearchSettings(@Body body: ResearchSettings): ResearchSettings
+    suspend fun saveResearchSettings(@Body body: ResearchSettingsRequest): ResearchSettings
 
     // ---- 评分 / 候选 / 组合 / 报告 ----
     @GET("api/v1/scores/{date}/{symbol}")

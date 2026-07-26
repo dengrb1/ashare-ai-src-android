@@ -27,6 +27,7 @@ import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
 import com.ashareai.app.ui.components.EmptyPlaceholder
 import com.ashareai.app.ui.components.ErrorBanner
+import com.ashareai.app.ui.components.CompactTopBar
 import com.ashareai.app.ui.fmtTime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -141,9 +142,9 @@ fun AIChatScreen(appViewModel: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        CenterAlignedTopAppBar(
-            title = { Text(currentThread?.title?.ifBlank { null } ?: "AI 问答", style = MaterialTheme.typography.titleMedium, maxLines = 1) },
-            navigationIcon = {
+        CompactTopBar(
+            title = currentThread?.title?.ifBlank { null } ?: "AI 问答",
+            navigation = {
                 IconButton(onClick = { showThreadSheet = true }) {
                     Icon(Icons.Outlined.History, contentDescription = "会话列表")
                 }
@@ -169,7 +170,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
             } else {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {

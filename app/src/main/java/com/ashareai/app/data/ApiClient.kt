@@ -1,5 +1,6 @@
 package com.ashareai.app.data
 
+import android.annotation.SuppressLint
 import com.ashareai.app.data.model.RefreshRequest
 import com.ashareai.app.data.model.TokenResponse
 import kotlinx.coroutines.runBlocking
@@ -30,6 +31,7 @@ object ApiClient {
         encodeDefaults = true
     }
 
+    @SuppressLint("StaticFieldLeak") // SettingsStore always retains applicationContext only.
     @Volatile
     private var settings: SettingsStore? = null
 

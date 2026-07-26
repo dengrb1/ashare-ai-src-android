@@ -165,6 +165,7 @@ data class Notification(
     val body: String = "",
     val resource_type: String? = null,
     val resource_id: String? = null,
+    val resource_url: String? = null,
     val read_at: String? = null,
     val created_at: String? = null,
 )
@@ -244,9 +245,11 @@ data class Run(
     val run_id: String,
     val run_type: String? = null,
     val trading_date: String? = null,
+    val requested_date: String? = null,
     val decision_at: String? = null,
     val status: String = "",
     val started_at: String? = null,
+    val created_at: String? = null,
     val completed_at: String? = null,
     val error_message: String? = null,
     val phase: String? = null,
@@ -260,7 +263,14 @@ data class Run(
     val portfolio_requested: Boolean? = null,
     val portfolio_generated: Boolean? = null,
     val reason_code: String? = null,
+    val reason_message: String? = null,
     val trigger_source: String? = null,
+    val automatic_report_slot: String? = null,
+    val next_retry_at: String? = null,
+    val formal_eligible_count: Int? = null,
+    val excluded_symbol_count: Int? = null,
+    val portfolio_reason_message: String? = null,
+    val reused: Boolean = false,
 )
 
 @Serializable
@@ -295,19 +305,35 @@ data class AuditEvent(
 )
 
 @Serializable
-data class ResearchSettingsSlot(
+data class AutomaticResearchReportSettings(
+    val slot: String,
     val enabled: Boolean = false,
-    val scope: String = "WATCHLIST",
+    val scope: String = "MARKET",
     val symbols: List<String> = emptyList(),
-    val total_budget: Double? = null,
-    val per_symbol_budget: Double? = null,
+    val total_budget: Double = 1_000_000.0,
+    val per_symbol_budget: Double = 80_000.0,
     val max_stock_price: Double? = null,
+    val config_version: Int = 1,
 )
 
 @Serializable
 data class ResearchSettings(
-    val report_a: ResearchSettingsSlot? = null,
-    val report_b: ResearchSettingsSlot? = null,
+    val auto_enabled: Boolean = false,
+    val updated_at: String? = null,
+    val automatic_scope: String = "MARKET",
+    val automatic_total_budget: Double = 1_000_000.0,
+    val automatic_per_symbol_budget: Double = 80_000.0,
+    val automatic_max_stock_price: Double? = null,
+    val automatic_reports: List<AutomaticResearchReportSettings> = emptyList(),
+    val schedule_timezone: String = "Asia/Shanghai",
+    val schedule_time: String = "15:05",
+    val snapshot_mode: String = "SYSTEM_ENFORCED",
+    val portfolio_target_count: Int = 15,
+)
+
+@Serializable
+data class ResearchSettingsRequest(
+    val automatic_reports: List<AutomaticResearchReportSettings>,
 )
 
 // ---------- 评分 / 候选 / 组合 / 报告 ----------

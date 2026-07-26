@@ -14,7 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// 简约风：主色靛蓝，界面以中性灰为主，留白充足。
+// 工作台风格：中性色承载高密度信息，青色仅用于关键操作与状态。
 val Indigo = Color(0xFF3D5AFE)
 val IndigoDark = Color(0xFF8C9EFF)
 
@@ -24,12 +24,12 @@ val StockDown = Color(0xFF00A86B)
 val StockFlat = Color(0xFF9E9E9E)
 
 private val LightColors = lightColorScheme(
-    primary = Indigo,
+    primary = Color(0xFF006B5F),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE8EBFF),
-    onPrimaryContainer = Color(0xFF1A2470),
+    primaryContainer = Color(0xFFD5F3EC),
+    onPrimaryContainer = Color(0xFF003730),
     secondary = Color(0xFF5C6070),
-    background = Color(0xFFFAFAFC),
+    background = Color(0xFFF7F8FA),
     onBackground = Color(0xFF1A1B20),
     surface = Color.White,
     onSurface = Color(0xFF1A1B20),
@@ -41,10 +41,10 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = IndigoDark,
-    onPrimary = Color(0xFF10164A),
-    primaryContainer = Color(0xFF283593),
-    onPrimaryContainer = Color(0xFFDDE1FF),
+    primary = Color(0xFF72D7C8),
+    onPrimary = Color(0xFF003731),
+    primaryContainer = Color(0xFF005047),
+    onPrimaryContainer = Color(0xFF9AF3E5),
     secondary = Color(0xFFAAAEBB),
     background = Color(0xFF121317),
     onBackground = Color(0xFFE3E4EA),
@@ -58,11 +58,11 @@ private val DarkColors = darkColorScheme(
 )
 
 val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(8.dp),
+    extraLarge = RoundedCornerShape(8.dp),
 )
 
 val AppTypography = Typography(
