@@ -1,10 +1,18 @@
 package com.ashareai.app.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -19,11 +27,15 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ashareai.app.data.model.KlineBar
+import com.ashareai.app.data.KlinePeriod
+import com.ashareai.app.data.KlineRepository
 import com.ashareai.app.ui.fmt2
 import com.ashareai.app.ui.theme.StockDown
 import com.ashareai.app.ui.theme.StockUp
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
+import java.time.format.DateTimeFormatter
 
 enum class SubChart(val label: String) { VOLUME("成交量"), MACD("MACD"), KDJ("KDJ") }
 
@@ -87,15 +99,24 @@ private fun computeIndicators(bars: List<KlineBar>): Indicators {
 @Composable
 fun CandlestickChart(
     bars: List<KlineBar>,
+    period: KlinePeriod,
     subChart: SubChart,
+    onLoadEarlier: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (bars.isEmpty()) {
         EmptyPlaceholder("暂无K线数据", modifier)
         return
     }
-    val indicators = remember(bars) { computeIndicators(bars) }
-    var crosshair by remember(bars) { mutableStateOf<Int?>(null) }
+    val allIndicators = remember(bars) { computeIndicators(bars) }
+    var viewport by remember(bars) { mutableStateOf(ChartViewport().normalized(bars.size)) }
+    val normalizedViewport = viewport.normalized(bars.size)
+    SideEffect { if (viewport != normalizedViewport) viewport = normalizedViewport }
+    val visibleRange = normalizedViewport.range(bars.size)
+    val visibleBars = bars.slice(visibleRange)
+    val indicators = allIndicators.slice(visibleRange)
+    var crosshair by remember(bars, visibleRange) { mutableStateOf<Int?>(null) }
+    var panRemainder by remember { mutableFloatStateOf(0f) }
 
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -109,19 +130,24 @@ fun CandlestickChart(
     Column(modifier = modifier) {
         // 图例 / 十字光标信息
         val idx = crosshair
-        val legendBar = if (idx != null && idx in bars.indices) bars[idx] else bars.last()
+        val legendBar = if (idx != null && idx in visibleBars.indices) visibleBars[idx] else visibleBars.last()
+        Text(
+            formatKlineTime(legendBar.timestamp, period, detailed = true),
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(legendBar.timestamp.take(10), style = MaterialTheme.typography.labelSmall, color = textColor)
-            Text("开 ${legendBar.open.fmt2()}", style = MaterialTheme.typography.labelSmall, color = textColor)
-            Text("高 ${legendBar.high.fmt2()}", style = MaterialTheme.typography.labelSmall, color = StockUp)
-            Text("低 ${legendBar.low.fmt2()}", style = MaterialTheme.typography.labelSmall, color = StockDown)
+            Text("开 ${legendBar.open.fmt2()}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text("高 ${legendBar.high.fmt2()}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = StockUp)
+            Text("低 ${legendBar.low.fmt2()}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = StockDown)
             Text(
                 "收 ${legendBar.close.fmt2()}",
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (legendBar.close >= legendBar.open) StockUp else StockDown,
             )
@@ -131,14 +157,27 @@ fun CandlestickChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .pointerInput(bars) {
-                    detectDragGestures(
+                .pointerInput(bars, viewport) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        if (zoom != 1f) viewport = viewport.zoom(bars.size, zoom)
+                        val slot = size.width.toFloat() / viewport.visibleCount.coerceAtLeast(1)
+                        panRemainder += pan.x / slot
+                        val wholeBars = panRemainder.roundToInt()
+                        if (wholeBars != 0) {
+                            viewport = viewport.pan(bars.size, wholeBars)
+                            panRemainder -= wholeBars
+                        }
+                        crosshair = null
+                    }
+                }
+                .pointerInput(visibleBars) {
+                    detectDragGesturesAfterLongPress(
                         onDragEnd = { crosshair = null },
                         onDragCancel = { crosshair = null },
                     ) { change, _ ->
                         val w = size.width.toFloat()
-                        val slot = w / bars.size
-                        crosshair = (change.position.x / slot).toInt().coerceIn(0, bars.size - 1)
+                        val slot = w / visibleBars.size
+                        crosshair = (change.position.x / slot).toInt().coerceIn(0, visibleBars.size - 1)
                     }
                 }
         ) {
@@ -148,11 +187,11 @@ fun CandlestickChart(
             val subTop = size.height * mainRatio + gap / 2
             val subH = size.height - subTop
 
-            val slot = size.width / bars.size
+            val slot = size.width / visibleBars.size
             val bodyW = (slot * 0.7f).coerceAtLeast(1f)
 
-            var minP = bars.minOf { it.low }
-            var maxP = bars.maxOf { it.high }
+            var minP = visibleBars.minOf { it.low }
+            var maxP = visibleBars.maxOf { it.high }
             listOf(indicators.ma5, indicators.ma10, indicators.ma20).forEach { series ->
                 series.filterNotNull().forEach { v -> minP = min(minP, v); maxP = max(maxP, v) }
             }
@@ -171,7 +210,7 @@ fun CandlestickChart(
             }
 
             // 蜡烛
-            bars.forEachIndexed { i, bar ->
+            visibleBars.forEachIndexed { i, bar ->
                 val x = slot * i + slot / 2
                 val up = bar.close >= bar.open
                 val color = if (up) StockUp else StockDown
@@ -205,9 +244,18 @@ fun CandlestickChart(
 
             // 副图
             when (subChart) {
-                SubChart.VOLUME -> drawVolume(bars, slot, bodyW, subTop, subH)
-                SubChart.MACD -> drawMacd(indicators, bars.size, slot, bodyW, subTop, subH)
-                SubChart.KDJ -> drawKdj(indicators, bars.size, slot, subTop, subH)
+                SubChart.VOLUME -> drawVolume(visibleBars, slot, bodyW, subTop, subH)
+                SubChart.MACD -> drawMacd(indicators, visibleBars.size, slot, bodyW, subTop, subH)
+                SubChart.KDJ -> drawKdj(indicators, visibleBars.size, slot, subTop, subH)
+            }
+
+            listOf(0f, .25f, .5f, .75f, 1f).forEach { ratio ->
+                val position = ((visibleBars.lastIndex) * ratio).roundToInt()
+                val label = formatKlineTime(visibleBars[position].timestamp, period, detailed = false)
+                val measured = textMeasurer.measure(label, labelStyle)
+                val x = (slot * position + slot / 2 - measured.size.width / 2)
+                    .coerceIn(0f, (size.width - measured.size.width).coerceAtLeast(0f))
+                drawText(textMeasurer, label, style = labelStyle, topLeft = Offset(x, size.height - 12.dp.toPx()))
             }
 
             // 十字光标
@@ -215,7 +263,7 @@ fun CandlestickChart(
                 if (ci in bars.indices) {
                     val x = slot * ci + slot / 2
                     drawLine(crossColor, Offset(x, 0f), Offset(x, size.height), 1f)
-                    val y = yOf(bars[ci].close)
+                    val y = yOf(visibleBars[ci].close)
                     drawLine(crossColor, Offset(0f, y), Offset(size.width, y), 1f)
                 }
             }
@@ -230,8 +278,51 @@ fun CandlestickChart(
             Text("MA5", style = MaterialTheme.typography.labelSmall, color = ma5Color)
             Text("MA10", style = MaterialTheme.typography.labelSmall, color = ma10Color)
             Text("MA20", style = MaterialTheme.typography.labelSmall, color = ma20Color)
+            Spacer(Modifier.weight(1f))
+            IconButton(
+                onClick = { viewport = viewport.zoom(bars.size, 1.4f) },
+                enabled = normalizedViewport.visibleCount > minOf(ChartViewport.MIN_VISIBLE, bars.size),
+            ) { Icon(Icons.Outlined.ZoomIn, contentDescription = "放大") }
+            IconButton(
+                onClick = { viewport = viewport.zoom(bars.size, .72f) },
+                enabled = normalizedViewport.visibleCount < bars.size,
+            ) { Icon(Icons.Outlined.ZoomOut, contentDescription = "缩小") }
+            IconButton(
+                onClick = { viewport = viewport.latest(bars.size) },
+                enabled = normalizedViewport.offsetFromLatest > 0,
+            ) { Icon(Icons.Outlined.History, contentDescription = "回到最新") }
+            if (onLoadEarlier != null) {
+                IconButton(onClick = onLoadEarlier) {
+                    Icon(Icons.Outlined.SkipPrevious, contentDescription = "加载更早")
+                }
+            }
         }
     }
+}
+
+private fun Indicators.slice(range: IntRange): Indicators = Indicators(
+    ma5 = ma5.slice(range),
+    ma10 = ma10.slice(range),
+    ma20 = ma20.slice(range),
+    macdDif = macdDif.slice(range),
+    macdDea = macdDea.slice(range),
+    macdHist = macdHist.slice(range),
+    k = k.slice(range),
+    d = d.slice(range),
+    j = j.slice(range),
+)
+
+internal fun formatKlineTime(value: String, period: KlinePeriod, detailed: Boolean): String {
+    val instant = KlineRepository.parseBarInstant(value) ?: return value
+    val pattern = when {
+        detailed && period != KlinePeriod.DAY -> "yyyy-MM-dd HH:mm"
+        detailed -> "yyyy-MM-dd"
+        period != KlinePeriod.DAY -> "MM-dd HH:mm"
+        else -> "MM-dd"
+    }
+    return DateTimeFormatter.ofPattern(pattern)
+        .withZone(java.time.ZoneId.of("Asia/Shanghai"))
+        .format(instant)
 }
 
 private fun DrawScope.drawVolume(bars: List<KlineBar>, slot: Float, bodyW: Float, top: Float, height: Float) {

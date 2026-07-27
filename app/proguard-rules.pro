@@ -14,3 +14,8 @@
 -keep,includedescriptorclasses class com.ashareai.app.**$$serializer { *; }
 -keepclassmembers class com.ashareai.app.** { *** Companion; }
 -keepclasseswithmembers class com.ashareai.app.** { kotlinx.serialization.KSerializer serializer(...); }
+
+# MiPush AAR is optional in local builds. Keep its receiver bridge when packaged.
+-keep class com.ashareai.app.island.MiPushReceiver { *; }
+-keep class com.xiaomi.mipush.** { *; }
+-dontwarn com.xiaomi.**

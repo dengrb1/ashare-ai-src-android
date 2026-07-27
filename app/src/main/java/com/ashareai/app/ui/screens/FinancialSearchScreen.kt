@@ -94,20 +94,19 @@ fun FinancialSearchScreen(appViewModel: AppViewModel) {
                     item {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             r.entities.take(4).forEach { e ->
-                                TagPill("${e.name ?: ""} ${e.symbol ?: ""}".trim())
+                                TagPill("${e.name ?: ""} ${e.code ?: ""}".trim())
                             }
                         }
                     }
                 }
-                items(r.results) { item ->
+                items(r.recalls) { item ->
                     AppCard {
-                        item.title?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
+                        item.desc?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
                         item.type?.let {
                             Spacer(Modifier.height(2.dp))
                             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        val body = item.content ?: item.description
-                        body?.let {
+                        item.content?.let {
                             Spacer(Modifier.height(6.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 8)
                         }

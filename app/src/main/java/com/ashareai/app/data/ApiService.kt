@@ -93,6 +93,21 @@ interface ApiService {
     @POST("api/v1/notifications/read-all")
     suspend fun markAllRead(@Header("Idempotency-Key") idempotencyKey: String): Response<Unit>
 
+    @GET("api/v1/notifications/{notificationId}")
+    suspend fun notification(@Path("notificationId") notificationId: String): Notification
+
+    @POST("api/v1/devices")
+    suspend fun registerDevice(@Body body: PushDeviceRequest): PushDevice
+
+    @DELETE("api/v1/devices/{deviceId}")
+    suspend fun unregisterDevice(@Path("deviceId") deviceId: String): Response<Unit>
+
+    @POST("api/v1/devices/{deviceId}/deliveries")
+    suspend fun acknowledgeDelivery(
+        @Path("deviceId") deviceId: String,
+        @Body body: PushDeliveryReceipt,
+    ): Response<Unit>
+
     // ---- 卖出建议 / 买入监控 ----
     @GET("api/v1/exit-advice")
     suspend fun exitAdvice(@Query("limit") limit: Int = 50): List<ExitAdvice>
@@ -268,6 +283,7 @@ interface ApiService {
     @POST("api/v1/ai/chat/attachments")
     suspend fun uploadAttachments(
         @Part files: List<MultipartBody.Part>,
+        @Part("thread_id") threadId: okhttp3.RequestBody,
     ): List<AIChatAttachment>
 
     // ---- 证券解析 / 搜索 ----

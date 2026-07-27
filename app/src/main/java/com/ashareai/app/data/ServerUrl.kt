@@ -1,6 +1,5 @@
 package com.ashareai.app.data
 
-import com.ashareai.app.BuildConfig
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.URI
 
@@ -19,14 +18,17 @@ fun normalizeServerUrl(input: String): Result<String> = runCatching {
     require(parsed.scheme == "http" || parsed.scheme == "https") {
         "服务器地址仅支持 http 或 https"
     }
-    require(BuildConfig.DEBUG || parsed.scheme == "https") {
-        "正式版本仅允许 HTTPS 服务器"
-    }
     require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
         "服务器地址不能包含用户名或密码"
     }
     require(parsed.query == null && parsed.fragment == null) {
         "服务器地址不能包含查询参数或片段"
+    }
+    require(!parsed.host.isLoopbackHost()) {
+        "手机不能使用 localhost 或 127.0.0.1 访问电脑，请填写电脑的局域网 IP 地址"
+    }
+    require(!parsed.host.isWildcardHost()) {
+        "0.0.0.0 仅用于服务器监听，请填写电脑的局域网 IP 地址"
     }
 
     val uri = URI(withScheme)
@@ -37,6 +39,15 @@ fun normalizeServerUrl(input: String): Result<String> = runCatching {
     }
     normalized.toString().trimEnd('/')
 }
+
+private fun String.isLoopbackHost(): Boolean {
+    val normalized = trimEnd('.').lowercase()
+    if (normalized == "localhost" || normalized == "::1") return true
+    val parts = normalized.split('.').mapNotNull(String::toIntOrNull)
+    return parts.size == 4 && parts.all { it in 0..255 } && parts[0] == 127
+}
+
+private fun String.isWildcardHost(): Boolean = this == "0.0.0.0" || this == "::"
 
 private fun String.isPrivateIpv4(): Boolean {
     val parts = split('.').mapNotNull(String::toIntOrNull)

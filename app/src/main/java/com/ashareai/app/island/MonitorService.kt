@@ -63,6 +63,11 @@ class MonitorService : Service() {
         super.onDestroy()
     }
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        scope.launch { (application as AShareApp).settings.setIslandEnabled(false) }
+        stopSelf(startId)
+    }
+
     private fun startForegroundCompat(notification: Notification) {
         startForeground(NOTIFY_ID_MONITOR, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }

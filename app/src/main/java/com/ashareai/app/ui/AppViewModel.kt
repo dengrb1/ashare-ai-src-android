@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ashareai.app.AShareApp
 import com.ashareai.app.data.ApiClient
+import com.ashareai.app.data.NotificationCenter
 import com.ashareai.app.data.model.*
 import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.toUserMessage
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.ashareai.app.island.PushManager
 
 /**
  * 会话级全局状态：登录态、资产、行情报价轮询、通知红点。
@@ -46,6 +48,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _unreadCount = MutableStateFlow(0)
     val unreadCount: StateFlow<Int> = _unreadCount.asStateFlow()
+    val notificationCenter = NotificationCenter(api, viewModelScope) { _unreadCount.value = it }
 
     private val _globalError = MutableStateFlow<String?>(null)
     val globalError: StateFlow<String?> = _globalError.asStateFlow()
@@ -61,6 +64,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         restoreSession()
+        viewModelScope.launch {
+            PushManager.events.collect { notificationCenter.refresh() }
+        }
     }
 
     private fun restoreSession() {
@@ -74,6 +80,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val user = api.me()
                 _authState.value = AuthState.LoggedIn(user)
                 loadAssets()
+                PushManager.bindAuthenticatedDevice(app)
             } catch (e: Exception) {
                 // token 失效但有 refresh 的场景由 Authenticator 兜底；这里直接判定登出
                 _authState.value = AuthState.LoggedOut
@@ -89,6 +96,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val user = api.me()
                 _authState.value = AuthState.LoggedIn(user)
                 loadAssets()
+                PushManager.bindAuthenticatedDevice(app)
             } catch (e: Exception) {
                 onError(e.toUserMessage())
             }
@@ -97,6 +105,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         viewModelScope.launch {
+            PushManager.unbindAuthenticatedDevice(app)
             try {
                 settings.currentRefreshToken()?.let { api.revoke(RefreshRequest(it)) }
             } catch (_: Exception) {

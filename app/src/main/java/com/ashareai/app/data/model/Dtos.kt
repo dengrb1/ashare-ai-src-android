@@ -165,6 +165,7 @@ data class Notification(
     val body: String = "",
     val resource_type: String? = null,
     val resource_id: String? = null,
+    val payload: JsonObject = JsonObject(emptyMap()),
     val resource_url: String? = null,
     val read_at: String? = null,
     val created_at: String? = null,
@@ -185,6 +186,29 @@ data class NotificationSummary(
 
 @Serializable
 data class NotificationReadRequest(val notification_ids: List<String>)
+
+@Serializable
+data class PushDeviceRequest(
+    val installation_id: String,
+    val registration_id: String,
+    val provider: String = "MIPUSH",
+    val app_version: String? = null,
+    val os_version: String? = null,
+    val device_model: String? = null,
+)
+
+@Serializable
+data class PushDevice(
+    val device_id: String,
+    val installation_id: String,
+    val provider: String = "MIPUSH",
+)
+
+@Serializable
+data class PushDeliveryReceipt(
+    val notification_id: String,
+    val status: String = "DELIVERED",
+)
 
 // ---------- 卖出建议 / 买入监控 ----------
 
@@ -455,16 +479,8 @@ data class ExecutionStatus(
 // ---------- AI 对话 ----------
 
 @Serializable
-data class AIModelInfo(
-    val id: String? = null,
-    val name: String? = null,
-    val label: String? = null,
-    val default: Boolean = false,
-)
-
-@Serializable
 data class AIModelsResponse(
-    val models: List<AIModelInfo> = emptyList(),
+    val models: List<String> = emptyList(),
     val reasoning_efforts: List<String> = emptyList(),
     val web_search_available: Boolean = false,
     val cache_enabled: Boolean = false,
@@ -473,11 +489,14 @@ data class AIModelsResponse(
 @Serializable
 data class AIChatThread(
     val thread_id: String,
+    val user_id: String? = null,
     val title: String = "",
-    val pinned: Boolean = false,
-    val archived: Boolean = false,
-    val group_name: String? = null,
-    val message_count: Int? = null,
+    val group_mode: String = "AUTO",
+    val group_type: String = "GENERAL",
+    val group_label: String? = null,
+    val cumulative_mentions: List<AIChatMentionRef> = emptyList(),
+    val pinned_at: String? = null,
+    val archived_at: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,
 )
@@ -491,7 +510,10 @@ data class AIChatThreadPage(
 @Serializable
 data class AIChatSource(
     val title: String? = null,
+    val uri: String? = null,
     val url: String? = null,
+    val source: String? = null,
+    val symbol: String? = null,
     val snippet: String? = null,
 )
 
@@ -502,9 +524,23 @@ data class AIChatMessage(
     val role: String = "user",
     val content: String = "",
     val status: String? = null,
+    val trading_date: String? = null,
+    val decision_at: String? = null,
+    val available_at: String? = null,
     val mentioned_symbols: List<String> = emptyList(),
+    val mention_refs: List<AIChatMentionRef> = emptyList(),
     val sources: List<AIChatSource> = emptyList(),
     val model_name: String? = null,
+    val reasoning_effort: String? = null,
+    val cache_hit: Boolean = false,
+    val input_tokens: Long = 0,
+    val cached_input_tokens: Long = 0,
+    val cache_write_tokens: Long = 0,
+    val output_tokens: Long = 0,
+    val context_budget_status: String = "WITHIN_BUDGET",
+    val streaming_mode: String = "STREAMING",
+    val data_status: JsonObject = JsonObject(emptyMap()),
+    val error_code: String? = null,
     val created_at: String? = null,
     val attachment_ids: List<String> = emptyList(),
 )
@@ -517,6 +553,7 @@ data class AIChatThreadPatch(
     val title: String? = null,
     val pinned: Boolean? = null,
     val archived: Boolean? = null,
+    val group_label: String? = null,
 )
 
 @Serializable
@@ -525,11 +562,19 @@ data class BulkDeleteThreads(val thread_ids: List<String>)
 @Serializable
 data class AIChatAttachment(
     val attachment_id: String,
-    val filename: String? = null,
-    val content_type: String? = null,
-    val size_bytes: Long? = null,
-    val expires_at: String? = null,
+    val thread_id: String? = null,
+    val mime_type: String,
+    val byte_size: Long,
+    val width: Int,
+    val height: Int,
+    val uploaded_at: String,
+    val expires_at: String,
+    val deleted_at: String? = null,
+    val deletion_reason: String? = null,
 )
+
+@Serializable
+data class AIChatMentionRef(val symbol: String, val name: String)
 
 @Serializable
 data class AIChatSendRequest(
@@ -538,16 +583,44 @@ data class AIChatSendRequest(
     val reasoning_effort: String? = null,
     val web_search: Boolean = false,
     val attachment_ids: List<String> = emptyList(),
+    val mention_refs: List<AIChatMentionRef> = emptyList(),
+    val decision_at: String? = null,
 )
 
 @Serializable
 data class AICostSummary(
-    val total_cost: Double? = null,
-    val recent_cost: Double? = null,
-    val currency: String? = null,
-    val cache_read_tokens: Long? = null,
-    val cache_write_tokens: Long? = null,
-    val items: List<JsonObject> = emptyList(),
+    val days: Int = 30,
+    val items: List<AICostValue> = emptyList(),
+    val next_cursor: String? = null,
+    val totals: AICostValue = AICostValue(),
+    val current_turn: AICostTurn? = null,
+)
+
+@Serializable
+data class AICostValue(
+    val bucket_date: String? = null,
+    val requests: Long = 0,
+    val cache_hits: Long = 0,
+    val input_tokens: Long = 0,
+    val cached_input_tokens: Long = 0,
+    val cache_write_tokens: Long = 0,
+    val uncached_input_tokens: Long = 0,
+    val output_tokens: Long = 0,
+    val estimated_spend_usd: Double = 0.0,
+    val estimated_savings_usd: Double = 0.0,
+)
+
+@Serializable
+data class AICostTurn(
+    val requests: Long = 0,
+    val cache_hit: Boolean = false,
+    val input_tokens: Long = 0,
+    val cached_input_tokens: Long = 0,
+    val cache_write_tokens: Long = 0,
+    val uncached_input_tokens: Long = 0,
+    val output_tokens: Long = 0,
+    val estimated_spend_usd: Double = 0.0,
+    val estimated_savings_usd: Double = 0.0,
 )
 
 // ---------- 证券解析 / 搜索 ----------
@@ -569,29 +642,37 @@ data class SecurityResolveResponse(
 @Serializable
 data class FinancialSearchEntity(
     val name: String? = null,
-    val symbol: String? = null,
+    val code: String? = null,
     val type: String? = null,
 )
 
 @Serializable
-data class FinancialSearchItem(
+data class FinancialSearchRecall(
     val type: String? = null,
-    val title: String? = null,
-    val description: String? = null,
+    val desc: String? = null,
     val content: String? = null,
-    val url: String? = null,
+)
+
+@Serializable
+data class FinancialSearchSource(
+    val source: String? = null,
+    val uri: String? = null,
+    val fetched_at: String? = null,
 )
 
 @Serializable
 data class FinancialSearchResult(
     val query: String? = null,
     val provider: String? = null,
+    val upstream: String? = null,
     val mode: String? = null,
+    val searched_at: String? = null,
     val elapsed_ms: Long? = null,
     val interpretation: String? = null,
     val entities: List<FinancialSearchEntity> = emptyList(),
-    val results: List<FinancialSearchItem> = emptyList(),
-    val facts: List<JsonObject> = emptyList(),
+    val recalls: List<FinancialSearchRecall> = emptyList(),
+    val outcome: JsonObject = JsonObject(emptyMap()),
+    val sources: List<FinancialSearchSource> = emptyList(),
     val warnings: List<String> = emptyList(),
 )
 

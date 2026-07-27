@@ -18,6 +18,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore(name = "ashare_settings")
 
@@ -33,6 +34,8 @@ class SettingsStore(context: Context) {
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode") // system | light | dark
         private val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
         private val KEY_SEEN_NOTIFICATION_IDS = stringSetPreferencesKey("seen_notification_ids")
+        private val KEY_INSTALLATION_ID = stringPreferencesKey("push_installation_id")
+        private val KEY_PUSH_DEVICE_ID = stringPreferencesKey("push_device_id")
 
         const val DEFAULT_BASE_URL = "http://127.0.0.1:8000"
     }
@@ -46,6 +49,19 @@ class SettingsStore(context: Context) {
     suspend fun currentAccessToken(): String? = readToken(KEY_ACCESS_TOKEN)
     suspend fun currentRefreshToken(): String? = readToken(KEY_REFRESH_TOKEN)
     suspend fun accessExpiresAt(): Long = context.dataStore.data.map { it[KEY_ACCESS_EXPIRES_AT] ?: 0L }.first()
+    suspend fun installationId(): String {
+        context.dataStore.data.map { it[KEY_INSTALLATION_ID] }.first()?.let { return it }
+        val value = UUID.randomUUID().toString()
+        context.dataStore.edit { it[KEY_INSTALLATION_ID] = value }
+        return value
+    }
+    suspend fun currentPushDeviceId(): String? = context.dataStore.data.map { it[KEY_PUSH_DEVICE_ID] }.first()
+
+    suspend fun setPushDeviceId(deviceId: String?) {
+        context.dataStore.edit {
+            if (deviceId == null) it.remove(KEY_PUSH_DEVICE_ID) else it[KEY_PUSH_DEVICE_ID] = deviceId
+        }
+    }
 
     suspend fun setBaseUrl(url: String) {
         context.dataStore.edit { it[KEY_BASE_URL] = url.trimEnd('/') }

@@ -156,7 +156,7 @@ private fun MainScaffold(
             composable(Routes.BACKTEST) { BacktestScreen(appViewModel) }
             composable(Routes.RUNS) { RunsScreen(appViewModel) }
             composable(Routes.SEARCH) { FinancialSearchScreen(appViewModel) }
-            composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel) }
+            composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel, navController) }
             composable(Routes.PERSONAL_DATA) { PersonalDataScreen(appViewModel) }
             composable(Routes.SETTINGS) { SettingsScreen(appViewModel) }
             composable("stock/{symbol}") { entry ->

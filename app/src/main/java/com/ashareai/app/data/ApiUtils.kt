@@ -30,8 +30,13 @@ fun Throwable.toUserMessage(): String = when (this) {
         } catch (_: Exception) {
             null
         }
+        val requestPath = response()?.raw()?.request?.url?.encodedPath
         when (code()) {
-            401 -> "登录已过期，请重新登录"
+            401 -> if (requestPath?.endsWith("/auth/token") == true) {
+                detail ?: "用户名或密码错误"
+            } else {
+                "登录已过期，请重新登录"
+            }
             403 -> detail ?: "无权限执行此操作"
             404 -> detail ?: "数据不存在"
             409 -> detail ?: "操作冲突，请刷新后重试"

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.SettingsStore
+import com.ashareai.app.island.PushManager
 
 class AShareApp : Application() {
 
@@ -17,6 +18,7 @@ class AShareApp : Application() {
         settings = SettingsStore(this)
         ApiClient.init(settings)
         createNotificationChannels()
+        PushManager.initialize(this)
     }
 
     private fun createNotificationChannels() {

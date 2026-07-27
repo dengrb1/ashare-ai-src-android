@@ -15,6 +15,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "MIPUSH_APP_ID", "\"${providers.gradleProperty("MIPUSH_APP_ID").orElse("").get()}\"")
+        buildConfigField("String", "MIPUSH_APP_KEY", "\"${providers.gradleProperty("MIPUSH_APP_KEY").orElse("").get()}\"")
     }
 
     buildTypes {
@@ -43,9 +45,19 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    sourceSets {
+        getByName("main").java.srcDir(
+            if (fileTree("libs") { include("MiPush_SDK_Client_*.aar") }.files.isNotEmpty()) {
+                "src/mipush/java"
+            } else {
+                "src/noMipush/java"
+            },
+        )
+    }
 }
 
 dependencies {
+    implementation(fileTree("libs") { include("MiPush_SDK_Client_*.aar") })
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -67,6 +79,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    implementation(libs.markdown.material3)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

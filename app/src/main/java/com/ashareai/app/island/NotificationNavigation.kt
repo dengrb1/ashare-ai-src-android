@@ -16,7 +16,7 @@ object NotificationNavigation {
         "BACKTEST" -> "backtest"
         "EXIT_ADVICE" -> "exit_advice"
         "TRADE_PLAN" -> reportRoute(notification.resource_url) ?: "reports"
-        "RESEARCH", "REPORT" -> reportRoute(notification.resource_url) ?: "research"
+        "RESEARCH", "RESEARCH_RUN", "REPORT" -> reportRoute(notification.resource_url) ?: "research"
         else -> "notifications"
     }
 

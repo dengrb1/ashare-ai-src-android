@@ -1,13 +1,17 @@
 package com.ashareai.app.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +50,8 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
     var error by remember { mutableStateOf<String?>(null) }
     var requestCount by remember { mutableIntStateOf(0) }
     var retryKey by remember { mutableIntStateOf(0) }
+    var showPeriodSheet by remember { mutableStateOf(false) }
+    var showRangeSheet by remember { mutableStateOf(false) }
     val repository = remember { KlineRepository(ApiClient.api) }
 
     val inWatchlist = symbol in (assets?.watchlist ?: emptyList())
@@ -155,29 +161,24 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
             // K线工具区
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    KlinePeriod.entries.forEach { item ->
-                        FilterChip(
-                            selected = period == item,
-                            onClick = { period = item },
-                            label = { Text(item.label) },
-                        )
+                    OutlinedButton(
+                        onClick = { showPeriodSheet = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("周期  ${period.label}")
                     }
-                }
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    KlineRange.entries.forEach { item ->
-                        FilterChip(
-                            selected = range == item,
-                            onClick = { range = item },
-                            label = { Text(item.label) },
-                        )
+                    OutlinedButton(
+                        onClick = { showRangeSheet = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("范围  ${range.label}")
                     }
                 }
                 if (loading) {
@@ -191,8 +192,12 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                     }
                 } else {
                     CandlestickChart(
-                        bars = bars.takeLast(240),
+                        bars = bars,
+                        period = period,
                         subChart = subChart,
+                        onLoadEarlier = if (range != KlineRange.YEAR_1) {
+                            { range = KlineRange.entries[(KlineRange.entries.indexOf(range) + 1).coerceAtMost(KlineRange.entries.lastIndex)] }
+                        } else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(340.dp),
@@ -208,13 +213,72 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                     }
                 }
                 Text(
-                    "已加载 ${bars.size} 根 · ${requestCount} 段 · 后复权(hfq)" +
-                        if (bars.size > 240) " · 图表显示最近 240 根" else "",
+                    "已加载 ${bars.size} 根 · ${requestCount} 段 · 后复权(hfq)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+
+    if (showPeriodSheet) {
+        KlineSelectionSheet(
+            title = "选择 K 线周期",
+            options = KlinePeriod.entries,
+            selected = period,
+            label = { it.label },
+            onDismiss = { showPeriodSheet = false },
+            onSelect = { period = it; showPeriodSheet = false },
+        )
+    }
+    if (showRangeSheet) {
+        KlineSelectionSheet(
+            title = "选择数据范围",
+            options = KlineRange.entries,
+            selected = range,
+            label = { it.label },
+            onDismiss = { showRangeSheet = false },
+            onSelect = { range = it; showRangeSheet = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> KlineSelectionSheet(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onDismiss: () -> Unit,
+    onSelect: (T) -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Text(
+            title,
+            modifier = Modifier.padding(horizontal = 20.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(16.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(options) { option ->
+                FilterChip(
+                    selected = option == selected,
+                    onClick = { onSelect(option) },
+                    label = { Text(label(option), modifier = Modifier.fillMaxWidth()) },
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
