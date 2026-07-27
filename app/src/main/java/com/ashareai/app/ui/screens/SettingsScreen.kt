@@ -45,12 +45,23 @@ fun SettingsScreen(appViewModel: AppViewModel) {
         )
     }
     var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
+    var testAfterPermission by remember { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationsGranted = granted
         if (granted) {
-            scope.launch {
-                appViewModel.settings.setIslandEnabled(true)
-                MonitorService.start(context)
+            if (testAfterPermission) {
+                val capability = FocusNotification.showTest(context)
+                message = if (capability.superIslandReady) {
+                    "测试通知已发送：请观察顶部超级岛"
+                } else {
+                    "测试通知已发送；此设备没有 HyperOS 3 焦点协议，将显示普通通知"
+                }
+                testAfterPermission = false
+            } else {
+                scope.launch {
+                    appViewModel.settings.setIslandEnabled(true)
+                    MonitorService.start(context)
+                }
             }
         } else {
             message = "通知权限未开启，监控不会在后台运行"
@@ -60,6 +71,18 @@ fun SettingsScreen(appViewModel: AppViewModel) {
     LaunchedEffect(Unit) {
         baseUrl = appViewModel.settings.currentBaseUrl()
         focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
+    }
+
+    androidx.compose.runtime.DisposableEffect(context) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notificationsGranted = Build.VERSION.SDK_INT < 33 ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        val owner = context as? androidx.lifecycle.LifecycleOwner
+        owner?.lifecycle?.addObserver(observer)
+        onDispose { owner?.lifecycle?.removeObserver(observer) }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -143,7 +166,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                             Text("行情与研究通知", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "后台监控持仓、交易预警和研究进度。所有设备使用标准通知；系统允许时自动增强为焦点通知或超级岛。",
+                                "后台监控持仓、交易预警和研究进度。所有设备使用标准通知；系统允许时会提交焦点通知协议。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -171,10 +194,9 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     KeyValueRow("普通通知", if (notificationsGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()) "可用" else "未授权")
                     val capabilities = focusCapabilities
                     KeyValueRow("HyperOS 焦点协议", capabilities?.protocolVersion?.takeIf { it > 0 }?.let { "v$it" } ?: "不支持")
-                    KeyValueRow("焦点通知权限", if (capabilities?.focusPermission == true) "已开通" else "未开通")
-                    KeyValueRow("小米超级岛", if (capabilities?.superIslandReady == true) "可用" else "当前不可用")
+                    KeyValueRow("HyperOS 3 超级岛", if (capabilities?.superIslandReady == true) "可提交 v3 岛协议" else "当前设备不支持")
                     Text(
-                        "超级岛仅在 HyperOS 3、系统支持岛且小米已为应用包名和通知渠道开通焦点权限时生效。",
+                        "实现采用 InstallerX-Revived 同款 focus-api v3 通知结构。系统仍可能按 ROM 版本、通知设置或应用授权决定是否上岛。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -185,6 +207,34 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                             },
                         )
                     }) { Text("打开系统通知设置") }
+                }
+            }
+
+            item {
+                AppCard {
+                    Text("无需设备数据测试", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "发送一条模拟沪深300行情的持续通知。HyperOS 3 会尝试显示系统超级岛，其他系统显示普通通知。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = {
+                        if (Build.VERSION.SDK_INT >= 33 && !notificationsGranted) {
+                            testAfterPermission = true
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            val capability = FocusNotification.showTest(context)
+                            message = if (capability.superIslandReady) {
+                                "测试通知已发送：请观察顶部超级岛"
+                            } else {
+                                "测试通知已发送；此设备没有 HyperOS 3 焦点协议，将显示普通通知"
+                            }
+                        }
+                    }) {
+                        Text("测试上岛")
+                    }
                 }
             }
 

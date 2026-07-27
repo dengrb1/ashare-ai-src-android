@@ -31,6 +31,8 @@ class SettingsStore(context: Context) {
         private val KEY_REFRESH_TOKEN = stringPreferencesKey("refresh_token")
         private val KEY_ACCESS_EXPIRES_AT = longPreferencesKey("access_expires_at")
         private val KEY_USERNAME = stringPreferencesKey("username")
+        private val KEY_REMEMBER_PASSWORD = booleanPreferencesKey("remember_password")
+        private val KEY_REMEMBERED_PASSWORD = stringPreferencesKey("remembered_password")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode") // system | light | dark
         private val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
         private val KEY_SEEN_NOTIFICATION_IDS = stringSetPreferencesKey("seen_notification_ids")
@@ -42,10 +44,14 @@ class SettingsStore(context: Context) {
 
     val baseUrl: Flow<String> = context.dataStore.data.map { it[KEY_BASE_URL] ?: DEFAULT_BASE_URL }
     val username: Flow<String?> = context.dataStore.data.map { it[KEY_USERNAME] }
+    val rememberPassword: Flow<Boolean> = context.dataStore.data.map { it[KEY_REMEMBER_PASSWORD] ?: false }
     val darkMode: Flow<String> = context.dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
     val islandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_ISLAND_ENABLED] ?: false }
 
     suspend fun currentBaseUrl(): String = baseUrl.first()
+    suspend fun currentUsername(): String? = username.first()
+    suspend fun isRememberPasswordEnabled(): Boolean = rememberPassword.first()
+    suspend fun currentRememberedPassword(): String? = readSecret(KEY_REMEMBERED_PASSWORD, CredentialCipher)
     suspend fun currentAccessToken(): String? = readToken(KEY_ACCESS_TOKEN)
     suspend fun currentRefreshToken(): String? = readToken(KEY_REFRESH_TOKEN)
     suspend fun accessExpiresAt(): Long = context.dataStore.data.map { it[KEY_ACCESS_EXPIRES_AT] ?: 0L }.first()
@@ -87,12 +93,34 @@ class SettingsStore(context: Context) {
         return unseen
     }
 
-    suspend fun saveTokens(access: String, refresh: String, expiresInSeconds: Long, username: String? = null) {
+    suspend fun saveTokens(
+        access: String,
+        refresh: String,
+        expiresInSeconds: Long,
+        username: String? = null,
+        password: String? = null,
+        rememberPassword: Boolean? = null,
+    ) {
         context.dataStore.edit {
             it[KEY_ACCESS_TOKEN] = TokenCipher.encrypt(access)
             it[KEY_REFRESH_TOKEN] = TokenCipher.encrypt(refresh)
             it[KEY_ACCESS_EXPIRES_AT] = System.currentTimeMillis() + expiresInSeconds * 1000
             if (username != null) it[KEY_USERNAME] = username
+            if (rememberPassword != null) {
+                it[KEY_REMEMBER_PASSWORD] = rememberPassword
+                if (rememberPassword && password != null) {
+                    it[KEY_REMEMBERED_PASSWORD] = CredentialCipher.encrypt(password)
+                } else {
+                    it.remove(KEY_REMEMBERED_PASSWORD)
+                }
+            }
+        }
+    }
+
+    suspend fun clearRememberedPassword() {
+        context.dataStore.edit {
+            it[KEY_REMEMBER_PASSWORD] = false
+            it.remove(KEY_REMEMBERED_PASSWORD)
         }
     }
 
@@ -112,23 +140,76 @@ class SettingsStore(context: Context) {
         context.dataStore.edit { it[key] = TokenCipher.encrypt(stored) }
         return stored
     }
+
+    private suspend fun readSecret(
+        key: androidx.datastore.preferences.core.Preferences.Key<String>,
+        cipher: SecretCipher,
+    ): String? {
+        val stored = context.dataStore.data.map { it[key] }.first() ?: return null
+        return cipher.decrypt(stored)
+    }
 }
 
-private object TokenCipher {
+private interface SecretCipher {
+    fun encrypt(value: String): String
+    fun decrypt(value: String): String?
+}
+
+private object TokenCipher : SecretCipher {
     const val PREFIX = "keystore:v1:"
     private const val KEY_ALIAS = "ashare_api_tokens_v1"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 
-    fun encrypt(value: String): String {
+    override fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val payload = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
         return PREFIX + Base64.encodeToString(payload, Base64.NO_WRAP)
     }
 
-    fun decrypt(value: String): String? = runCatching {
+    override fun decrypt(value: String): String? = runCatching {
         val payload = Base64.decode(value.removePrefix(PREFIX), Base64.NO_WRAP)
         require(payload.size > 12) { "Invalid encrypted token" }
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, payload.copyOfRange(0, 12)))
+        cipher.doFinal(payload.copyOfRange(12, payload.size)).toString(Charsets.UTF_8)
+    }.getOrNull()
+
+    private fun secretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
+            init(
+                KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setRandomizedEncryptionRequired(true)
+                    .build(),
+            )
+            generateKey()
+        }
+    }
+}
+
+private object CredentialCipher : SecretCipher {
+    private const val PREFIX = "keystore:credentials:v1:"
+    private const val KEY_ALIAS = "ashare_login_credentials_v1"
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+
+    override fun encrypt(value: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val payload = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        return PREFIX + Base64.encodeToString(payload, Base64.NO_WRAP)
+    }
+
+    override fun decrypt(value: String): String? = runCatching {
+        require(value.startsWith(PREFIX)) { "Invalid credential cipher text" }
+        val payload = Base64.decode(value.removePrefix(PREFIX), Base64.NO_WRAP)
+        require(payload.size > 12) { "Invalid credential cipher text" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, payload.copyOfRange(0, 12)))
         cipher.doFinal(payload.copyOfRange(12, payload.size)).toString(Charsets.UTF_8)

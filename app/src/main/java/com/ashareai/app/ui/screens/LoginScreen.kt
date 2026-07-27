@@ -29,6 +29,38 @@ fun SplashScreen() {
 }
 
 @Composable
+fun ConnectionFailedScreen(
+    appViewModel: AppViewModel,
+    message: String,
+    onRetry: () -> Unit,
+    onReturnToLogin: () -> Unit,
+) {
+    var serverUrl by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { serverUrl = appViewModel.settings.currentBaseUrl() }
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(16.dp))
+            Text("无法连接服务器", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            Text(message, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (serverUrl.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text("当前地址：$serverUrl", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("重试") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onReturnToLogin, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("返回登录页面") }
+        }
+    }
+}
+
+@Composable
 fun LoginScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
     var serverUrl by remember { mutableStateOf("") }
@@ -37,12 +69,13 @@ fun LoginScreen(appViewModel: AppViewModel) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         serverUrl = appViewModel.settings.currentBaseUrl()
-        appViewModel.settings.username.collect { saved ->
-            if (username.isBlank() && !saved.isNullOrBlank()) username = saved
-        }
+        username = appViewModel.settings.currentUsername().orEmpty()
+        rememberPassword = appViewModel.settings.isRememberPasswordEnabled()
+        if (rememberPassword) password = appViewModel.settings.currentRememberedPassword().orEmpty()
     }
 
     fun submit() {
@@ -61,7 +94,7 @@ fun LoginScreen(appViewModel: AppViewModel) {
         scope.launch {
             appViewModel.settings.setBaseUrl(normalizedUrl)
             com.ashareai.app.data.ApiClient.rebuild()
-            appViewModel.login(username.trim(), password) { msg ->
+            appViewModel.login(username.trim(), password, rememberPassword) { msg ->
                 error = msg
                 loading = false
             }
@@ -134,6 +167,16 @@ fun LoginScreen(appViewModel: AppViewModel) {
                 keyboardActions = KeyboardActions(onDone = { submit() }),
                 modifier = Modifier.fillMaxWidth(),
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = rememberPassword,
+                    onCheckedChange = { enabled ->
+                        rememberPassword = enabled
+                        if (!enabled) scope.launch { appViewModel.settings.clearRememberedPassword() }
+                    },
+                )
+                Text("记住账号密码")
+            }
             Spacer(Modifier.height(20.dp))
 
             error?.let {

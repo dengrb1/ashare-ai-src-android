@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import com.ashareai.app.island.PushManager
+import retrofit2.HttpException
 
 /**
  * 会话级全局状态：登录态、资产、行情报价轮询、通知红点。
@@ -31,6 +33,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     sealed class AuthState {
         data object Loading : AuthState()
         data object LoggedOut : AuthState()
+        data class ConnectionFailed(val message: String) : AuthState()
         data class LoggedIn(val user: UserResponse) : AuthState()
     }
 
@@ -71,28 +74,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun restoreSession() {
         viewModelScope.launch {
+            _authState.value = AuthState.Loading
             val token = settings.currentAccessToken()
             if (token.isNullOrBlank()) {
                 _authState.value = AuthState.LoggedOut
                 return@launch
             }
             try {
-                val user = api.me()
+                val user = withTimeout(20_000) { api.me() }
                 _authState.value = AuthState.LoggedIn(user)
                 loadAssets()
                 PushManager.bindAuthenticatedDevice(app)
             } catch (e: Exception) {
-                // token 失效但有 refresh 的场景由 Authenticator 兜底；这里直接判定登出
-                _authState.value = AuthState.LoggedOut
+                if (e is HttpException && e.code() in setOf(401, 403)) {
+                    settings.clearTokens()
+                    _authState.value = AuthState.LoggedOut
+                } else {
+                    _authState.value = AuthState.ConnectionFailed("无法连接服务器，请检查网络或服务器地址后重试。")
+                }
             }
         }
     }
 
-    fun login(username: String, password: String, onError: (String) -> Unit) {
+    fun retrySessionRestore() = restoreSession()
+
+    fun showLogin() {
+        _authState.value = AuthState.LoggedOut
+    }
+
+    fun login(username: String, password: String, rememberPassword: Boolean, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
                 val tokens = api.token(LoginRequest(username, password))
-                settings.saveTokens(tokens.access_token, tokens.refresh_token, tokens.expires_in, username)
+                settings.saveTokens(
+                    tokens.access_token,
+                    tokens.refresh_token,
+                    tokens.expires_in,
+                    username,
+                    password,
+                    rememberPassword,
+                )
                 val user = api.me()
                 _authState.value = AuthState.LoggedIn(user)
                 loadAssets()

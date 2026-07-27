@@ -21,7 +21,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
 
@@ -191,7 +190,8 @@ class MonitorService : Service() {
             subContent = subContent,
             colorContent = color,
             ticker = content,
-            enableFloat = false,
+            // A v3 Island is only visibly expanded when the first update is allowed to float.
+            enableFloat = true,
             timeoutMinutes = 720,
             islandTimeoutSeconds = 3_600,
         )

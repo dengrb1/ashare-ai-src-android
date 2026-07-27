@@ -51,12 +51,18 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.UUID
 
-private val quickQuestions = listOf(
-    "解读报告" to "请解读最新系统研究报告，概括市场状态、候选概览和风险结论。",
-    "个股省流版" to "请生成 @股票名称或代码 的省流版，并说明是否适合继续查看模拟方案。",
-    "持仓风险" to "请结合我的持仓、最新系统研究和风险结论，分析当前持仓风险。",
-    "比较候选" to "请比较 @股票A 和 @股票B 的最新系统研究结论、门禁和主要风险。",
+internal val quickQuestions = listOf(
+    "解读最新系统研究报告" to "请解读最新系统研究报告，概括市场状态、候选概览和风险结论。",
+    "生成个股省流版" to "请生成个股省流版，并说明是否适合继续查看模拟方案。",
+    "分析持仓风险" to "请结合我的持仓、最新系统研究和风险结论，分析当前持仓风险。",
+    "比较候选股票" to "请比较 @股票A 和 @股票B 的最新系统研究结论、门禁和主要风险。",
 )
+
+internal fun appendQuickQuestion(draft: TextFieldValue, question: String): TextFieldValue {
+    val existing = draft.text.trimEnd()
+    val next = if (existing.isEmpty()) question else "$existing $question"
+    return TextFieldValue(next, androidx.compose.ui.text.TextRange(next.length))
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -488,7 +494,7 @@ private fun ChatBody(
         }
         if (attachments.isNotEmpty()) PendingAttachments(attachments, onRemoveAttachment, appViewModel)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            quickQuestions.forEach { (label, value) -> AssistChip(onClick = { onDraft(TextFieldValue(value)) }, label = { Text(label) }) }
+            quickQuestions.forEach { (label, value) -> AssistChip(onClick = { onDraft(appendQuickQuestion(draft, value)) }, label = { Text(label) }) }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             models?.models?.takeIf { it.isNotEmpty() }?.let { options ->

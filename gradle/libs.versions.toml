@@ -1,6 +1,6 @@
 [versions]
 agp = "8.9.1"
-kotlin = "2.1.10"
+kotlin = "2.3.0"
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
 activityCompose = "1.10.0"
@@ -15,6 +15,7 @@ coil = "2.7.0"
 kotlinxCoroutines = "1.10.1"
 junit = "4.13.2"
 markdown = "0.32.0"
+focusApi = "1.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +40,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 markdown-material3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdown" }
+focus-api = { module = "com.xzakota.hyper.notification:focus-api", version.ref = "focusApi" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 

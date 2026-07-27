@@ -69,9 +69,15 @@ fun AppRoot(
 ) {
     val authState by appViewModel.authState.collectAsState()
 
-    when (authState) {
+    when (val state = authState) {
         is AppViewModel.AuthState.Loading -> SplashScreen()
         is AppViewModel.AuthState.LoggedOut -> LoginScreen(appViewModel)
+        is AppViewModel.AuthState.ConnectionFailed -> ConnectionFailedScreen(
+            appViewModel = appViewModel,
+            message = state.message,
+            onRetry = appViewModel::retrySessionRestore,
+            onReturnToLogin = appViewModel::showLogin,
+        )
         is AppViewModel.AuthState.LoggedIn -> MainScaffold(appViewModel, pendingRoute, onRouteConsumed)
     }
 }
