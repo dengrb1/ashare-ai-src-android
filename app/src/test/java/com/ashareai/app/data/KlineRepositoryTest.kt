@@ -82,6 +82,33 @@ class KlineRepositoryTest {
         )
     }
 
+    @Test
+    fun repairsMissingOpenWithoutDistortingTheCandleRange() {
+        val repaired = KlineRepository.sanitizeBar(
+            KlineBar(
+                timestamp = "2026-07-29T09:28:00+08:00",
+                open = 0.0,
+                high = 22.40,
+                low = 22.39,
+                close = 22.40,
+                volume = -1.0,
+            ),
+        )!!
+
+        assertEquals(22.40, repaired.open, 0.0)
+        assertEquals(22.40, repaired.high, 0.0)
+        assertEquals(22.39, repaired.low, 0.0)
+        assertEquals(0.0, repaired.volume, 0.0)
+    }
+
+    @Test
+    fun dropsBarsWithoutAUsableClose() {
+        assertEquals(
+            null,
+            KlineRepository.sanitizeBar(bar("2026-07-29T09:28:00+08:00", 0.0)),
+        )
+    }
+
     private fun bar(timestamp: String, close: Double) = KlineBar(
         timestamp = timestamp,
         open = close,

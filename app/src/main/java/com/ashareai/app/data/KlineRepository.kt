@@ -78,7 +78,11 @@ class KlineRepository(private val source: KlineSource) {
             val response = source.load(symbol, period.apiValue, BARS_PER_REQUEST, window.start.toString(), window.end.toString())
             requestCount += 1
             onProgress(requestCount)
-            response.bars.forEach { bar -> parseBarInstant(bar.timestamp)?.let { merged[it] = bar } }
+            response.bars.forEach { bar ->
+                parseBarInstant(bar.timestamp)?.let { timestamp ->
+                    sanitizeBar(bar)?.let { merged[timestamp] = it }
+                }
+            }
 
             val ordered = merged.toSortedMap()
             if (hasCoverage(ordered.keys.toList(), start, range, zone)) break
@@ -138,6 +142,30 @@ class KlineRepository(private val source: KlineSource) {
             ?: runCatching { ZonedDateTime.parse(value).toInstant() }.getOrNull()
             ?: runCatching { LocalDateTime.parse(value).atZone(SHANGHAI_ZONE).toInstant() }.getOrNull()
             ?: runCatching { LocalDate.parse(value).atStartOfDay(SHANGHAI_ZONE).toInstant() }.getOrNull()
+
+        /**
+         * Some upstream intraday records omit the open price (reported as 0) while
+         * still providing a valid close/high/low. A zero price makes the candle body
+         * span the whole chart, so use close as the neutral fallback and clamp the
+         * high/low around the resulting body. Records without a usable close cannot
+         * be represented and are ignored.
+         */
+        internal fun sanitizeBar(bar: KlineBar): KlineBar? {
+            val close = bar.close.takeIf { it.isFinite() && it > 0.0 } ?: return null
+            val open = bar.open.takeIf { it.isFinite() && it > 0.0 } ?: close
+            val high = maxOf(
+                bar.high.takeIf { it.isFinite() && it > 0.0 } ?: maxOf(open, close),
+                open,
+                close,
+            )
+            val low = minOf(
+                bar.low.takeIf { it.isFinite() && it > 0.0 } ?: minOf(open, close),
+                open,
+                close,
+            )
+            val volume = bar.volume.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+            return bar.copy(open = open, high = high, low = low, close = close, volume = volume)
+        }
     }
 }
 
