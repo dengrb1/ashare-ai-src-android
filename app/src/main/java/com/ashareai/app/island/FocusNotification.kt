@@ -19,6 +19,8 @@ data class FocusCapabilities(
 ) {
     val focusSupported: Boolean get() = protocolVersion > 0
     val superIslandReady: Boolean get() = protocolVersion >= MIN_SUPER_ISLAND_PROTOCOL
+    /** HyperOS does not consistently expose the protocol setting to third-party apps. */
+    val v3PayloadAttached: Boolean get() = true
 
     private companion object {
         const val MIN_SUPER_ISLAND_PROTOCOL = 3
@@ -67,9 +69,12 @@ object FocusNotification {
     }
 
     /**
-     * Builds a standard Android notification, then adds the local HyperOS v3 payload when
-     * available. No Xiaomi account, AppId, certificate, or focus-permission-provider query is
-     * required; ROMs that reject the payload simply render the standard notification.
+     * Builds a standard Android notification and always adds the local HyperOS v3 payload.
+     *
+     * InstallerX-Revived submits the v3 bundle directly.  Its approach is important because
+     * HyperOS 3 devices often leave `notification_focus_protocol` unreadable to regular apps;
+     * using that value as a gate made this app silently emit a normal notification.  ROMs that
+     * do not consume the bundle ignore it and retain the standard Android notification.
      */
     fun decorate(
         context: Context,
@@ -83,20 +88,17 @@ object FocusNotification {
         timeoutMinutes: Int = 120,
         islandTimeoutSeconds: Int = 3_600,
     ): Notification {
-        val capabilities = capabilities(context)
-        if (capabilities.superIslandReady) {
-            val spec = IslandNotificationSpec(
-                title = title,
-                content = content,
-                subContent = subContent,
-                colorContent = colorContent,
-                ticker = ticker ?: title,
-                enableFloat = enableFloat,
-                timeoutMinutes = timeoutMinutes,
-                islandTimeoutSeconds = islandTimeoutSeconds,
-            ).normalized()
-            runCatching { builder.addExtras(buildV3Extras(context, spec)) }
-        }
+        val spec = IslandNotificationSpec(
+            title = title,
+            content = content,
+            subContent = subContent,
+            colorContent = colorContent,
+            ticker = ticker ?: title,
+            enableFloat = enableFloat,
+            timeoutMinutes = timeoutMinutes,
+            islandTimeoutSeconds = islandTimeoutSeconds,
+        ).normalized()
+        runCatching { builder.addExtras(buildV3Extras(context, spec)) }
         return builder.build()
     }
 
@@ -150,14 +152,20 @@ object FocusNotification {
             timeout = spec.timeoutMinutes
             updatable = true
             enableFloat = spec.enableFloat
-            islandFirstFloat = spec.enableFloat
-            filterWhenNoPermission = false
+            // Unlike the normal notification heads-up behaviour, the first Island update must
+            // be marked as floating even for an ongoing monitor/progress notification.
+            islandFirstFloat = true
             business = "ashare_market_monitor"
 
             baseInfo {
                 type = 2
                 title = spec.title
                 content = listOfNotNull(spec.content, spec.subContent).joinToString(" · ")
+            }
+            picInfo {
+                type = 1
+                pic = iconKey
+                picDark = iconKey
             }
             island {
                 islandProperty = 1
