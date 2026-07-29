@@ -130,6 +130,15 @@ interface ApiService {
         @Body body: BuyEntryMonitorRequest,
     ): List<BuyEntryMonitor>
 
+    @GET("api/v1/trade-advice-monitors")
+    suspend fun tradeAdviceMonitors(): List<TradeAdviceMonitor>
+
+    @PUT("api/v1/trade-advice-monitors")
+    suspend fun saveTradeAdviceMonitor(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: TradeAdviceMonitorRequest,
+    ): TradeAdviceMonitor
+
     // ---- 研究 ----
     @POST("api/v1/research/runs")
     suspend fun submitResearch(

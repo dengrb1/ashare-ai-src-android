@@ -252,6 +252,28 @@ data class BuyEntryMonitor(
 @Serializable
 data class BuyEntryMonitorRequest(val symbol: String, val enabled: Boolean)
 
+data class TradeAdviceMonitor(
+    val monitor_id: String,
+    val symbol: String,
+    val enabled: Boolean,
+    val manual_buy_price: Double? = null,
+    val manual_sell_price: Double? = null,
+    val ai_buy_price: Double? = null,
+    val ai_sell_price: Double? = null,
+    val stop_loss_price: Double? = null,
+    val rationale: Map<String, Any?> = emptyMap(),
+    val generated_at: String? = null,
+    val last_alert_types: List<String> = emptyList(),
+    val error_code: String? = null,
+)
+
+data class TradeAdviceMonitorRequest(
+    val symbol: String,
+    val enabled: Boolean,
+    val manual_buy_price: Double? = null,
+    val manual_sell_price: Double? = null,
+)
+
 // ---------- 研究 / 运行 ----------
 
 @Serializable
