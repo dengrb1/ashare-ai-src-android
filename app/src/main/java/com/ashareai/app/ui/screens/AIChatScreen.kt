@@ -468,7 +468,7 @@ private fun ChatBody(
     effort: String, onEffort: (String) -> Unit, webSearch: Boolean, onWebSearch: (Boolean) -> Unit,
     onSend: () -> Unit, onStop: () -> Unit, appViewModel: AppViewModel,
 ) {
-    Column(modifier) {
+    Column(modifier.imePadding()) {
         CompactTopBar(
             title = currentThread?.title ?: "AI 问答",
             navigation = onOpenThreads?.let { action -> { IconButton(onClick = action) { Icon(Icons.Outlined.History, "会话列表") } } },

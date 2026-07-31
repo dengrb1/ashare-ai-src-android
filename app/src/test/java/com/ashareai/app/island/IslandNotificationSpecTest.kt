@@ -38,6 +38,7 @@ class IslandNotificationSpecTest {
     fun `capability requires protocol v3`() {
         assertFalse(FocusCapabilities(2, false).superIslandReady)
         assertTrue(FocusCapabilities(3, true).superIslandReady)
+        assertTrue(FocusCapabilities(0, false).v3PayloadAttached)
     }
 
     private fun spec(

@@ -51,11 +51,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
         if (granted) {
             if (testAfterPermission) {
                 val capability = FocusNotification.showTest(context)
-                message = if (capability.superIslandReady) {
-                    "测试通知已发送：请观察顶部超级岛"
-                } else {
-                    "测试通知已发送；此设备没有 HyperOS 3 焦点协议，将显示普通通知"
-                }
+                message = "测试通知已发送：已附加 HyperOS v3 超级岛载荷，请观察顶部超级岛"
                 testAfterPermission = false
             } else {
                 scope.launch {
@@ -194,7 +190,10 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     KeyValueRow("普通通知", if (notificationsGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()) "可用" else "未授权")
                     val capabilities = focusCapabilities
                     KeyValueRow("HyperOS 焦点协议", capabilities?.protocolVersion?.takeIf { it > 0 }?.let { "v$it" } ?: "不支持")
-                    KeyValueRow("HyperOS 3 超级岛", if (capabilities?.superIslandReady == true) "可提交 v3 岛协议" else "当前设备不支持")
+                    KeyValueRow(
+                        "HyperOS 3 超级岛",
+                        if (capabilities?.superIslandReady == true) "已确认 v3 协议" else "已提交 v3 载荷（系统未公开回报）",
+                    )
                     Text(
                         "实现采用 InstallerX-Revived 同款 focus-api v3 通知结构。系统仍可能按 ROM 版本、通知设置或应用授权决定是否上岛。",
                         style = MaterialTheme.typography.labelSmall,
@@ -226,11 +225,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
                             val capability = FocusNotification.showTest(context)
-                            message = if (capability.superIslandReady) {
-                                "测试通知已发送：请观察顶部超级岛"
-                            } else {
-                                "测试通知已发送；此设备没有 HyperOS 3 焦点协议，将显示普通通知"
-                            }
+                            message = "测试通知已发送：已附加 HyperOS v3 超级岛载荷，请观察顶部超级岛"
                         }
                     }) {
                         Text("测试上岛")
