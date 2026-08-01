@@ -9,3 +9,6 @@
 *.aab
 /captures
 .DS_Store
+
+# Local task notes
+/1.txt
