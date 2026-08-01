@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,8 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
     var candidates by remember { mutableStateOf<List<Candidate>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var sortOptionName by rememberSaveable { mutableStateOf(StockSortOption.SCORE_DESC.name) }
+    val sortOption = StockSortOption.valueOf(sortOptionName)
 
     suspend fun load() {
         loading = true
@@ -59,11 +62,25 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
         } else if (candidates.isEmpty()) {
             EmptyPlaceholder("该交易日暂无候选股")
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(candidates, key = { it.symbol }) { c ->
+            val sortedCandidates = candidates.sortedForStockDisplay(
+                option = sortOption,
+                scoreOf = { it.total_score },
+                rankOf = { it.rank },
+                nameOf = { it.name },
+                symbolOf = { it.symbol },
+            )
+            Column(Modifier.fillMaxSize()) {
+                StockSortSelector(
+                    selected = sortOption,
+                    onSelected = { sortOptionName = it.name },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(sortedCandidates, key = { it.symbol }) { c ->
                     AppCard(
                         modifier = Modifier.let { m ->
                             m
@@ -115,6 +132,7 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
                                 contentPadding = PaddingValues(horizontal = 8.dp),
                             ) { Text("查看报告") }
                         }
+                    }
                     }
                 }
             }

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +48,8 @@ fun ReportsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(0) }
     var selectedSymbol by remember { mutableStateOf<ReportSymbol?>(null) }
+    var sortOptionName by rememberSaveable { mutableStateOf(StockSortOption.SCORE_DESC.name) }
+    val sortOption = StockSortOption.valueOf(sortOptionName)
 
     suspend fun load() {
         loading = true
@@ -131,6 +134,8 @@ fun ReportsScreen(
                 1 -> SymbolListView(
                     symbols = symbols,
                     tradePlans = tradePlans,
+                    sortOption = sortOption,
+                    onSortOptionChange = { sortOptionName = it.name },
                     onSelect = { selectedSymbol = it },
                     onSubmitPlan = { symbol ->
                         report?.report_id?.let { reportId ->
@@ -185,6 +190,8 @@ private fun ReportContentView(html: String?) {
 private fun SymbolListView(
     symbols: List<ReportSymbol>,
     tradePlans: List<TradePlan>,
+    sortOption: StockSortOption,
+    onSortOptionChange: (StockSortOption) -> Unit,
     onSelect: (ReportSymbol) -> Unit,
     onSubmitPlan: (String) -> Unit,
 ) {
@@ -192,11 +199,25 @@ private fun SymbolListView(
         EmptyPlaceholder("暂无个股研究数据")
         return
     }
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(symbols, key = { it.symbol }) { sym ->
+    val sortedSymbols = symbols.sortedForStockDisplay(
+        option = sortOption,
+        scoreOf = { it.score?.total_score },
+        rankOf = { it.rank },
+        nameOf = { it.name },
+        symbolOf = { it.symbol },
+    )
+    Column(Modifier.fillMaxSize()) {
+        StockSortSelector(
+            selected = sortOption,
+            onSelected = onSortOptionChange,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(sortedSymbols, key = { it.symbol }) { sym ->
             val plan = tradePlans.firstOrNull { sym.symbol in it.symbols }
             AppCard(modifier = Modifier.clickable { onSelect(sym) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -242,6 +263,7 @@ private fun SymbolListView(
                         ) { Text("生成买入方案") }
                     }
                 }
+            }
             }
         }
     }
