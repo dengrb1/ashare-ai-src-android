@@ -115,6 +115,8 @@ fun CandlestickChart(
     val visibleRange = normalizedViewport.range(bars.size)
     val visibleBars = bars.slice(visibleRange)
     val indicators = allIndicators.slice(visibleRange)
+    val currentViewport by rememberUpdatedState(viewport)
+    val currentVisibleBars by rememberUpdatedState(visibleBars)
     var crosshair by remember(bars, visibleRange) { mutableStateOf<Int?>(null) }
     var panRemainder by remember { mutableFloatStateOf(0f) }
 
@@ -157,27 +159,29 @@ fun CandlestickChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .pointerInput(bars, viewport) {
+                .pointerInput(bars) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        if (zoom != 1f) viewport = viewport.zoom(bars.size, zoom)
-                        val slot = size.width.toFloat() / viewport.visibleCount.coerceAtLeast(1)
+                        var nextViewport = currentViewport.zoom(bars.size, zoom)
+                        val slot = size.width.toFloat() / nextViewport.visibleCount.coerceAtLeast(1)
                         panRemainder += pan.x / slot
                         val wholeBars = panRemainder.roundToInt()
                         if (wholeBars != 0) {
-                            viewport = viewport.pan(bars.size, wholeBars)
+                            nextViewport = nextViewport.pan(bars.size, wholeBars)
                             panRemainder -= wholeBars
                         }
+                        if (nextViewport != currentViewport) viewport = nextViewport
                         crosshair = null
                     }
                 }
-                .pointerInput(visibleBars) {
+                .pointerInput(bars) {
                     detectDragGesturesAfterLongPress(
                         onDragEnd = { crosshair = null },
                         onDragCancel = { crosshair = null },
                     ) { change, _ ->
+                        val barsForGesture = currentVisibleBars
                         val w = size.width.toFloat()
-                        val slot = w / visibleBars.size
-                        crosshair = (change.position.x / slot).toInt().coerceIn(0, visibleBars.size - 1)
+                        val slot = w / barsForGesture.size
+                        crosshair = (change.position.x / slot).toInt().coerceIn(0, barsForGesture.size - 1)
                     }
                 }
         ) {

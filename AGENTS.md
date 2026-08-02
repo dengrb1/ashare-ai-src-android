@@ -19,9 +19,15 @@ Use the checked-in Gradle wrapper (Windows examples):
 
 Android Studio should use JDK 17. Configure the local Android SDK through `local.properties`; do not commit that file.
 
+For every code change, run `.\gradlew.bat assembleDebug` before considering the work complete. Also run the relevant unit tests and lint checks; run connected tests when the change affects UI, navigation, permissions, or lifecycle behavior. If a required verification command fails, investigate and fix the issue when it is within scope, or clearly report the failure and its cause.
+
 ## Coding Style & Naming Conventions
 
 Follow standard Kotlin formatting with four-space indentation and trailing commas in multiline declarations and calls. Use `PascalCase` for classes, composables, and files (`StockDetailScreen.kt`), `camelCase` for functions and properties, and `UPPER_SNAKE_CASE` for constants. Keep package names lowercase. Compose screens should expose focused `@Composable` functions, hoist reusable UI into `ui/components`, and keep networking or persistence out of composables. Run Android Studio's Kotlin formatter and optimize imports before committing.
+
+## Code Readability & Maintainability
+
+Write code for the next maintainer: prefer clear names, small focused functions, straightforward control flow, and explicit responsibilities. Keep changes narrowly scoped, avoid unnecessary duplication and premature abstractions, and reuse existing project patterns before introducing new ones. Keep composables, data access, and business logic separated; preserve stable public interfaces unless a change is required. Add comments only when they explain non-obvious intent or constraints, and update nearby tests and documentation when behavior changes. Before finishing, review the diff for dead code, accidental complexity, inconsistent formatting, and maintainability regressions.
 
 ## Testing Guidelines
 
