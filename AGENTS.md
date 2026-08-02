@@ -19,7 +19,9 @@ Use the checked-in Gradle wrapper (Windows examples):
 
 Android Studio should use JDK 17. Configure the local Android SDK through `local.properties`; do not commit that file.
 
-For every code change, run `.\gradlew.bat assembleDebug` before considering the work complete. Also run the relevant unit tests and lint checks; run connected tests when the change affects UI, navigation, permissions, or lifecycle behavior. If a required verification command fails, investigate and fix the issue when it is within scope, or clearly report the failure and its cause.
+When project code changes, including Kotlin/Java, Compose UI, resources, the manifest, Gradle configuration, ProGuard rules, or dependencies, build both APK variants before considering the work complete: `.\gradlew.bat assembleDebug assembleRelease`. Also run the relevant unit tests and lint checks; run connected tests when the change affects UI, navigation, permissions, or lifecycle behavior. Documentation-only changes, including `AGENTS.md`, do not require compilation unless they change build behavior or signing configuration. If a required verification command fails, investigate and fix the issue when it is within scope, or clearly report the failure and its cause.
+
+Every Release APK delivered for installation or distribution must be signed. An `app-release-unsigned.apk` must not be treated as a finished artifact. Use a secure local or CI signing configuration, never commit keystores or signing credentials, and report the missing signing configuration instead of delivering an unsigned APK.
 
 ## Coding Style & Naming Conventions
 
