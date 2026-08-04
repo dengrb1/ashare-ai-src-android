@@ -33,7 +33,7 @@ Write code for the next maintainer: prefer clear names, small focused functions,
 
 ## Testing Guidelines
 
-No test suites are currently checked in. New business logic should include focused unit tests named `*Test.kt`; navigation, permissions, and critical user flows should use `*Test.kt` instrumentation tests. Prefer deterministic coroutine tests and mocked network boundaries. Run unit tests and lint for every change; run connected tests when UI or lifecycle behavior changes.
+Unit tests are checked in under `app/src/test/java/` and cover data serialization contracts, repositories, and pure UI helpers. DTOs in `data/model/Dtos.kt` mirror the backend `/api/v1` snake_case JSON contracts; when a backend field type changes (e.g. a dict becomes a typed object), update the DTO and its `*SerializationTest` so the app keeps decoding real responses. New business logic should include focused unit tests named `*Test.kt`; navigation, permissions, and critical user flows should use `*Test.kt` instrumentation tests. Prefer deterministic coroutine tests and mocked network boundaries. Run unit tests and lint for every change; run connected tests when UI or lifecycle behavior changes.
 
 ## Commit & Pull Request Guidelines
 
