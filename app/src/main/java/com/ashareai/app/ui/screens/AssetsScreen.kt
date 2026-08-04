@@ -36,6 +36,18 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
     var editing by remember { mutableStateOf<PaperPosition?>(null) }
     var showAddPosition by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<PaperPosition?>(null) }
+    var buyMonitors by remember { mutableStateOf<List<BuyEntryMonitor>>(emptyList()) }
+    var buyMonitorError by remember { mutableStateOf<String?>(null) }
+
+    suspend fun loadBuyMonitors() {
+        try {
+            buyMonitors = ApiClient.api.buyEntryMonitors()
+            buyMonitorError = null
+        } catch (e: Exception) {
+            buyMonitorError = e.toUserMessage()
+        }
+    }
+    LaunchedEffect(Unit) { loadBuyMonitors() }
 
     fun currentRequest(): AssetStateRequest? {
         val a = assets ?: return null
@@ -100,6 +112,16 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
                     onSave = { req ->
                         appViewModel.saveExitMonitor(req) { msg -> if (msg != null) error = msg }
                     },
+                )
+            }
+
+            // 买入区间监控：正式 BUY Trade Plan 派生的次交易日入场区间提醒
+            item {
+                BuyMonitorCard(
+                    monitors = buyMonitors,
+                    error = buyMonitorError,
+                    enabled = assets?.buy_monitor_enabled == true,
+                    onRetry = { scope.launch { loadBuyMonitors() } },
                 )
             }
 
@@ -263,6 +285,85 @@ private fun MonitorSwitch(label: String, checked: Boolean, onChange: (Boolean) -
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
     }
+}
+
+/** 当前买入区间状态：展示由正式 BUY Trade Plan 派生的次交易日入场区间提醒。 */
+@Composable
+private fun BuyMonitorCard(
+    monitors: List<BuyEntryMonitor>,
+    error: String?,
+    enabled: Boolean,
+    onRetry: () -> Unit,
+) {
+    AppCard {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("当前买入区间状态", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (enabled) "只展示由正式 BUY Trade Plan 生成的提醒" else "总开关已关闭，不会生成新的买入区间提醒",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusChip(
+                if (enabled) "监控中" else "已暂停",
+                if (enabled) statusColor("ACTIVE") else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        when {
+            error != null -> ErrorBanner(error, onRetry)
+            monitors.isEmpty() -> Text(
+                "尚无有效入场区间。开启后，等待正式研究完成并生成符合条件的 BUY Trade Plan。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> monitors.forEach { monitor ->
+                BuyMonitorRow(monitor)
+                if (monitor != monitors.last()) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BuyMonitorRow(monitor: BuyEntryMonitor) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(monitor.symbol, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            StatusChip(buyMonitorStatusLabel(monitor.status), statusColor(monitor.status))
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "¥ ${monitor.entry_low.fmt2()} — ¥ ${monitor.entry_high.fmt2()}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            buildString {
+                append("有效日 ${monitor.effective_date ?: "--"}")
+                append(" · ")
+                append(
+                    monitor.triggered_at?.let { "已于 ${it.fmtTime(full = true)} 通知" }
+                        ?: "到期 ${monitor.expires_at.fmtTime(full = true)}"
+                )
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun buyMonitorStatusLabel(status: String?): String = when (status?.uppercase()) {
+    "ACTIVE" -> "等待入场区间"
+    "TRIGGERED" -> "已触发提醒"
+    "EXPIRED" -> "已到期"
+    "CANCELLED" -> "已取消"
+    "FAILED" -> "数据异常"
+    else -> status ?: "--"
 }
 
 @Composable
