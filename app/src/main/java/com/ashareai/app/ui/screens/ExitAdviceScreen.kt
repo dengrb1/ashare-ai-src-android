@@ -26,6 +26,7 @@ import java.util.UUID
 @Composable
 fun ExitAdviceScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
+    val quotes by appViewModel.quotes.collectAsState()
     var symbols by remember { mutableStateOf<List<String>>(emptyList()) }
     var monitors by remember { mutableStateOf<List<TradeAdviceMonitor>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -52,7 +53,7 @@ fun ExitAdviceScreen(appViewModel: AppViewModel) {
                 item { TradeAdviceIntro() }
                 items(symbols, key = { it }) { symbol ->
                     val monitor = monitors.firstOrNull { it.symbol == symbol }
-                    TradeAdviceCard(symbol, monitor) { enabled, buy, sell ->
+                    TradeAdviceCard(symbol, quotes[symbol]?.name, monitor) { enabled, buy, sell ->
                         scope.launch {
                             try {
                                 val saved = ApiClient.api.saveTradeAdviceMonitor(UUID.randomUUID().toString(), TradeAdviceMonitorRequest(symbol, enabled, buy, sell))
@@ -84,16 +85,23 @@ private fun TradeAdviceIntro() {
 }
 
 @Composable
-private fun TradeAdviceCard(symbol: String, monitor: TradeAdviceMonitor?, onSave: (Boolean, Double?, Double?) -> Unit) {
+private fun TradeAdviceCard(symbol: String, name: String?, monitor: TradeAdviceMonitor?, onSave: (Boolean, Double?, Double?) -> Unit) {
     var buy by remember(monitor?.symbol, monitor?.manual_buy_price) { mutableStateOf(monitor?.manual_buy_price?.toString().orEmpty()) }
     var sell by remember(monitor?.symbol, monitor?.manual_sell_price) { mutableStateOf(monitor?.manual_sell_price?.toString().orEmpty()) }
     val enabled = monitor?.enabled == true
+    val displayName = name?.takeIf { it.isNotBlank() }
     AppCard {
-        // 标题行：代码 + 提醒状态 + 开关
+        // 标题行：股票名称 + 代码、提醒状态 + 开关
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(symbol, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        displayName?.let { "$it $symbol" } ?: symbol,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                     if (enabled) {
                         Spacer(Modifier.width(8.dp))
                         StatusChip(alertLabel(monitor), alertColor(monitor))
