@@ -243,15 +243,19 @@ data class BuyEntryMonitor(
     val expires_at: String? = null,
     val entry_low: Double? = null,
     val entry_high: Double? = null,
-    val rationale: String? = null,
+    val score_run_id: String? = null,
+    val trade_plan_id: String? = null,
+    val rationale: JsonObject = JsonObject(emptyMap()),
     val triggered_at: String? = null,
     val error_code: String? = null,
     val created_at: String? = null,
+    val updated_at: String? = null,
 )
 
 @Serializable
 data class BuyEntryMonitorRequest(val symbol: String, val enabled: Boolean)
 
+@Serializable
 data class TradeAdviceMonitor(
     val monitor_id: String,
     val symbol: String,
@@ -261,12 +265,13 @@ data class TradeAdviceMonitor(
     val ai_buy_price: Double? = null,
     val ai_sell_price: Double? = null,
     val stop_loss_price: Double? = null,
-    val rationale: Map<String, Any?> = emptyMap(),
+    val rationale: JsonObject = JsonObject(emptyMap()),
     val generated_at: String? = null,
     val last_alert_types: List<String> = emptyList(),
     val error_code: String? = null,
 )
 
+@Serializable
 data class TradeAdviceMonitorRequest(
     val symbol: String,
     val enabled: Boolean,
