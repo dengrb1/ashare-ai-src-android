@@ -10,6 +10,8 @@ import com.ashareai.app.data.model.*
 import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.toUserMessage
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,9 +83,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             try {
-                val user = withTimeout(20_000) { api.me() }
+                val bootstrap = withTimeout(20_000) { api.bootstrap() }
+                val user = bootstrap.user ?: api.me()
+                _assets.value = bootstrap.assets ?: api.assets()
                 _authState.value = AuthState.LoggedIn(user)
-                loadAssets()
                 PushManager.bindAuthenticatedDevice(app)
             } catch (e: Exception) {
                 if (e is HttpException && e.code() in setOf(401, 403)) {
@@ -114,9 +117,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     password,
                     rememberPassword,
                 )
-                val user = api.me()
+                val bootstrap = api.bootstrap()
+                val user = bootstrap.user ?: api.me()
+                _assets.value = bootstrap.assets ?: api.assets()
                 _authState.value = AuthState.LoggedIn(user)
-                loadAssets()
                 PushManager.bindAuthenticatedDevice(app)
             } catch (e: Exception) {
                 onError(e.toUserMessage())
@@ -167,10 +171,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         pollJob = viewModelScope.launch {
             var sessionTick = 0
             while (true) {
-                refreshQuotes()
-                if (sessionTick % 4 == 0) {
-                    refreshMarketStatus()
-                    refreshNotificationSummary()
+                coroutineScope {
+                    val quoteJob = async { refreshQuotes() }
+                    val auxiliaryJobs = if (sessionTick % 4 == 0) {
+                        listOf(
+                            async { refreshMarketStatus() },
+                            async { refreshNotificationSummary() },
+                        )
+                    } else {
+                        emptyList()
+                    }
+                    quoteJob.await()
+                    auxiliaryJobs.forEach { it.await() }
                 }
                 sessionTick++
                 val interval = (_assets.value?.market_refresh_interval_seconds ?: 15).coerceAtLeast(15)
@@ -207,9 +219,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun forceRefresh() {
         viewModelScope.launch {
-            refreshQuotes()
-            refreshMarketStatus()
-            refreshNotificationSummary()
+            coroutineScope {
+                listOf(
+                    async { refreshQuotes() },
+                    async { refreshMarketStatus() },
+                    async { refreshNotificationSummary() },
+                ).forEach { it.await() }
+            }
         }
     }
 

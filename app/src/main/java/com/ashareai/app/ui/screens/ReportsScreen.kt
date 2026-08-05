@@ -25,6 +25,8 @@ import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -59,21 +61,22 @@ fun ReportsScreen(
             report = r
             val reportId = r.report_id
             if (reportId != null) {
-                content = try {
-                    val c = ApiClient.api.reportContent(reportId)
-                    c.content ?: c.body
-                } catch (_: Exception) {
-                    null
-                }
-                symbols = try {
-                    ApiClient.api.reportSymbols(reportId)
-                } catch (_: Exception) {
-                    emptyList()
-                }
-                tradePlans = try {
-                    ApiClient.api.reportTradePlans(reportId)
-                } catch (_: Exception) {
-                    emptyList()
+                coroutineScope {
+                    val contentDeferred = async {
+                        runCatching {
+                            val c = ApiClient.api.reportContent(reportId)
+                            c.content ?: c.body
+                        }.getOrNull()
+                    }
+                    val symbolsDeferred = async {
+                        runCatching { ApiClient.api.reportSymbols(reportId) }.getOrDefault(emptyList())
+                    }
+                    val plansDeferred = async {
+                        runCatching { ApiClient.api.reportTradePlans(reportId) }.getOrDefault(emptyList())
+                    }
+                    content = contentDeferred.await()
+                    symbols = symbolsDeferred.await()
+                    tradePlans = plansDeferred.await()
                 }
             }
         } catch (e: Exception) {

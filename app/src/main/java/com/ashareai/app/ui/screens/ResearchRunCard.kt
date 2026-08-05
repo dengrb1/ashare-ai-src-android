@@ -12,6 +12,7 @@ import com.ashareai.app.ui.isActiveStatus
 import com.ashareai.app.ui.statusLabel
 import com.ashareai.app.ui.components.AppCard
 import com.ashareai.app.ui.components.StatusChip
+import com.ashareai.app.ui.components.TagPill
 import com.ashareai.app.ui.components.statusColor
 
 @Composable
@@ -42,6 +43,41 @@ fun RunCard(run: Run, onCancel: (() -> Unit)? = null, onOpenReport: (() -> Unit)
         }
         if (run.status.equals("DATA_READINESS_WAITING", true)) {
             Text("等待基准数据同步，下次重试 ${run.next_retry_at.fmtTime()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+        if (run.supreme_mode || run.execution_profile != null) {
+            val profile = run.execution_profile
+            val supreme = run.supreme_mode || profile?.mode.equals("SUPREME", ignoreCase = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TagPill(
+                    if (supreme) "至高模式" else "标准模式",
+                    if (supreme) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                )
+                profile?.let {
+                    TagPill("采集并发 ${it.data_fetch_workers}")
+                    if (supreme && !it.model_concurrency_changed) {
+                        TagPill("模型并发未提升")
+                    }
+                    TagPill(
+                        when (it.resource_level.uppercase()) {
+                            "CRITICAL" -> "资源紧张"
+                            "WARNING" -> "资源受限"
+                            else -> "资源正常"
+                        },
+                        when (it.resource_level.uppercase()) {
+                            "CRITICAL" -> MaterialTheme.colorScheme.error
+                            "WARNING" -> androidx.compose.ui.graphics.Color(0xFFFFA000)
+                            else -> MaterialTheme.colorScheme.secondary
+                        },
+                    )
+                }
+            }
+            if (profile?.reason_codes?.isNotEmpty() == true) {
+                Text(
+                    "资源策略：${profile.reason_codes.joinToString("、")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         run.error_message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         run.reason_message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

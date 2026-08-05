@@ -289,6 +289,7 @@ data class ResearchRequest(
     val total_budget: Double? = null,
     val per_symbol_budget: Double? = null,
     val max_stock_price: Double? = null,
+    val supreme_mode: Boolean = false,
 )
 
 @Serializable
@@ -317,11 +318,33 @@ data class Run(
     val reason_message: String? = null,
     val trigger_source: String? = null,
     val automatic_report_slot: String? = null,
+    val data_readiness_state: String? = null,
     val next_retry_at: String? = null,
     val formal_eligible_count: Int? = null,
     val excluded_symbol_count: Int? = null,
+    val portfolio_reason_code: String? = null,
     val portfolio_reason_message: String? = null,
+    val supreme_mode: Boolean = false,
+    val execution_profile: ResearchExecutionProfile? = null,
     val reused: Boolean = false,
+)
+
+@Serializable
+data class ResearchExecutionProfile(
+    val policy_version: String = "",
+    val mode: String = "STANDARD",
+    val data_fetch_workers: Int = 1,
+    val model_agent_max_concurrency: Int = 1,
+    val model_concurrency_changed: Boolean = false,
+    val resource_scope: String = "HOST",
+    val logical_cores: Int = 1,
+    val cpu_percent: Double = 0.0,
+    val available_memory_bytes: Long = 0L,
+    val memory_limit_bytes: Long? = null,
+    val active_memory_bytes: Long? = null,
+    val memory_budget_bytes: Long = 0L,
+    val resource_level: String = "NORMAL",
+    val reason_codes: List<String> = emptyList(),
 )
 
 @Serializable

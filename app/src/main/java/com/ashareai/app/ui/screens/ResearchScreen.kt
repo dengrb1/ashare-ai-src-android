@@ -22,6 +22,9 @@ import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.data.model.*
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -57,11 +60,20 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
     var totalBudget by remember { mutableStateOf("1000000") }
     var perSymbolBudget by remember { mutableStateOf("80000") }
     var maxStockPrice by remember { mutableStateOf("") }
+    var supremeMode by remember { mutableStateOf(false) }
 
-    suspend fun refresh() {
+    suspend fun refresh(loadSettings: Boolean = false) {
         try {
-            runs = ApiClient.api.researchRuns(limit = 20, mine = true)
-            settings = runCatching { ApiClient.api.researchSettings() }.getOrElse { settings }
+            if (loadSettings) {
+                coroutineScope {
+                    val runsDeferred = async { ApiClient.api.researchRuns(limit = 20, mine = true) }
+                    val settingsDeferred = async { runCatching { ApiClient.api.researchSettings() }.getOrNull() }
+                    runs = runsDeferred.await()
+                    settingsDeferred.await()?.let { settings = it }
+                }
+            } else {
+                runs = ApiClient.api.researchRuns(limit = 20, mine = true)
+            }
             error = null
         } catch (e: Exception) {
             error = e.toUserMessage()
@@ -70,11 +82,27 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    suspend fun refreshActiveRuns() {
+        val activeIds = runs.filter { isActiveStatus(it.status) }.map { it.run_id }
+        if (activeIds.isEmpty()) return
+        val updates = coroutineScope {
+            activeIds.map { runId ->
+                async { runCatching { ApiClient.api.researchRun(runId) }.getOrNull() }
+            }.awaitAll().filterNotNull()
+        }
+        if (updates.isNotEmpty()) {
+            val byId = updates.associateBy { it.run_id }
+            runs = runs.map { byId[it.run_id] ?: it }
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh(loadSettings = true) }
     LaunchedEffect(runs.any { isActiveStatus(it.status) }) {
+        var intervalMillis = 2_500L
         while (runs.any { isActiveStatus(it.status) }) {
-            delay(2_500)
-            refresh()
+            delay(intervalMillis)
+            refreshActiveRuns()
+            intervalMillis = 5_000L
         }
     }
 
@@ -204,6 +232,27 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
                 )
             }
             item {
+                Surface(
+                    color = if (supremeMode) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("至高模式", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "仅提升数据采集并行度，服务端会按 CPU 和内存自动收敛；模型并发保持不变。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = supremeMode, onCheckedChange = { supremeMode = it })
+                    }
+                }
+            }
+            item {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                     Column(Modifier.padding(10.dp)) {
                         Text("冻结快照由系统强制开启", style = MaterialTheme.typography.labelLarge)
@@ -245,9 +294,10 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
                                         total_budget = total,
                                         per_symbol_budget = perSymbol,
                                         max_stock_price = maxPrice,
+                                        supreme_mode = supremeMode,
                                     ),
                                 )
-                                refresh()
+                                refresh(loadSettings = false)
                             } catch (e: Exception) {
                                 error = e.toUserMessage()
                             } finally {
@@ -293,7 +343,7 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
                     coroutineScope.launch {
                         try {
                             ApiClient.api.cancelResearch(run.run_id)
-                            refresh()
+                            refresh(loadSettings = false)
                         } catch (e: Exception) {
                             error = e.toUserMessage()
                         }
