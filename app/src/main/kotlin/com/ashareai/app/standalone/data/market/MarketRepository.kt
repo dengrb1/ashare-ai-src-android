@@ -1,0 +1,109 @@
+package com.ashareai.app.standalone.data.market
+
+import com.ashareai.app.standalone.data.LocalRepository
+import com.ashareai.app.standalone.domain.DailyCandle
+import com.ashareai.app.standalone.domain.MarketFreshness
+import com.ashareai.app.standalone.domain.MarketQuote
+import com.ashareai.app.standalone.domain.Security
+
+class MarketRepository(
+    private val local: LocalRepository,
+    private val provider: MarketDataProvider,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    suspend fun catalog(limit: Int): List<Security> = try {
+        provider.catalog(limit.coerceIn(1, 500))
+    } catch (_: Exception) {
+        fallbackCatalog.take(limit.coerceIn(1, fallbackCatalog.size))
+    }
+
+    suspend fun refreshQuotes(symbols: Collection<String>): List<MarketQuote> {
+        val requested = symbols.filter(String::isNotBlank).distinct()
+        if (requested.isEmpty()) return emptyList()
+        val cached = local.cachedQuotes(requested).associateBy { it.symbol }
+        return try {
+            val fresh = provider.quotes(requested)
+            local.cacheQuotes(fresh)
+            QuoteCachePolicy.merge(requested, fresh, cached, provider.id, clock())
+        } catch (_: Exception) {
+            QuoteCachePolicy.merge(requested, emptyList(), cached, provider.id, clock())
+        }
+    }
+
+    suspend fun refreshQuote(symbol: String): MarketQuote = refreshQuotes(listOf(symbol)).first()
+
+    suspend fun dailyCandles(symbol: String, limit: Int, forceRefresh: Boolean = false): List<DailyCandle> {
+        val cached = local.cachedCandles(symbol)
+        val cacheFresh = cached.isNotEmpty() && clock() - cached.last().fetchedAt < CANDLE_CACHE_TTL_MILLIS
+        if (!forceRefresh && cacheFresh) return cached.takeLast(limit)
+        return try {
+            provider.dailyCandles(symbol, limit)
+                .also { if (it.isNotEmpty()) local.replaceCandles(symbol, it) }
+        } catch (_: Exception) {
+            cached.takeLast(limit)
+        }
+    }
+
+    fun isStale(quote: MarketQuote, maximumAgeMillis: Long = QUOTE_STALE_AFTER_MILLIS): Boolean =
+        QuoteCachePolicy.isStale(quote, clock(), maximumAgeMillis)
+
+    private companion object {
+        const val QUOTE_STALE_AFTER_MILLIS = 90_000L
+        const val CANDLE_CACHE_TTL_MILLIS = 6 * 60 * 60 * 1000L
+
+        val fallbackCatalog = listOf(
+            Security("600519", "贵州茅台", "SH"),
+            Security("600036", "招商银行", "SH"),
+            Security("601318", "中国平安", "SH"),
+            Security("600900", "长江电力", "SH"),
+            Security("601857", "中国石油", "SH"),
+            Security("600030", "中信证券", "SH"),
+            Security("601398", "工商银行", "SH"),
+            Security("600276", "恒瑞医药", "SH"),
+            Security("000001", "平安银行", "SZ"),
+            Security("000333", "美的集团", "SZ"),
+            Security("000858", "五粮液", "SZ"),
+            Security("002594", "比亚迪", "SZ"),
+            Security("300750", "宁德时代", "SZ"),
+            Security("300059", "东方财富", "SZ"),
+            Security("000651", "格力电器", "SZ"),
+            Security("002475", "立讯精密", "SZ"),
+            Security("000002", "万科A", "SZ"),
+            Security("600000", "浦发银行", "SH"),
+            Security("601888", "中国中免", "SH"),
+            Security("601012", "隆基绿能", "SH"),
+        )
+    }
+}
+
+object QuoteCachePolicy {
+    fun merge(
+        requested: List<String>,
+        fresh: List<MarketQuote>,
+        cached: Map<String, MarketQuote>,
+        provider: String,
+        now: Long,
+    ): List<MarketQuote> {
+        val freshBySymbol = fresh.associateBy(MarketQuote::symbol)
+        return requested.map { symbol ->
+            freshBySymbol[symbol]
+                ?: cached[symbol]?.copy(freshness = MarketFreshness.STALE)
+                ?: unavailable(symbol, provider, now)
+        }
+    }
+
+    fun isStale(quote: MarketQuote, now: Long, maximumAgeMillis: Long): Boolean =
+        now - quote.fetchedAt > maximumAgeMillis
+
+    private fun unavailable(symbol: String, provider: String, now: Long) = MarketQuote(
+        symbol = symbol,
+        name = symbol,
+        lastPrice = null,
+        previousClose = null,
+        changePercent = null,
+        volume = null,
+        provider = provider,
+        fetchedAt = now,
+        freshness = MarketFreshness.UNAVAILABLE,
+    )
+}

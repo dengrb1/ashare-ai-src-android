@@ -12,3 +12,8 @@
 
 # Local task notes
 /1.txt
+
+# Standalone release signing is local only.
+/keystore.properties
+*.jks
+*.keystore
