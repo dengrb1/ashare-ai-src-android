@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 冷启动窗口背景（深色主题）：深蓝夜色，与 Compose 深色背景一致，避免启动黑屏/flash -->
+    <color name="launch_background">#0E1524</color>
+</resources>

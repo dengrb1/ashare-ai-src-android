@@ -4,6 +4,8 @@
 /.gradle
 /.kotlin
 /local.properties
+/keystore.properties
+/release.keystore
 /.idea
 *.apk
 *.aab

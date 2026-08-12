@@ -1,5 +1,14 @@
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+
+// 签名配置：keystore 与密码存于根目录 keystore.properties（已被 .gitignore 排除，不入库）。
+// 该文件不存在时（如 CI/新克隆）release 构建退化为未签名，不中断构建。
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -56,8 +65,20 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = if (keystorePropertiesFile.exists()) rootProject.file(keystoreProperties.getProperty("storeFile")) else null
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             if (standaloneSigningReady) {
