@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun PersonalDataScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = appViewModel.screenContext()
     var passphrase by remember { mutableStateOf("") }
     var job by remember { mutableStateOf<PersonalArchiveJob?>(null) }
     var error by remember { mutableStateOf<String?>(null) }

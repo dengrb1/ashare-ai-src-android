@@ -9,15 +9,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -31,13 +29,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MainActivity : ComponentActivity() {
 
     private val pendingRoute = MutableStateFlow<String?>(null)
+    private lateinit var appViewModel: AppViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         consumeIntent(intent)
+        appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
+        appViewModel.attachHostContext(this)
         setContent {
-            val appViewModel: AppViewModel = viewModel()
             val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
             val authState by appViewModel.authState.collectAsState()
             val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = false)
@@ -61,26 +61,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val lifecycleOwner = LocalLifecycleOwner.current
-            DisposableEffect(lifecycleOwner) {
-                val observer = LifecycleEventObserver { _, event ->
-                    when (event) {
-                        Lifecycle.Event.ON_START -> {
-                            notificationsGranted = Build.VERSION.SDK_INT < 33 ||
-                                ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.POST_NOTIFICATIONS,
-                                ) == PackageManager.PERMISSION_GRANTED
-                            appViewModel.onForeground()
-                        }
-                        Lifecycle.Event.ON_STOP -> appViewModel.onBackground()
-                        else -> Unit
-                    }
-                }
-                lifecycleOwner.lifecycle.addObserver(observer)
-                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-            }
-
             AShareTheme(darkModePref = darkMode) {
                 AppRoot(appViewModel, pendingRoute) { pendingRoute.value = null }
             }
@@ -91,6 +71,21 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        appViewModel.onForeground()
+    }
+
+    override fun onStop() {
+        appViewModel.onBackground()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        appViewModel.detachHostContext(this)
+        super.onDestroy()
     }
 
     private fun consumeIntent(intent: Intent?) {

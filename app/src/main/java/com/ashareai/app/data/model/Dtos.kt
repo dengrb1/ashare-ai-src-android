@@ -122,6 +122,13 @@ data class Quote(
 )
 
 @Serializable
+data class MarketIndicesResponse(
+    val quotes: List<Quote> = emptyList(),
+    val labels: Map<String, String> = emptyMap(),
+    val live_data_isolated_from_snapshots: Boolean = true,
+)
+
+@Serializable
 data class KlineBar(
     val timestamp: String,
     val open: Double,
@@ -424,8 +431,33 @@ data class Score(
     val base_total_score: Double? = null,
     val dividend_bonus: Double? = null,
     val event_risk_multiplier: Double? = null,
+    val market_index_snapshot: MarketIndexSnapshot? = null,
+    val market_regime: String? = null,
+    val market_score_adjustment: Double? = null,
+    val market_risk_multiplier: Double? = null,
     val total_score: Double? = null,
     val formula_version: String? = null,
+)
+
+@Serializable
+data class MarketIndexPerformance(
+    val name: String,
+    val symbol: String,
+    val return_1d: Double? = null,
+    val return_5d: Double? = null,
+    val return_20d: Double? = null,
+)
+
+@Serializable
+data class MarketIndexSnapshot(
+    val trading_date: String? = null,
+    val indices: List<MarketIndexPerformance> = emptyList(),
+    val composite_return_1d: Double? = null,
+    val composite_return_5d: Double? = null,
+    val composite_return_20d: Double? = null,
+    val regime: String = "UNKNOWN",
+    val score_adjustment: Double = 0.0,
+    val risk_multiplier: Double = 1.0,
 )
 
 @Serializable
@@ -474,6 +506,7 @@ data class Report(
     val report_type: String? = null,
     val created_at: String? = null,
     val status: String? = null,
+    val market_index_snapshot: MarketIndexSnapshot? = null,
 )
 
 @Serializable

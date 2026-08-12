@@ -60,6 +60,11 @@ interface ApiService {
         @Query("refresh") refresh: Boolean? = null,
     ): List<Quote>
 
+    @GET("api/v1/market/indices")
+    suspend fun marketIndices(
+        @Query("refresh") refresh: Boolean? = null,
+    ): MarketIndicesResponse
+
     @GET("api/v1/market/klines/{symbol}")
     suspend fun klines(
         @Path("symbol") symbol: String,

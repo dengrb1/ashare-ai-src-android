@@ -32,7 +32,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SettingsScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = appViewModel.screenContext()
     val foregroundRefreshIntervalSeconds by appViewModel.foregroundRefreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = true)

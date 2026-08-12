@@ -108,7 +108,7 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                     Icon(
                         if (inWatchlist) Icons.Outlined.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (inWatchlist) "取消自选" else "加入自选",
-                        tint = if (inWatchlist) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                        tint = if (inWatchlist) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                 }
             },

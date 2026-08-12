@@ -3,6 +3,7 @@ package com.ashareai.app.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Search
@@ -13,9 +14,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.AssetStateRequest
+import com.ashareai.app.data.model.MarketIndicesResponse
 import com.ashareai.app.data.normalizeSymbol
 import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.fmt2
+import com.ashareai.app.ui.components.ChangeText
 import com.ashareai.app.ui.components.EmptyPlaceholder
 import com.ashareai.app.ui.components.ErrorBanner
 import com.ashareai.app.ui.navigation.Routes
@@ -26,10 +30,15 @@ import kotlinx.coroutines.launch
 fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
     val assets by appViewModel.assets.collectAsState()
     val quotes by appViewModel.quotes.collectAsState()
+    val marketIndices by appViewModel.marketIndices.collectAsState()
     val scope = rememberCoroutineScope()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (marketIndices.quotes.isEmpty()) appViewModel.loadMarketIndices()
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(title = "行情")
@@ -37,6 +46,8 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
         error?.let {
             Box(Modifier.padding(horizontal = 16.dp)) { ErrorBanner(it) { error = null } }
         }
+
+        MarketIndicesStrip(marketIndices)
 
         val watchlist = assets?.watchlist ?: emptyList()
         if (watchlist.isEmpty()) {
@@ -92,6 +103,47 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
                 ) { msg -> if (msg != null) error = msg else appViewModel.forceRefresh() }
             },
         )
+    }
+}
+
+@Composable
+private fun MarketIndicesStrip(indices: MarketIndicesResponse) {
+    if (indices.quotes.isEmpty()) return
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("大盘指数", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "实时展示；研究评分使用报告生成时冻结的指数环境",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            indices.quotes.forEach { quote ->
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Column(Modifier.padding(8.dp)) {
+                        Text(
+                            indices.labels[quote.symbol] ?: quote.name ?: quote.symbol,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                        Text(quote.price.fmt2(), style = MaterialTheme.typography.titleSmall)
+                        ChangeText(
+                            quote.change_percent,
+                            "${if ((quote.change_percent ?: 0.0) >= 0) "+" else ""}${quote.change_percent.fmt2()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

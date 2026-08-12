@@ -20,8 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,7 +66,7 @@ internal fun appendQuickQuestion(draft: TextFieldValue, question: String): TextF
 @Composable
 fun AIChatScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val context = appViewModel.screenContext()
     val assets by appViewModel.assets.collectAsState()
     val quotes by appViewModel.quotes.collectAsState()
 
@@ -557,7 +555,7 @@ private fun CostStrip(summary: AICostSummary?) {
 @Composable
 private fun MessageBubble(message: AIChatMessage, appViewModel: AppViewModel) {
     val isUser = message.role == "user"
-    val uriHandler = LocalUriHandler.current
+    val context = appViewModel.screenContext()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
         Column(
             Modifier.widthIn(max = 680.dp).clip(RoundedCornerShape(8.dp))
@@ -574,7 +572,13 @@ private fun MessageBubble(message: AIChatMessage, appViewModel: AppViewModel) {
                     val link = safeLink(source.uri ?: source.url)
                     Text(
                         source.title ?: source.symbol ?: source.source ?: link ?: "系统数据",
-                        modifier = if (link != null) Modifier.clickable { uriHandler.openUri(link) } else Modifier,
+                        modifier = if (link != null) Modifier.clickable {
+                            context.startActivity(
+                                android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(link)).apply {
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                },
+                            )
+                        } else Modifier,
                         style = MaterialTheme.typography.labelSmall,
                         color = if (link != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -596,7 +600,7 @@ private fun AttachmentImage(id: String, appViewModel: AppViewModel) {
     var baseUrl by remember { mutableStateOf<String?>(null) }
     var token by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    val context = appViewModel.screenContext()
     LaunchedEffect(id) { baseUrl = appViewModel.settings.currentBaseUrl(); token = appViewModel.settings.currentAccessToken() }
     if (failed) {
         Box(Modifier.size(96.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text("图片已过期", style = MaterialTheme.typography.labelSmall) }

@@ -132,6 +132,9 @@ fun ReportsScreen(
                 Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("日报正文") })
                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("研究个股(${symbols.size})") })
             }
+            report?.market_index_snapshot?.let { snapshot ->
+                MarketIndexSnapshotSummary(snapshot, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            }
             when (selectedTab) {
                 0 -> ReportContentView(content)
                 1 -> SymbolListView(
@@ -299,6 +302,9 @@ private fun SymbolDetailSheet(symbol: ReportSymbol, onDismiss: () -> Unit) {
                 KeyValueRow("基础分", s.base_total_score.fmt2())
                 KeyValueRow("分红加分", s.dividend_bonus.fmt2())
                 KeyValueRow("事件风险乘数", s.event_risk_multiplier.fmt2())
+                KeyValueRow("大盘状态", marketRegimeLabel(s.market_regime))
+                KeyValueRow("大盘评分调整", signedFmt(s.market_score_adjustment))
+                KeyValueRow("大盘风险乘数", s.market_risk_multiplier.fmt2())
                 KeyValueRow("公式版本", s.formula_version ?: "--")
             }
             symbol.plain_language_summary?.let {
@@ -323,6 +329,38 @@ private fun SymbolDetailSheet(symbol: ReportSymbol, onDismiss: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun MarketIndexSnapshotSummary(snapshot: MarketIndexSnapshot, modifier: Modifier = Modifier) {
+    AppCard(modifier) {
+        Text("冻结大盘指数环境", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "${marketRegimeLabel(snapshot.regime)} · 综合5日 ${snapshot.composite_return_5d?.times(100).fmt2()}% · 调整 ${signedFmt(snapshot.score_adjustment)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        snapshot.indices.forEach { index ->
+            KeyValueRow(
+                index.name,
+                "1日 ${index.return_1d?.times(100).fmt2()}% · 5日 ${index.return_5d?.times(100).fmt2()}% · 20日 ${index.return_20d?.times(100).fmt2()}%",
+            )
+        }
+        Text(
+            "指数环境来自本次研究冻结基准，已参与最终分。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun marketRegimeLabel(value: String?): String = when (value) {
+    "RISK_ON" -> "风险偏好改善"
+    "RISK_OFF" -> "风险偏好收缩"
+    "NEUTRAL" -> "大盘中性"
+    else -> "大盘数据不足"
+}
+
+private fun signedFmt(value: Double?): String = value?.let { if (it >= 0) "+${it.fmt2()}" else it.fmt2() } ?: "--"
 
 @Composable
 private fun ScoreStat(label: String, value: Double?) {

@@ -1,6 +1,7 @@
 package com.ashareai.app.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ashareai.app.AShareApp
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import com.ashareai.app.island.PushManager
 import retrofit2.HttpException
+import java.lang.ref.WeakReference
 
 /**
  * 会话级全局状态：登录态、资产、行情报价轮询、通知红点。
@@ -30,6 +32,8 @@ import retrofit2.HttpException
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as AShareApp
+    val appContext = application.applicationContext
+    private var hostContext = WeakReference<Context>(null)
     val settings get() = app.settings
     private val api get() = ApiClient.api
 
@@ -50,6 +54,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _quotes = MutableStateFlow<Map<String, Quote>>(emptyMap())
     val quotes: StateFlow<Map<String, Quote>> = _quotes.asStateFlow()
 
+    private val _marketIndices = MutableStateFlow(MarketIndicesResponse())
+    val marketIndices: StateFlow<MarketIndicesResponse> = _marketIndices.asStateFlow()
+
     private val _foregroundRefreshIntervalSeconds =
         MutableStateFlow(MarketRefreshIntervals.DEFAULT_SECONDS)
     val foregroundRefreshIntervalSeconds: StateFlow<Int> = _foregroundRefreshIntervalSeconds.asStateFlow()
@@ -67,6 +74,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var pollJob: Job? = null
     private var pushEventsJob: Job? = null
     private var foreground = false
+
+    fun attachHostContext(context: Context) {
+        hostContext = WeakReference(context)
+    }
+
+    fun detachHostContext(context: Context) {
+        if (hostContext.get() === context) hostContext.clear()
+    }
+
+    fun screenContext(): Context = hostContext.get() ?: appContext
 
     init {
         ApiClient.onSessionExpired = {
@@ -220,6 +237,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun refreshMarketStatus() {
         try {
             _marketSession.value = api.marketStatus().market_session
+        } catch (_: Exception) {
+        }
+    }
+
+    fun loadMarketIndices(refresh: Boolean = false) {
+        viewModelScope.launch { refreshMarketIndices(refresh) }
+    }
+
+    private suspend fun refreshMarketIndices(refresh: Boolean = false) {
+        try {
+            _marketIndices.value = api.marketIndices(refresh = refresh)
         } catch (_: Exception) {
         }
     }
