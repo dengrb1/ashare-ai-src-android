@@ -6,8 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -52,27 +50,13 @@ class MainActivity : ComponentActivity() {
                         ) == PackageManager.PERMISSION_GRANTED,
                 )
             }
-            var notificationPermissionRequested by remember { mutableStateOf(false) }
-            val notificationPermission = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission(),
-            ) { granted ->
-                notificationsGranted = granted
-            }
-
-            LaunchedEffect(notificationsGranted, notificationPermissionRequested) {
-                if (Build.VERSION.SDK_INT >= 33 && !notificationsGranted && !notificationPermissionRequested) {
-                    notificationPermissionRequested = true
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-
             // 登录后按设置启动持仓监控前台服务
             LaunchedEffect(authState, islandEnabled, notificationsGranted) {
                 if (authState is AppViewModel.AuthState.LoggedIn && islandEnabled &&
                     notificationsGranted && NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
                 ) {
                     MonitorService.start(this@MainActivity)
-                } else if (authState is AppViewModel.AuthState.LoggedOut) {
+                } else {
                     MonitorService.stop(this@MainActivity)
                 }
             }
@@ -81,7 +65,14 @@ class MainActivity : ComponentActivity() {
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
-                        Lifecycle.Event.ON_START -> appViewModel.onForeground()
+                        Lifecycle.Event.ON_START -> {
+                            notificationsGranted = Build.VERSION.SDK_INT < 33 ||
+                                ContextCompat.checkSelfPermission(
+                                    this@MainActivity,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) == PackageManager.PERMISSION_GRANTED
+                            appViewModel.onForeground()
+                        }
                         Lifecycle.Event.ON_STOP -> appViewModel.onBackground()
                         else -> Unit
                     }

@@ -1,44 +1,99 @@
-# Repository Guidelines
+# AShare AI Android Engineering Guide
 
-## Project Structure & Module Organization
+## Scope and Architecture
 
-This is a single-module Android application built with Kotlin and Jetpack Compose. Production code lives under `app/src/main/java/com/ashareai/app/`. Keep API clients, DTOs, and settings in `data/`; notification behavior in `island/`; and Compose code in `ui/`, grouped into `screens/`, `components/`, `navigation/`, and `theme/`. Resources and the manifest are under `app/src/main/res/` and `app/src/main/AndroidManifest.xml`. Dependency versions are centralized in `gradle/libs.versions.toml`.
+This repository contains the standalone Android client for the AShare AI research system. It is a single Android application module written in Kotlin and Jetpack Compose.
 
-Add local unit tests to `app/src/test/` and device or Compose UI tests to `app/src/androidTest/`. Generated output in `build/` and `app/build/` must remain untracked.
+```text
+app/src/main/java/com/ashareai/app/
+├── data/       # Retrofit, OkHttp, SSE, DTOs, DataStore, and encrypted local secrets
+├── island/     # Push, foreground monitor service, notification routing
+├── ui/
+│   ├── components/
+│   ├── navigation/
+│   ├── screens/
+│   └── theme/
+├── AShareApp.kt
+└── MainActivity.kt
+```
 
-## Build, Test, and Development Commands
+- Keep API clients, DTOs, URL helpers, and local preference storage in `data/`.
+- Keep notification and foreground-service behavior in `island/`.
+- Keep composables free of networking and persistence. Place screen state in focused screen state or `AppViewModel`, and reusable UI in `ui/components/`.
+- Keep backend DTO fields in `data/model/Dtos.kt` aligned with the `/api/v1` snake_case JSON contract. Do not rename fields to camelCase unless a `@SerialName` migration is deliberately added and tested.
 
-Use the checked-in Gradle wrapper (Windows examples):
+## Product Boundaries
 
-- `.\gradlew.bat assembleDebug` builds a debug APK.
-- `.\gradlew.bat installDebug` installs it on a connected emulator or device.
-- `.\gradlew.bat testDebugUnitTest` runs JVM unit tests.
-- `.\gradlew.bat connectedDebugAndroidTest` runs instrumentation/UI tests on a device.
-- `.\gradlew.bat lintDebug` performs Android static analysis.
-- `.\gradlew.bat clean` removes generated build artifacts.
+The mobile client supports investment research, market observation, paper portfolios, research, backtests, AI chat, notifications, personal data import/export, and the administrator controls exposed by the backend.
 
-Android Studio should use JDK 17. Configure the local Android SDK through `local.properties`; do not commit that file.
+The Android administrator area includes model configuration, system resource/settings control, runtime identity, and Edge Gateway configuration. Account lifecycle management (create, disable, delete, reset password) is intentionally Web-only. Do not add Android account management screens unless the product requirement changes explicitly.
 
-When project code changes, including Kotlin/Java, Compose UI, resources, the manifest, Gradle configuration, ProGuard rules, or dependencies, build both APK variants before considering the work complete: `.\gradlew.bat assembleDebug assembleRelease`. Also run the relevant unit tests and lint checks; run connected tests when the change affects UI, navigation, permissions, or lifecycle behavior. Documentation-only changes, including `AGENTS.md`, do not require compilation unless they change build behavior or signing configuration. If a required verification command fails, investigate and fix the issue when it is within scope, or clearly report the failure and its cause.
+The product is for research and paper trading. Do not add broker execution, real-money order placement, or language implying a recommendation or guaranteed return.
 
-Every Release APK delivered for installation or distribution must be signed. An `app-release-unsigned.apk` must not be treated as a finished artifact. Use a secure local or CI signing configuration, never commit keystores or signing credentials, and report the missing signing configuration instead of delivering an unsigned APK.
+## AI Configuration and Secrets
 
-## Coding Style & Naming Conventions
+- The model settings UI must use the backend `/api/v1/admin/model-settings` endpoints. The backend owns encryption, versioning, validation, model probing, and activation.
+- Never persist an AI API Key in `SettingsStore`, Compose saved state, logs, screenshots, tests, or analytics. Hold it only as ephemeral form input and send it over the authenticated API request.
+- Leaving a secret field empty must retain the server-side encrypted value. API responses expose only configuration flags such as `api_key_configured`.
+- System settings and Edge Gateway changes require the short-lived `X-System-Settings-Unlock` token obtained from the administrator password flow. Do not cache this token in DataStore.
+- Do not log Authorization headers, AI keys, FRP TOML tokens, unlock tokens, portfolios, or archive passphrases.
 
-Follow standard Kotlin formatting with four-space indentation and trailing commas in multiline declarations and calls. Use `PascalCase` for classes, composables, and files (`StockDetailScreen.kt`), `camelCase` for functions and properties, and `UPPER_SNAKE_CASE` for constants. Keep package names lowercase. Compose screens should expose focused `@Composable` functions, hoist reusable UI into `ui/components`, and keep networking or persistence out of composables. Run Android Studio's Kotlin formatter and optimize imports before committing.
+## Low-Memory and Lifecycle Rules
 
-## Code Readability & Maintainability
+- The normal foreground client must start only login/session restoration and the active UI. Market polling runs only while the app is foregrounded and logged in.
+- Do not initialize Mi Push or start `MonitorService` at application startup. Push registration, foreground monitoring, and notification permission requests occur only after the user actively enables notifications in Settings.
+- When notifications are disabled or the user logs out, stop the foreground service, cancel push event collection, and unbind the remote device.
+- Do not introduce global background loops, large caches, eager chart loading, or eager network prefetches. Load screen-specific data when the screen becomes active and release/cancel jobs when it leaves scope.
+- Preserve the `LIGHTWEIGHT` versus `SUPREME` backend runtime setting semantics. Mobile controls configure the backend; they must not attempt to run quant models locally.
 
-Write code for the next maintainer: prefer clear names, small focused functions, straightforward control flow, and explicit responsibilities. Keep changes narrowly scoped, avoid unnecessary duplication and premature abstractions, and reuse existing project patterns before introducing new ones. Keep composables, data access, and business logic separated; preserve stable public interfaces unless a change is required. Add comments only when they explain non-obvious intent or constraints, and update nearby tests and documentation when behavior changes. Before finishing, review the diff for dead code, accidental complexity, inconsistent formatting, and maintainability regressions.
+## UI Rules
 
-## Testing Guidelines
+- Follow the existing Material 3 design system and `AShareTheme` tokens. Do not add a parallel component library.
+- The interface uses an Apple-inspired Liquid Glass treatment only for functional chrome: navigation, toolbars, bottom controls, popovers, and sheets. Keep charts, forms, reports, tables, and repeated data cards clear and opaque enough for financial scanning.
+- Maintain visible focus, adequate contrast, 48dp touch targets, stable layouts, and dark/light theme support.
+- Use familiar Material icons in icon-only controls with content descriptions. Do not use decorative emoji, gradients as the primary background, or large marketing-style layouts for operational screens.
+- Test rendering on a real device or emulator for navigation, permissions, keyboard resizing, long Chinese labels, dark mode, and accessibility scaling when UI behavior changes.
 
-Unit tests are checked in under `app/src/test/java/` and cover data serialization contracts, repositories, and pure UI helpers. DTOs in `data/model/Dtos.kt` mirror the backend `/api/v1` snake_case JSON contracts; when a backend field type changes (e.g. a dict becomes a typed object), update the DTO and its `*SerializationTest` so the app keeps decoding real responses. New business logic should include focused unit tests named `*Test.kt`; navigation, permissions, and critical user flows should use `*Test.kt` instrumentation tests. Prefer deterministic coroutine tests and mocked network boundaries. Run unit tests and lint for every change; run connected tests when UI or lifecycle behavior changes.
+## Build and Test Commands
 
-## Commit & Pull Request Guidelines
+Use JDK 17 and the checked-in Windows Gradle wrapper:
 
-The current history uses Conventional Commit-style subjects, for example `feat: Add Settings and Stock Detail screens with theme support`. Continue with concise imperative prefixes such as `feat:`, `fix:`, `test:`, or `refactor:`. Pull requests should explain behavior changes, identify validation commands, link relevant issues, and include screenshots or recordings for visible UI changes. Keep PRs narrowly scoped and call out changes to permissions, API contracts, or ProGuard rules.
+```powershell
+.\gradlew.bat assembleDebug
+.\gradlew.bat assembleRelease
+.\gradlew.bat testDebugUnitTest
+.\gradlew.bat lintDebug
+.\gradlew.bat connectedDebugAndroidTest
+```
 
-## Security & Configuration
+For every code, resource, manifest, Gradle, or dependency change, run:
 
-Never commit credentials, tokens, private server URLs, signing files, or generated APK/AAB files. Treat logs from Retrofit/OkHttp carefully and avoid exposing authentication headers or personal portfolio data.
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleDebug assembleRelease
+```
+
+Run `connectedDebugAndroidTest` whenever the change affects Compose UI, navigation, permissions, foreground service behavior, activity lifecycle, or notification routing and a device is available. Report the missing device rather than claiming connected tests passed.
+
+`app/build/` and root `build/` are generated and must remain untracked.
+
+## Tests and API Contracts
+
+- Put local JVM tests under `app/src/test/java/` and instrumentation/Compose tests under `app/src/androidTest/`.
+- Add or update `*ContractTest` serialization coverage whenever a backend model or endpoint shape changes, especially admin model settings, system settings, Edge Gateway, research, AI chat, and monitoring DTOs.
+- Prefer deterministic coroutine tests and mocked network boundaries. Keep tests focused on observable behavior.
+- Treat unknown fields as backward-compatible only because `ApiClient.json` deliberately uses `ignoreUnknownKeys`; required fields must still mirror the backend contract.
+
+## Security and Release Requirements
+
+- `local.properties`, `keystore.properties`, `.keystore`, `.jks`, signing passwords, API keys, internal server URLs, push credentials, and generated APK/AAB files must never be committed.
+- Release artifacts must be signed. Do not treat `app-release-unsigned.apk` as deliverable.
+- Verify a release APK with `apksigner verify --verbose` before distribution.
+- Preserve authenticated Retrofit behavior and token refresh safeguards. New mutating backend requests must use idempotency keys when the server endpoint requires them.
+
+## Editing and Git Hygiene
+
+- Use standard Kotlin formatting: four spaces, focused functions, `PascalCase` classes/composables/files, `camelCase` functions/properties, and `UPPER_SNAKE_CASE` constants.
+- Prefer existing patterns and narrowly scoped changes. Avoid unrelated refactors.
+- Preserve user changes in a dirty worktree. Never use destructive Git commands to discard changes unless explicitly asked.
+- Use Conventional Commit subjects, such as `feat: Add administrator model controls`.
+- Before committing, inspect `git diff --check`, review the staged diff, and ensure tests appropriate to the change have passed.

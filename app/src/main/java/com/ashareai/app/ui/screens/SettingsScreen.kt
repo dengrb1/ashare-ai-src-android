@@ -21,18 +21,19 @@ import com.ashareai.app.island.FocusCapabilities
 import com.ashareai.app.island.FocusNotification
 import com.ashareai.app.data.normalizeServerUrl
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.MarketRefreshIntervals
 import com.ashareai.app.ui.components.AppCard
 import com.ashareai.app.ui.components.KeyValueRow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** 设置：服务器地址、行情刷新间隔、深浅色、超级岛监控开关。 */
+/** 设置：服务器地址、前台行情刷新间隔、深浅色、超级岛监控开关。 */
 @Composable
 fun SettingsScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val assets by appViewModel.assets.collectAsState()
+    val foregroundRefreshIntervalSeconds by appViewModel.foregroundRefreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = true)
 
@@ -56,6 +57,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
             } else {
                 scope.launch {
                     appViewModel.settings.setIslandEnabled(true)
+                    appViewModel.enableOptionalPush()
                     MonitorService.start(context)
                 }
             }
@@ -121,19 +123,29 @@ fun SettingsScreen(appViewModel: AppViewModel) {
 
             item {
                 AppCard {
-                    Text("行情刷新间隔", style = MaterialTheme.typography.titleSmall)
+                    Text("前台行情自动刷新", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(15, 30, 60, 120).forEach { sec ->
-                            FilterChip(
-                                selected = assets?.market_refresh_interval_seconds == sec,
-                                onClick = {
-                                    appViewModel.saveRefreshInterval(sec) { msg ->
-                                        message = msg ?: "刷新间隔已改为 ${sec}s"
-                                    }
-                                },
-                                label = { Text("${sec}s") },
-                            )
+                    Text(
+                        "仅应用在前台时自动请求行情，切到后台后会暂停。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MarketRefreshIntervals.OPTIONS.chunked(3).forEach { rowOptions ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                rowOptions.forEach { sec ->
+                                    FilterChip(
+                                        selected = foregroundRefreshIntervalSeconds == sec,
+                                        onClick = {
+                                            appViewModel.saveForegroundRefreshInterval(sec) { msg ->
+                                                message = msg ?: "刷新间隔已改为 ${sec}s"
+                                            }
+                                        },
+                                        label = { Text("${sec}s") },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -173,6 +185,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                                 if (!enabled) {
                                     scope.launch {
                                         appViewModel.settings.setIslandEnabled(false)
+                                        appViewModel.disableOptionalPushForSettings()
                                         MonitorService.stop(context)
                                     }
                                 } else if (Build.VERSION.SDK_INT >= 33 && !notificationsGranted) {
@@ -180,6 +193,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                                 } else {
                                     scope.launch {
                                         appViewModel.settings.setIslandEnabled(true)
+                                        appViewModel.enableOptionalPush()
                                         MonitorService.start(context)
                                     }
                                 }

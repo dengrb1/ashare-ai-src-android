@@ -16,6 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import com.ashareai.app.island.PushManager
@@ -23,7 +25,7 @@ import retrofit2.HttpException
 
 /**
  * 会话级全局状态：登录态、资产、行情报价轮询、通知红点。
- * 行情按用户设置的 market_refresh_interval_seconds 轮询，页面退后台时暂停。
+ * 行情按独立版的前台刷新偏好轮询，仅在应用前台运行。
  */
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,6 +50,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _quotes = MutableStateFlow<Map<String, Quote>>(emptyMap())
     val quotes: StateFlow<Map<String, Quote>> = _quotes.asStateFlow()
 
+    private val _foregroundRefreshIntervalSeconds =
+        MutableStateFlow(MarketRefreshIntervals.DEFAULT_SECONDS)
+    val foregroundRefreshIntervalSeconds: StateFlow<Int> = _foregroundRefreshIntervalSeconds.asStateFlow()
+
     private val _marketSession = MutableStateFlow<MarketSession?>(null)
     val marketSession: StateFlow<MarketSession?> = _marketSession.asStateFlow()
 
@@ -59,18 +65,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val globalError: StateFlow<String?> = _globalError.asStateFlow()
 
     private var pollJob: Job? = null
+    private var pushEventsJob: Job? = null
     private var foreground = false
 
     init {
         ApiClient.onSessionExpired = {
             viewModelScope.launch {
+                pollJob?.cancel()
+                disableOptionalPush()
                 settings.clearTokens()
                 _authState.value = AuthState.LoggedOut
             }
         }
         restoreSession()
         viewModelScope.launch {
-            PushManager.events.collect { notificationCenter.refresh() }
+            settings.foregroundMarketRefreshIntervalSeconds.collect { seconds ->
+                _foregroundRefreshIntervalSeconds.value = MarketRefreshIntervals.normalize(seconds)
+            }
         }
     }
 
@@ -87,7 +98,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val user = bootstrap.user ?: api.me()
                 _assets.value = bootstrap.assets ?: api.assets()
                 _authState.value = AuthState.LoggedIn(user)
-                PushManager.bindAuthenticatedDevice(app)
+                initializeOptionalPush()
+                restartPolling()
             } catch (e: Exception) {
                 if (e is HttpException && e.code() in setOf(401, 403)) {
                     settings.clearTokens()
@@ -102,6 +114,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun retrySessionRestore() = restoreSession()
 
     fun showLogin() {
+        pollJob?.cancel()
         _authState.value = AuthState.LoggedOut
     }
 
@@ -121,7 +134,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val user = bootstrap.user ?: api.me()
                 _assets.value = bootstrap.assets ?: api.assets()
                 _authState.value = AuthState.LoggedIn(user)
-                PushManager.bindAuthenticatedDevice(app)
+                initializeOptionalPush()
+                restartPolling()
             } catch (e: Exception) {
                 onError(e.toUserMessage())
             }
@@ -129,8 +143,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        pollJob?.cancel()
         viewModelScope.launch {
-            PushManager.unbindAuthenticatedDevice(app)
+            disableOptionalPush()
             try {
                 settings.currentRefreshToken()?.let { api.revoke(RefreshRequest(it)) }
             } catch (_: Exception) {
@@ -170,7 +185,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!foreground || _authState.value !is AuthState.LoggedIn) return
         pollJob = viewModelScope.launch {
             var sessionTick = 0
-            while (true) {
+            while (foreground && _authState.value is AuthState.LoggedIn) {
                 coroutineScope {
                     val quoteJob = async { refreshQuotes() }
                     val auxiliaryJobs = if (sessionTick % 4 == 0) {
@@ -185,8 +200,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     auxiliaryJobs.forEach { it.await() }
                 }
                 sessionTick++
-                val interval = (_assets.value?.market_refresh_interval_seconds ?: 15).coerceAtLeast(15)
-                delay(interval * 1000L)
+                delay(_foregroundRefreshIntervalSeconds.value * 1000L)
             }
         }
     }
@@ -233,6 +247,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _globalError.value = null
     }
 
+    /**
+     * 推送 SDK 可能唤起厂商进程，只有登录且用户明确开启行情/研究通知后才初始化。
+     * 未开启时独立版仅保留前台页面的轻量轮询。
+     */
+    fun enableOptionalPush() {
+        viewModelScope.launch {
+            if (!settings.islandEnabled.first()) return@launch
+            PushManager.bindAuthenticatedDevice(app)
+            if (pushEventsJob == null) {
+                pushEventsJob = viewModelScope.launch {
+                    PushManager.events.collect { notificationCenter.refresh() }
+                }
+            }
+        }
+    }
+
+    private suspend fun disableOptionalPush() {
+        pushEventsJob?.cancel()
+        pushEventsJob = null
+        PushManager.unbindAuthenticatedDevice(app)
+    }
+
+    fun disableOptionalPushForSettings() {
+        viewModelScope.launch { disableOptionalPush() }
+    }
+
+    private fun initializeOptionalPush() = enableOptionalPush()
+
     // ---- 资产写操作 ----
 
     fun saveAssets(request: AssetStateRequest, onDone: (String?) -> Unit) {
@@ -258,10 +300,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveRefreshInterval(seconds: Int, onDone: (String?) -> Unit) {
+    fun saveForegroundRefreshInterval(seconds: Int, onDone: (String?) -> Unit) {
+        if (seconds !in MarketRefreshIntervals.OPTIONS) {
+            onDone("不支持的自动刷新间隔")
+            return
+        }
         viewModelScope.launch {
             try {
-                _assets.value = api.saveMarketRefresh(newIdempotencyKey(), MarketRefreshRequest(seconds))
+                settings.setForegroundMarketRefreshIntervalSeconds(seconds)
+                _foregroundRefreshIntervalSeconds.value = seconds
                 restartPolling()
                 onDone(null)
             } catch (e: Exception) {

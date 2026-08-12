@@ -15,6 +15,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,14 +30,23 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import com.ashareai.app.ui.theme.changeColor
 
-/** 简约卡片：白底、圆角、细描边，无阴影堆叠。 */
+/** 简约卡片：主题色面、圆角、细描边，顶部一条主题色微光渐隐（边缘光层次）。 */
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val edgeTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
     Surface(
-        modifier = modifier,
+        modifier = modifier.drawWithContent {
+            drawContent()
+            val edge = 2.dp.toPx()
+            drawRect(
+                brush = Brush.verticalGradient(0f to edgeTint, edge to Color.Transparent),
+                topLeft = Offset(0f, 0f),
+                size = Size(size.width, edge),
+            )
+        },
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),

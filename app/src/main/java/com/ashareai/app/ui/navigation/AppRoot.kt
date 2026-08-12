@@ -3,6 +3,8 @@ package com.ashareai.app.ui.navigation
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.AccountCircle
@@ -12,6 +14,8 @@ import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -45,6 +49,9 @@ object Routes {
     const val NOTIFICATIONS = "notifications"
     const val PERSONAL_DATA = "personal_data"
     const val SETTINGS = "settings"
+    const val MODEL_SETTINGS = "model_settings"
+    const val SYSTEM_SETTINGS = "system_settings"
+    const val EDGE_GATEWAY = "edge_gateway"
 
     fun stockDetail(symbol: String) = "stock/$symbol"
     fun reportDetail(date: String, runId: String?) =
@@ -107,21 +114,37 @@ private fun MainScaffold(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(modifier = Modifier.height(64.dp)) {
-                    bottomTabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                            alwaysShowLabel = false,
-                        )
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(24.dp)),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp,
+                ) {
+                    NavigationBar(
+                        modifier = Modifier.height(56.dp),
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                    ) {
+                        bottomTabs.forEach { tab ->
+                            NavigationBarItem(
+                                selected = currentRoute == tab.route,
+                                onClick = {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                label = { Text(tab.label) },
+                                alwaysShowLabel = false,
+                            )
+                        }
                     }
                 }
             }
@@ -165,6 +188,9 @@ private fun MainScaffold(
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel, navController) }
             composable(Routes.PERSONAL_DATA) { PersonalDataScreen(appViewModel) }
             composable(Routes.SETTINGS) { SettingsScreen(appViewModel) }
+            composable(Routes.MODEL_SETTINGS) { ModelSettingsScreen(appViewModel) }
+            composable(Routes.SYSTEM_SETTINGS) { SystemSettingsScreen(appViewModel) }
+            composable(Routes.EDGE_GATEWAY) { EdgeGatewayScreen(appViewModel) }
             composable("stock/{symbol}") { entry ->
                 StockDetailScreen(
                     appViewModel,

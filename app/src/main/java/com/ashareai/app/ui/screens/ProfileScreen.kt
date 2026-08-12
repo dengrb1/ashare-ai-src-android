@@ -45,6 +45,19 @@ fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) 
             item { ProfileEntry("通知中心") { navController.navigate(Routes.NOTIFICATIONS) } }
             item { ProfileEntry("个人档案（导出/导入）") { navController.navigate(Routes.PERSONAL_DATA) } }
             item { ProfileEntry("设置") { navController.navigate(Routes.SETTINGS) } }
+            if (user?.role?.uppercase() == "ADMIN") {
+                item {
+                    Text(
+                        "管理员控制台",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                    )
+                }
+                item { ProfileEntry("AI 模型配置") { navController.navigate(Routes.MODEL_SETTINGS) } }
+                item { ProfileEntry("系统资源与运行配置") { navController.navigate(Routes.SYSTEM_SETTINGS) } }
+                item { ProfileEntry("Edge Gateway") { navController.navigate(Routes.EDGE_GATEWAY) } }
+            }
 
             item {
                 Spacer(Modifier.height(8.dp))

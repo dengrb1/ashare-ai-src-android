@@ -1,6 +1,7 @@
 package com.ashareai.app.data
 
 import com.ashareai.app.data.model.*
+import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -258,6 +259,91 @@ interface ApiService {
         @Query("limit") limit: Int = 20,
         @Query("thread_id") threadId: String? = null,
     ): AICostSummary
+
+    // ---- 管理员：模型与运行控制 ----
+    @GET("api/v1/admin/model-settings")
+    suspend fun modelSettings(): ModelSettings
+
+    @PUT("api/v1/admin/model-settings")
+    suspend fun saveModelSettings(@Body body: ModelSettingsDraft): ModelSettings
+
+    @POST("api/v1/admin/model-settings/test")
+    suspend fun testModelSettings(@Body body: ModelSettingsDraft): ModelProbeResult
+
+    @POST("api/v1/admin/model-settings/models")
+    suspend fun listConfiguredModels(@Body body: ModelSettingsDraft): ModelListResponse
+
+    @GET("api/v1/admin/model-settings/logs")
+    suspend fun modelProbeLogs(@Query("limit") limit: Int = 50): List<ModelProbeLog>
+
+    @GET("api/v1/admin/system-settings")
+    suspend fun systemSettings(): SystemSettings
+
+    @GET("api/v1/admin/system-resources")
+    suspend fun systemResources(): SystemResources
+
+    @POST("api/v1/admin/system-settings/unlock")
+    suspend fun unlockSystemSettings(@Body body: SystemSettingsUnlockRequest): SystemSettingsUnlockResponse
+
+    @PUT("api/v1/admin/system-settings")
+    suspend fun saveSystemSettings(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+        @Body body: JsonObject,
+    ): SystemSettings
+
+    @DELETE("api/v1/admin/system-settings/{field}")
+    suspend fun restoreSystemSetting(
+        @Path("field") field: String,
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+    ): SystemSettings
+
+    @DELETE("api/v1/admin/system-settings")
+    suspend fun restoreAllSystemSettings(
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+    ): SystemSettings
+
+    @GET("api/v1/admin/runtime-identity")
+    suspend fun runtimeIdentity(): RuntimeIdentity
+
+    @PUT("api/v1/admin/runtime-identity")
+    suspend fun saveRuntimeIdentity(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+        @Body body: RuntimeIdentityRequest,
+    ): RuntimeIdentity
+
+    @GET("api/v1/admin/energy-saving")
+    suspend fun energySaving(): EnergySaving
+
+    @POST("api/v1/admin/energy-saving/enable")
+    suspend fun rearmEnergySaving(): EnergySaving
+
+    @POST("api/v1/admin/energy-saving/disable")
+    suspend fun wakeEnergySaving(): EnergySaving
+
+    @GET("api/v1/admin/edge-gateway")
+    suspend fun edgeGateway(
+        @Header("X-System-Settings-Unlock") unlockToken: String? = null,
+    ): EdgeGatewayConfiguration
+
+    @GET("api/v1/admin/edge-gateway/logs")
+    suspend fun edgeGatewayLogs(@Query("limit") limit: Int = 200): EdgeGatewayLogs
+
+    @POST("api/v1/admin/edge-gateway/validate")
+    suspend fun validateEdgeGateway(@Body body: EdgeGatewayDraft): EdgeGatewayValidation
+
+    @PUT("api/v1/admin/edge-gateway")
+    suspend fun saveEdgeGateway(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+        @Body body: EdgeGatewayDraft,
+    ): EdgeGatewayConfiguration
+
+    @POST("api/v1/admin/edge-gateway/rollback")
+    suspend fun rollbackEdgeGateway(
+        @Header("X-System-Settings-Unlock") unlockToken: String,
+    ): EdgeGatewayConfiguration
 
     @GET("api/v1/ai/chat/thread-index")
     suspend fun aiThreadIndex(

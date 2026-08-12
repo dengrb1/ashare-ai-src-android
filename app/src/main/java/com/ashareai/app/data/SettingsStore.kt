@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -35,6 +36,8 @@ class SettingsStore(context: Context) {
         private val KEY_REMEMBERED_PASSWORD = stringPreferencesKey("remembered_password")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode") // system | light | dark
         private val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
+        private val KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS =
+            intPreferencesKey("foreground_market_refresh_interval_seconds")
         private val KEY_SEEN_NOTIFICATION_IDS = stringSetPreferencesKey("seen_notification_ids")
         private val KEY_INSTALLATION_ID = stringPreferencesKey("push_installation_id")
         private val KEY_PUSH_DEVICE_ID = stringPreferencesKey("push_device_id")
@@ -47,6 +50,9 @@ class SettingsStore(context: Context) {
     val rememberPassword: Flow<Boolean> = context.dataStore.data.map { it[KEY_REMEMBER_PASSWORD] ?: false }
     val darkMode: Flow<String> = context.dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
     val islandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_ISLAND_ENABLED] ?: false }
+    val foregroundMarketRefreshIntervalSeconds: Flow<Int> = context.dataStore.data.map {
+        it[KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS] ?: 5
+    }
 
     suspend fun currentBaseUrl(): String = baseUrl.first()
     suspend fun currentUsername(): String? = username.first()
@@ -79,6 +85,11 @@ class SettingsStore(context: Context) {
 
     suspend fun setIslandEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_ISLAND_ENABLED] = enabled }
+    }
+
+    suspend fun setForegroundMarketRefreshIntervalSeconds(seconds: Int) {
+        require(seconds > 0) { "刷新间隔必须为正数" }
+        context.dataStore.edit { it[KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS] = seconds }
     }
 
     /** Atomically claims unseen IDs so process restarts cannot duplicate alerts. */

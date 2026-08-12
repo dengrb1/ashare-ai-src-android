@@ -22,6 +22,7 @@ data class UserResponse(
     val username: String,
     val role: String = "USER",
     val enabled: Boolean = true,
+    val is_admin_account: Boolean = false,
     val created_at: String? = null,
     val updated_at: String? = null,
 )
@@ -65,7 +66,7 @@ data class AssetState(
     val default_profit_trigger: Double? = null,
     val stop_loss_monitor_enabled: Boolean = false,
     val buy_monitor_enabled: Boolean = false,
-    val market_refresh_interval_seconds: Int = 15,
+    val market_refresh_interval_seconds: Int = 5,
     val updated_at: String? = null,
 )
 
@@ -78,7 +79,7 @@ data class AssetStateRequest(
     val default_profit_trigger: Double? = null,
     val stop_loss_monitor_enabled: Boolean = false,
     val buy_monitor_enabled: Boolean = false,
-    val market_refresh_interval_seconds: Int = 15,
+    val market_refresh_interval_seconds: Int = 5,
 )
 
 @Serializable
@@ -534,6 +535,262 @@ data class AIModelsResponse(
     val reasoning_efforts: List<String> = emptyList(),
     val web_search_available: Boolean = false,
     val cache_enabled: Boolean = false,
+)
+
+// ---------- 管理员：模型与运行控制 ----------
+
+/**
+ * 与 Web 管理端共用的模型档案。价格以数值发送，服务端会按 Decimal 安全保存。
+ */
+@Serializable
+data class ModelProfileSettings(
+    val model: String,
+    val cache_policy: String = "COMPATIBLE",
+    val context_window_tokens: Int = 128_000,
+    val output_token_reserve: Int = 8_192,
+    val reasoning_token_reserve: Int = 0,
+    val input_price_per_million: Double = 0.0,
+    val cached_input_price_per_million: Double = 0.0,
+    val cache_write_price_per_million: Double = 0.0,
+    val output_price_per_million: Double = 0.0,
+)
+
+@Serializable
+data class ModelSettingsDraft(
+    val base_url: String,
+    val api_key: String? = null,
+    val search_model: String = "gpt-5.6-luna",
+    val search_reasoning_effort: String = "low",
+    val research_model: String = "gpt-5.6-sol",
+    val research_reasoning_effort: String = "high",
+    val model_profiles: List<ModelProfileSettings> = emptyList(),
+    val timeout_seconds: Double = 90.0,
+    val enabled: Boolean = true,
+)
+
+@Serializable
+data class ModelSettings(
+    val configuration_id: String? = null,
+    val version: Int = 0,
+    val config_sha256: String = "",
+    val source: String = "",
+    val provider: String = "",
+    val base_url: String = "",
+    val api_key_configured: Boolean = false,
+    val search_model: String = "gpt-5.6-luna",
+    val search_reasoning_effort: String = "low",
+    val research_model: String = "gpt-5.6-sol",
+    val research_reasoning_effort: String = "high",
+    val model_profiles: List<ModelProfileSettings> = emptyList(),
+    val timeout_seconds: Double = 90.0,
+    val enabled: Boolean = true,
+    val configured: Boolean = false,
+    val reachable: Boolean = false,
+    val degraded: Boolean = false,
+    val status_message: String = "",
+    val checked_at: String? = null,
+    val structured_output_supported: Boolean = false,
+    val streaming_supported: Boolean = false,
+)
+
+@Serializable
+data class ModelProbeResult(
+    val reachable: Boolean = false,
+    val message: String = "",
+    val model: String = "",
+    val checked_at: String? = null,
+    val structured_output_supported: Boolean = false,
+    val streaming_supported: Boolean = false,
+)
+
+@Serializable
+data class ModelProbeLog(
+    val log_id: String,
+    val model: String,
+    val purpose: String,
+    val protocol: String,
+    val endpoint_path: String,
+    val request_mode: String,
+    val outcome: String,
+    val http_status: Int? = null,
+    val error_code: String? = null,
+    val message: String,
+    val duration_ms: Int = 0,
+    val header_presence: Map<String, Boolean> = emptyMap(),
+    val created_at: String? = null,
+)
+
+@Serializable
+data class ModelListResponse(val models: List<String> = emptyList())
+
+@Serializable
+data class SystemSettingsUnlockRequest(val password: String)
+
+@Serializable
+data class SystemSettingsUnlockResponse(
+    val unlock_token: String,
+    val expires_at: String,
+)
+
+@Serializable
+data class WorkerHealth(
+    val worker_id: String,
+    val role: String,
+    val healthy: Boolean,
+    val loaded_mode: String = "UNKNOWN",
+    val topology_sha256: String? = null,
+    val last_heartbeat_at: String? = null,
+    val memory_used_bytes: Long? = null,
+    val memory_cache_bytes: Long? = null,
+    val memory_limit_bytes: Long? = null,
+    val cpu_percent: Double? = null,
+)
+
+@Serializable
+data class QueueSummary(val pending: Int = 0, val processing: Int = 0)
+
+@Serializable
+data class SystemSettings(
+    val configuration_id: String? = null,
+    val version: Int = 0,
+    val config_sha256: String = "",
+    val source: String = "environment",
+    val values: JsonObject = JsonObject(emptyMap()),
+    val sources: Map<String, String> = emptyMap(),
+    val secret_configured: Map<String, Boolean> = emptyMap(),
+    val secret_sources: Map<String, String> = emptyMap(),
+    val read_only_environment: JsonObject = JsonObject(emptyMap()),
+    val topology_sha256: String = "",
+    val actual_loaded_mode: String = "UNKNOWN",
+    val restart_required: Boolean = false,
+    val workers: List<WorkerHealth> = emptyList(),
+    val queues: Map<String, QueueSummary> = emptyMap(),
+    val compose_restart_command: String = "",
+)
+
+@Serializable
+data class ResourceMetric(
+    val total_bytes: Long = 0,
+    val used_bytes: Long = 0,
+    val available_bytes: Long = 0,
+    val percent: Double = 0.0,
+)
+
+@Serializable
+data class CpuMetric(val percent: Double = 0.0, val logical_cores: Int = 0)
+
+@Serializable
+data class ServiceResource(
+    val service_id: String,
+    val role: String,
+    val healthy: Boolean,
+    val memory_used_bytes: Long? = null,
+    val memory_cache_bytes: Long? = null,
+    val memory_limit_bytes: Long? = null,
+    val cpu_percent: Double? = null,
+    val collected_at: String? = null,
+)
+
+@Serializable
+data class DualMemoryEstimate(
+    val worker_replicas: Int = 0,
+    val estimate_source: String = "fallback",
+    val typical_per_worker_bytes: Long = 0,
+    val typical_increment_bytes: Long = 0,
+    val maximum_increment_bytes: Long = 0,
+    val projected_available_bytes: Long = 0,
+    val level: String = "NORMAL",
+    val messages: List<String> = emptyList(),
+)
+
+@Serializable
+data class SystemResources(
+    val collected_at: String? = null,
+    val scope: String = "HOST",
+    val scope_label: String = "运行资源",
+    val memory: ResourceMetric = ResourceMetric(),
+    val cpu: CpuMetric = CpuMetric(),
+    val disk: ResourceMetric = ResourceMetric(),
+    val services: List<ServiceResource> = emptyList(),
+    val topology_estimate: DualMemoryEstimate = DualMemoryEstimate(),
+    val level: String = "NORMAL",
+    val warnings: List<String> = emptyList(),
+)
+
+@Serializable
+data class RuntimeIdentity(
+    val mode: String? = null,
+    val applicable: Boolean = false,
+    val platform: String = "",
+    val supported_modes: List<String> = emptyList(),
+    val note: String? = null,
+)
+
+@Serializable
+data class RuntimeIdentityRequest(val mode: String)
+
+@Serializable
+data class EnergySaving(
+    val enabled: Boolean = false,
+    val active: Boolean = false,
+    val reason: String = "",
+    val manual_wake: Boolean = false,
+    val entered_at: String? = null,
+    val updated_at: String? = null,
+    val deep_standby_seconds: Int = 0,
+)
+
+@Serializable
+data class EdgeProxyHost(
+    val id: String? = null,
+    val name: String,
+    val domains: List<String>,
+    val forward_scheme: String = "http",
+    val forward_host: String,
+    val forward_port: Int = 80,
+    val ssl_enabled: Boolean = true,
+    val websocket_support: Boolean = true,
+    val enabled: Boolean = true,
+    val notes: String = "",
+)
+
+@Serializable
+data class EdgeGatewayDraft(
+    val enabled: Boolean = false,
+    val validation_mode: String = "STRICT",
+    val proxy_hosts: List<EdgeProxyHost> = emptyList(),
+    val frpc_toml: String = "",
+)
+
+@Serializable
+data class EdgeGatewayConfiguration(
+    val configuration_id: String? = null,
+    val version: Int = 0,
+    val enabled: Boolean = false,
+    val validation_mode: String = "STRICT",
+    val proxy_hosts: List<EdgeProxyHost> = emptyList(),
+    val frpc_toml: String = "",
+    val config_sha256: String? = null,
+    val apply_status: String = "PENDING",
+    val apply_message: String? = null,
+    val applied_at: String? = null,
+    val applied_sha256: String? = null,
+    val source_sync: Boolean = false,
+)
+
+@Serializable
+data class EdgeGatewayValidation(
+    val valid: Boolean = false,
+    val nginx_sha256: String = "",
+    val proxy_count: Int = 0,
+)
+
+@Serializable
+data class EdgeGatewayLogs(
+    val available: Boolean = false,
+    val message: String = "",
+    val lines: List<String> = emptyList(),
+    val updated_at: String? = null,
 )
 
 @Serializable
