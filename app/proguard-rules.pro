@@ -14,3 +14,13 @@
 
 # Room loads generated implementations by name.
 -keep class * extends androidx.room.RoomDatabase
+
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+-keep,includedescriptorclasses class com.ashareai.app.**$$serializer { *; }
+-keepclassmembers class com.ashareai.app.** { *** Companion; }
+-keepclasseswithmembers class com.ashareai.app.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep class com.ashareai.app.island.MiPushReceiver { *; }
+-keep class com.xiaomi.mipush.** { *; }
+-dontwarn com.xiaomi.**

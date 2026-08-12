@@ -2,6 +2,10 @@ import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.FileInputStream
 
+val appMode = providers.gradleProperty("appMode").orElse("standalone").get()
+require(appMode == "connected" || appMode == "standalone") { "appMode must be connected or standalone." }
+val standaloneMode = appMode == "standalone"
+
 // 签名配置：keystore 与密码存于根目录 keystore.properties（已被 .gitignore 排除，不入库）。
 // 该文件不存在时（如 CI/新克隆）release 构建退化为未签名，不中断构建。
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -42,16 +46,20 @@ val standaloneSigningReady = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "com.ashareai.app.standalone"
+    namespace = if (standaloneMode) "com.ashareai.app.standalone" else "com.ashareai.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.ashareai.app.standalone"
+        applicationId = if (standaloneMode) "com.ashareai.app.standalone" else "com.ashareai.app"
         minSdk = 29
-        targetSdk = 36
-        versionCode = 3
-        versionName = "2.0.0"
+        targetSdk = if (standaloneMode) 36 else 35
+        versionCode = if (standaloneMode) 3 else 2
+        versionName = if (standaloneMode) "2.0.0" else "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (!standaloneMode) {
+            buildConfigField("String", "MIPUSH_APP_ID", "\"${providers.gradleProperty("MIPUSH_APP_ID").orElse("").get()}\"")
+            buildConfigField("String", "MIPUSH_APP_KEY", "\"${providers.gradleProperty("MIPUSH_APP_KEY").orElse("").get()}\"")
+        }
     }
 
     signingConfigs {
@@ -101,6 +109,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = !standaloneMode
     }
     packaging {
         resources {
@@ -108,9 +117,15 @@ android {
         }
     }
     sourceSets {
-        getByName("main").java.srcDirs("src/main/kotlin")
-        getByName("test").java.srcDirs("src/test/kotlin")
-        getByName("androidTest").java.srcDirs("src/androidTest/kotlin")
+        getByName("main").apply {
+            manifest.srcFile("src/$appMode/AndroidManifest.xml")
+            java.setSrcDirs(listOf(if (standaloneMode) "src/main/kotlin" else "src/main/java"))
+            if (!standaloneMode) {
+                java.srcDir(if (fileTree("libs") { include("MiPush_SDK_Client_*.aar") }.files.isNotEmpty()) "src/mipush/java" else "src/noMipush/java")
+            }
+        }
+        getByName("test").java.setSrcDirs(listOf(if (standaloneMode) "src/test/kotlin" else "src/test/java"))
+        getByName("androidTest").java.setSrcDirs(listOf(if (standaloneMode) "src/androidTest/kotlin" else "src/androidTest/java"))
         getByName("androidTest").assets.srcDirs("schemas")
     }
     testOptions {
@@ -146,6 +161,13 @@ dependencies {
     implementation(libs.markdown.material3)
     implementation(libs.focus.api)
     ksp(libs.androidx.room.compiler)
+    if (!standaloneMode) {
+        implementation(fileTree("libs") { include("MiPush_SDK_Client_*.aar") })
+        implementation(libs.retrofit)
+        implementation(libs.retrofit.kotlinx.serialization)
+        implementation(libs.okhttp.logging)
+        implementation(libs.okhttp.sse)
+    }
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
