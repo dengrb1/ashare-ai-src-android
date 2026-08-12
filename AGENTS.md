@@ -16,10 +16,10 @@
 
 ## 验证与安全
 
-JDK 17 下，改动代码后运行：
+JDK 17 下，独立版为默认构建模式，改动后运行：
 
 ```powershell
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
-涉及 Compose、导航、权限、前台服务或 Room 迁移时，有设备则补跑 `connectedDebugAndroidTest`。提交前执行 `git diff --check`；不得提交 `local.properties`、keystore、签名凭据、API Key、私有服务器地址、APK 或 `build/`。
+连接版使用 `-PappMode=connected`，例如 ` .\gradlew.bat -PappMode=connected testDebugUnitTest lintDebug assembleDebug assembleRelease`。涉及 Compose、导航、权限、前台服务或 Room 迁移时，有设备则补跑对应模式的 `connectedDebugAndroidTest`。提交前执行 `git diff --check`；不得提交 `local.properties`、keystore、签名凭据、API Key、私有服务器地址、APK 或 `build/`。

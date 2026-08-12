@@ -18,10 +18,16 @@
 
 ## 构建与验证
 
-需要 Android Studio、JDK 17、Android SDK 36 和 minSdk 29。配置未提交的 `local.properties` 后运行：
+需要 Android Studio、JDK 17、Android SDK 36 和 minSdk 29。配置未提交的 `local.properties` 后，默认构建独立版：
 
 ```powershell
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
-有设备时再运行 `connectedDebugAndroidTest`。Release 必须使用本地或 CI 签名配置签名；不要提交 keystore、密码、API Key、私有地址、APK 或 `build/`。
+连接 Web/FastAPI 的版本使用同一模块、独立源集和 Manifest：
+
+```powershell
+.\gradlew.bat -PappMode=connected testDebugUnitTest lintDebug assembleDebug assembleRelease
+```
+
+显式指定 `-PappMode=standalone` 可构建本地独立版。有设备时再运行对应模式的 `connectedDebugAndroidTest`。Release 必须使用本地或 CI 签名配置签名；不要提交 keystore、密码、API Key、私有地址、APK 或 `build/`。
