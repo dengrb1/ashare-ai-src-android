@@ -1,44 +1,28 @@
-# Repository Guidelines
+# 独立版协作说明
 
-## Project Structure & Module Organization
+这是单模块 Kotlin + Jetpack Compose 本地优先应用，生产代码位于 `app/src/main/kotlin/com/ashareai/app/standalone/`；行情与缓存在 `data/market`，研究在 `research`，Room 在 `data/local`，AI 在 `data/ai`，页面在 `ui`。
 
-This is a single-module Android application built with Kotlin and Jetpack Compose. Production code lives under `app/src/main/java/com/ashareai/app/`. Keep API clients, DTOs, and settings in `data/`; notification behavior in `island/`; and Compose code in `ui/`, grouped into `screens/`, `components/`, `navigation/`, and `theme/`. Resources and the manifest are under `app/src/main/res/` and `app/src/main/AndroidManifest.xml`. Dependency versions are centralized in `gradle/libs.versions.toml`.
+## 大盘指数契约
 
-Add local unit tests to `app/src/test/` and device or Compose UI tests to `app/src/androidTest/`. Generated output in `build/` and `app/build/` must remain untracked.
+- 指数代码固定为沪深 300 `000300`、中证 500 `000905`、中证 1000 `000852`；上海指数必须使用 Eastmoney `1.<symbol>` secid。
+- `MarketIndexContextAnalyzer` 只使用研究启动时取到的历史 K 线，输出 1/5/20 日收益、50/30/20 加权收益、市场状态、评分调整和风险乘数。
+- `ResearchCoordinator` 每个 run 冻结一次 context，并将其传入 `DeterministicResearchEngine`；报告、候选、模拟组合和 AI prompt 都必须保持一致。
+- 数据不足只能降级为 `UNKNOWN`、调整 0、风险乘数 1，不得猜测或用当前实时价格回写历史报告。
 
-## Build, Test, and Development Commands
+## 低内存与生命周期
 
-Use the checked-in Gradle wrapper (Windows examples):
+应用启动只恢复本地状态和必要调度。行情页进入时才加载三指数；股票 K 线和目录按需加载。无持仓、非交易时段和无任务时不轮询；后台停止前台监控或由 WorkManager 按设置接管。不要引入全局网络循环、无界缓存或 Python/Chaquopy。
 
-- `.\gradlew.bat assembleDebug` builds a debug APK.
-- `.\gradlew.bat installDebug` installs it on a connected emulator or device.
-- `.\gradlew.bat testDebugUnitTest` runs JVM unit tests.
-- `.\gradlew.bat connectedDebugAndroidTest` runs instrumentation/UI tests on a device.
-- `.\gradlew.bat lintDebug` performs Android static analysis.
-- `.\gradlew.bat clean` removes generated build artifacts.
+## AI 与安全
 
-Android Studio should use JDK 17. Configure the local Android SDK through `local.properties`; do not commit that file.
+AI Provider 的 API Key 必须通过 `ApiKeyCipher` 使用 Android Keystore 加密，不能写日志、普通 DataStore、导出档案、测试夹具或截图。AI 只能解释确定性结果，不能修改评分、风险或交易门槛。独立版不保存账号管理信息，也不调用服务器登录接口。
 
-When project code changes, including Kotlin/Java, Compose UI, resources, the manifest, Gradle configuration, ProGuard rules, or dependencies, build both APK variants before considering the work complete: `.\gradlew.bat assembleDebug assembleRelease`. Also run the relevant unit tests and lint checks; run connected tests when the change affects UI, navigation, permissions, or lifecycle behavior. Documentation-only changes, including `AGENTS.md`, do not require compilation unless they change build behavior or signing configuration. If a required verification command fails, investigate and fix the issue when it is within scope, or clearly report the failure and its cause.
+## UI 与验证
 
-Every Release APK delivered for installation or distribution must be signed. An `app-release-unsigned.apk` must not be treated as a finished artifact. Use a secure local or CI signing configuration, never commit keystores or signing credentials, and report the missing signing configuration instead of delivering an unsigned APK.
+沿用 Material 3 和现有独立版主题。Liquid Glass 只应用于导航、工具条、分段控制和临时操作层；图表、报告、表格和数据卡片保持清晰。代码改动后运行：
 
-## Coding Style & Naming Conventions
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleDebug assembleRelease
+```
 
-Follow standard Kotlin formatting with four-space indentation and trailing commas in multiline declarations and calls. Use `PascalCase` for classes, composables, and files (`StockDetailScreen.kt`), `camelCase` for functions and properties, and `UPPER_SNAKE_CASE` for constants. Keep package names lowercase. Compose screens should expose focused `@Composable` functions, hoist reusable UI into `ui/components`, and keep networking or persistence out of composables. Run Android Studio's Kotlin formatter and optimize imports before committing.
-
-## Code Readability & Maintainability
-
-Write code for the next maintainer: prefer clear names, small focused functions, straightforward control flow, and explicit responsibilities. Keep changes narrowly scoped, avoid unnecessary duplication and premature abstractions, and reuse existing project patterns before introducing new ones. Keep composables, data access, and business logic separated; preserve stable public interfaces unless a change is required. Add comments only when they explain non-obvious intent or constraints, and update nearby tests and documentation when behavior changes. Before finishing, review the diff for dead code, accidental complexity, inconsistent formatting, and maintainability regressions.
-
-## Testing Guidelines
-
-Unit tests are checked in under `app/src/test/java/` and cover data serialization contracts, repositories, and pure UI helpers. DTOs in `data/model/Dtos.kt` mirror the backend `/api/v1` snake_case JSON contracts; when a backend field type changes (e.g. a dict becomes a typed object), update the DTO and its `*SerializationTest` so the app keeps decoding real responses. New business logic should include focused unit tests named `*Test.kt`; navigation, permissions, and critical user flows should use `*Test.kt` instrumentation tests. Prefer deterministic coroutine tests and mocked network boundaries. Run unit tests and lint for every change; run connected tests when UI or lifecycle behavior changes.
-
-## Commit & Pull Request Guidelines
-
-The current history uses Conventional Commit-style subjects, for example `feat: Add Settings and Stock Detail screens with theme support`. Continue with concise imperative prefixes such as `feat:`, `fix:`, `test:`, or `refactor:`. Pull requests should explain behavior changes, identify validation commands, link relevant issues, and include screenshots or recordings for visible UI changes. Keep PRs narrowly scoped and call out changes to permissions, API contracts, or ProGuard rules.
-
-## Security & Configuration
-
-Never commit credentials, tokens, private server URLs, signing files, or generated APK/AAB files. Treat logs from Retrofit/OkHttp carefully and avoid exposing authentication headers or personal portfolio data.
+涉及 Compose、导航、权限、前台服务或 Room 迁移时，在有设备时补跑 `connectedDebugAndroidTest`。提交前执行 `git diff --check`，不得提交 `local.properties`、keystore、密钥、Token、APK 或 `build/`。

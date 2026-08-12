@@ -90,8 +90,13 @@ class EastMoneyMarketDataProvider(
     }
 
     private fun toSecId(symbol: String): String = when {
+        symbol in SHANGHAI_INDEX_SYMBOLS -> "1." + symbol
         symbol.startsWith("6") -> "1." + symbol
         else -> "0." + symbol
+    }
+
+    private companion object {
+        val SHANGHAI_INDEX_SYMBOLS = setOf("000300", "000905", "000852")
     }
 }
 

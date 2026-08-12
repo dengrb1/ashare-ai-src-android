@@ -95,6 +95,13 @@ class ResearchCoordinator(
         local.updateResearchRun(runId, ResearchRunState.RUNNING, original.completedCount, now = clock())
         val analysed = mutableListOf<AnalysedSecurity>()
         try {
+            // Freeze one shared market environment before stock analysis. It is passed to every
+            // result and persisted in the report rather than refreshed while a report is viewed.
+            val marketContext = MarketIndexContextAnalyzer.analyze(
+                MarketIndexContextAnalyzer.specs.associate { spec ->
+                    spec.symbol to market.dailyCandles(spec.symbol, limit = 100)
+                },
+            )
             val batches = ResearchBatchPlanner.batches(original.symbols)
             var completed = original.completedCount
             batches.forEach { batch ->
@@ -115,6 +122,7 @@ class ResearchCoordinator(
                         name = quote?.name ?: symbol,
                         quote = quote,
                         candles = candles,
+                        marketContext = marketContext,
                     )
                     analysed += AnalysedSecurity(result, candles)
                     completed += 1
@@ -126,12 +134,12 @@ class ResearchCoordinator(
 
             val ranked = analysed.sortedByDescending { it.result.score.total }
             saveDeterministicOutputs(original, ranked)
-            val aiExplanation = requestAiExplanation(original, ranked)
+            val aiExplanation = requestAiExplanation(original, ranked, marketContext)
             val report = ResearchReport(
                 id = UUID.randomUUID().toString(),
                 runId = original.id,
                 title = "本地研究报告",
-                deterministicBody = reportBody(original, ranked),
+                deterministicBody = reportBody(original, ranked, marketContext),
                 aiExplanation = aiExplanation,
                 createdAt = clock(),
             )
@@ -230,12 +238,15 @@ class ResearchCoordinator(
     private suspend fun requestAiExplanation(
         run: ResearchRun,
         ranked: List<AnalysedSecurity>,
+        marketContext: MarketIndexContext,
     ): String? {
         val providerId = run.aiProviderId ?: return null
         val output = StringBuilder()
         var failure: String? = null
         val context = buildString {
             append("请为以下本地确定性研究写简洁解释。不得修改评分、风险或交易门槛；不可用数据必须保持不可用。\n")
+            append(marketContext.reportSummary())
+            append("\n")
             ranked.take(10).forEach { item ->
                 append(item.result.summary)
                 append("\n近20日收盘：")
@@ -263,12 +274,18 @@ class ResearchCoordinator(
             ?: failure?.let { "AI 解释未生成：" + it }
     }
 
-    private fun reportBody(run: ResearchRun, ranked: List<AnalysedSecurity>): String = buildString {
+    private fun reportBody(
+        run: ResearchRun,
+        ranked: List<AnalysedSecurity>,
+        marketContext: MarketIndexContext,
+    ): String = buildString {
         append("范围：")
         append(run.scope.name)
         append("；样本：")
         append(run.totalCount)
         append("；评分完全由本地规则生成。\n\n")
+        append(marketContext.reportSummary())
+        append("\n\n")
         ranked.take(30).forEachIndexed { index, item ->
             append(index + 1)
             append(". ")
@@ -282,3 +299,39 @@ class ResearchCoordinator(
         val candles: List<com.ashareai.app.standalone.domain.DailyCandle>,
     )
 }
+
+private fun MarketIndexContext.reportSummary(): String = buildString {
+    val marketIndices = this@reportSummary.indices
+    append("冻结大盘指数环境：")
+    append(
+        when (regime) {
+            MarketRegime.RISK_ON -> "风险偏好改善"
+            MarketRegime.RISK_OFF -> "风险偏好收缩"
+            MarketRegime.NEUTRAL -> "大盘中性"
+            MarketRegime.UNKNOWN -> "大盘数据不足（中性处理）"
+        },
+    )
+    append("；综合 1/5/20 日 ")
+    append(compositeReturn1d.percentText())
+    append(" / ")
+    append(compositeReturn5d.percentText())
+    append(" / ")
+    append(compositeReturn20d.percentText())
+    append("；评分调整 ")
+    append(if (scoreAdjustment >= 0) "+" else "")
+    append(scoreAdjustment)
+    append("；风险乘数 ")
+    append(riskMultiplier)
+    marketIndices.forEach { index ->
+        append("\n")
+        append(index.name)
+        append("：1/5/20 日 ")
+        append(index.return1d.percentText())
+        append(" / ")
+        append(index.return5d.percentText())
+        append(" / ")
+        append(index.return20d.percentText())
+    }
+}
+
+private fun Double?.percentText(): String = this?.let { "%.2f%%".format(java.util.Locale.US, it * 100) } ?: "--"

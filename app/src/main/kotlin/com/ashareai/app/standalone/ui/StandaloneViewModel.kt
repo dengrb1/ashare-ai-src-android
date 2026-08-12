@@ -39,6 +39,8 @@ data class MarketUiState(
     val catalog: List<com.ashareai.app.standalone.domain.Security> = emptyList(),
     val quote: MarketQuote? = null,
     val candles: List<com.ashareai.app.standalone.domain.DailyCandle> = emptyList(),
+    val indexQuotes: List<MarketQuote> = emptyList(),
+    val indicesLoading: Boolean = false,
     val loading: Boolean = false,
     val message: String? = null,
 )
@@ -47,6 +49,7 @@ data class MarketUiState(
 class StandaloneViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
+    val appContext = application.applicationContext
     private val app = application as StandaloneApp
     private val local = app.container.local
     private val market = app.container.market
@@ -126,6 +129,22 @@ class StandaloneViewModel(
                     candles = candles,
                     loading = false,
                     message = if (quote.lastPrice == null) "行情源不可用，未使用虚构数据" else null,
+                )
+            }
+        }
+    }
+
+    /** The three index quotes are only fetched while the market page is visible. */
+    fun loadMarketIndices(forceRefresh: Boolean = false) {
+        if (marketState.value.indicesLoading) return
+        viewModelScope.launch {
+            _marketState.update { it.copy(indicesLoading = true) }
+            val quotes = market.refreshQuotes(MARKET_INDEX_SYMBOLS)
+            _marketState.update {
+                it.copy(
+                    indexQuotes = quotes,
+                    indicesLoading = false,
+                    message = if (forceRefresh && quotes.none(MarketQuote::isUsable)) "大盘指数行情暂不可用" else it.message,
                 )
             }
         }
@@ -494,5 +513,9 @@ class StandaloneViewModel(
 
     fun dismissMessage() {
         _message.value = null
+    }
+
+    private companion object {
+        val MARKET_INDEX_SYMBOLS = listOf("000300", "000905", "000852")
     }
 }

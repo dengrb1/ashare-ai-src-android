@@ -13,15 +13,24 @@ interface ResearchEngine {
         name: String,
         quote: MarketQuote?,
         candles: List<DailyCandle>,
+        marketContext: MarketIndexContext = MarketIndexContext.unknown(),
     ): ResearchResult
 }
 
 class DeterministicResearchEngine : ResearchEngine {
+    fun analyse(
+        symbol: String,
+        name: String,
+        quote: MarketQuote?,
+        candles: List<DailyCandle>,
+    ): ResearchResult = analyse(symbol, name, quote, candles, MarketIndexContext.unknown())
+
     override fun analyse(
         symbol: String,
         name: String,
         quote: MarketQuote?,
         candles: List<DailyCandle>,
+        marketContext: MarketIndexContext,
     ): ResearchResult {
         val closes = candles.map(DailyCandle::close)
         val unavailable = mutableListOf<String>()
@@ -124,7 +133,12 @@ class DeterministicResearchEngine : ResearchEngine {
             .filter { it.second != null }
             .sumOf { it.first }
         val normalizedTotal = if (availableMaximum == 0.0) 0.0 else availableTotal / availableMaximum * 100
-        val total = (normalizedTotal * 10).roundToInt() / 10.0
+        val baseTotal = (normalizedTotal * 10).roundToInt() / 10.0
+        if (marketContext.regime == MarketRegime.UNKNOWN) {
+            unavailable += "大盘指数（K 线不足 20 日，按中性处理）"
+        }
+        val total = (((baseTotal + marketContext.scoreAdjustment).coerceIn(0.0, 100.0) * marketContext.riskMultiplier) * 10)
+            .roundToInt() / 10.0
         val risk = when {
             quote?.freshness == MarketFreshness.UNAVAILABLE -> "数据不足"
             total >= 70 && (volatility ?: 1.0) < 0.55 -> "中"
@@ -137,6 +151,13 @@ class DeterministicResearchEngine : ResearchEngine {
             append(total)
             append(" / 100；风险：")
             append(risk)
+            append("；大盘：")
+            append(marketRegimeLabel(marketContext.regime))
+            append("（调整 ")
+            append(formatSigned(marketContext.scoreAdjustment))
+            append("，风险乘数 ")
+            append(marketContext.riskMultiplier)
+            append("）")
             if (quote?.freshness == MarketFreshness.STALE) append("；报价为陈旧缓存")
             if (unavailable.isNotEmpty()) {
                 append("；不可用：")
@@ -155,6 +176,8 @@ class DeterministicResearchEngine : ResearchEngine {
                 volatility = volatility,
                 volume = volumeRatio,
                 freshness = freshnessScore,
+                baseTotal = baseTotal,
+                marketContext = marketContext,
                 total = total,
                 unavailable = unavailable.distinct(),
             ),
@@ -163,4 +186,13 @@ class DeterministicResearchEngine : ResearchEngine {
             quote = quote,
         )
     }
+
+    private fun marketRegimeLabel(regime: MarketRegime) = when (regime) {
+        MarketRegime.RISK_ON -> "风险偏好改善"
+        MarketRegime.RISK_OFF -> "风险偏好收缩"
+        MarketRegime.NEUTRAL -> "大盘中性"
+        MarketRegime.UNKNOWN -> "大盘数据不足"
+    }
+
+    private fun formatSigned(value: Double): String = if (value >= 0) "+$value" else value.toString()
 }

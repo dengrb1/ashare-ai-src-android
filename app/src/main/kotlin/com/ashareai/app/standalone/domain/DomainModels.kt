@@ -150,6 +150,9 @@ data class ResearchScore(
     val freshness: Double,
     val total: Double,
     val unavailable: List<String>,
+    val baseTotal: Double = total,
+    val marketContext: com.ashareai.app.standalone.research.MarketIndexContext =
+        com.ashareai.app.standalone.research.MarketIndexContext.unknown(),
 )
 
 data class ResearchResult(

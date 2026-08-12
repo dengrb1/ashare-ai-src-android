@@ -1,54 +1,72 @@
 package com.ashareai.app.standalone.ui
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatterySaver
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CandlestickChart
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,30 +76,42 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketFreshness
+import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.NotificationPriority
 import com.ashareai.app.standalone.domain.ResearchRunState
 import com.ashareai.app.standalone.domain.ResearchScope
 import java.text.DateFormat
 import java.util.Date
-import kotlin.math.max
+import java.util.Locale
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+data class DevicePermissionState(
+    val notificationsGranted: Boolean,
+    val batteryUnrestricted: Boolean,
+)
 
 @Composable
 fun StandaloneAppRoot(
     viewModel: StandaloneViewModel,
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
+    permissionState: DevicePermissionState,
+    onRequestNotifications: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
 ) {
     val incomingRoute by pendingRoute.collectAsState()
     val message by viewModel.message.collectAsState()
@@ -102,62 +132,31 @@ fun StandaloneAppRoot(
     }
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-            ) {
-                Text(
-                    text = routeTitle(route),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "超级岛 A股（独立版） · 本地优先",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            GlassTopBar(route = route)
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = route == "home",
-                    onClick = { route = "home" },
-                    icon = { Icon(Icons.Outlined.Home, null) },
-                    label = { Text("主页") },
-                )
-                NavigationBarItem(
-                    selected = route == "market",
-                    onClick = { route = "market"; viewModel.loadCatalog() },
-                    icon = { Icon(Icons.Outlined.Search, null) },
-                    label = { Text("行情") },
-                )
-                NavigationBarItem(
-                    selected = route == "research",
-                    onClick = { route = "research" },
-                    icon = { Icon(Icons.Outlined.QueryStats, null) },
-                    label = { Text("研究") },
-                )
-                NavigationBarItem(
-                    selected = route == "notifications",
-                    onClick = { route = "notifications" },
-                    icon = { Icon(Icons.Outlined.Notifications, null) },
-                    label = { Text(if (unread > 0) "通知 " + unread else "通知") },
-                )
-                NavigationBarItem(
-                    selected = route == "settings",
-                    onClick = { route = "settings" },
-                    icon = { Icon(Icons.Outlined.Settings, null) },
-                    label = { Text("设置") },
-                )
-            }
+            LiquidGlassBottomBar(
+                route = route,
+                unread = unread,
+                onNavigate = { destination ->
+                    route = destination
+                    if (destination == "market") viewModel.loadCatalog()
+                },
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHost) },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         when (route) {
-            "home" -> HomeScreen(viewModel, Modifier.padding(padding)) { route = it }
+            "home" -> HomeScreen(
+                viewModel = viewModel,
+                modifier = Modifier.padding(padding),
+                permissionState = permissionState,
+                onRequestNotifications = onRequestNotifications,
+                onOpenBatterySettings = onOpenBatterySettings,
+                navigate = { route = it },
+            )
             "market" -> MarketScreen(viewModel, Modifier.padding(padding)) { route = it }
             "assets" -> AssetsScreen(viewModel, Modifier.padding(padding))
             "alerts" -> AlertsScreen(viewModel, Modifier.padding(padding))
@@ -168,8 +167,177 @@ fun StandaloneAppRoot(
             "exit" -> ExitResearchScreen(viewModel, Modifier.padding(padding))
             "notifications" -> NotificationsScreen(viewModel, Modifier.padding(padding))
             "chat" -> ChatScreen(viewModel, Modifier.padding(padding))
-            "settings" -> SettingsScreen(viewModel, Modifier.padding(padding))
-            else -> HomeScreen(viewModel, Modifier.padding(padding)) { route = it }
+            "settings" -> SettingsScreen(
+                viewModel = viewModel,
+                modifier = Modifier.padding(padding),
+                permissionState = permissionState,
+                onRequestNotifications = onRequestNotifications,
+                onOpenBatterySettings = onOpenBatterySettings,
+                onOpenAppSettings = onOpenAppSettings,
+            )
+            else -> HomeScreen(
+                viewModel = viewModel,
+                modifier = Modifier.padding(padding),
+                permissionState = permissionState,
+                onRequestNotifications = onRequestNotifications,
+                onOpenBatterySettings = onOpenBatterySettings,
+                navigate = { route = it },
+            )
+        }
+    }
+}
+
+private data class BottomDestination(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+)
+
+private val bottomDestinations = listOf(
+    BottomDestination("home", "主页", Icons.Outlined.Home),
+    BottomDestination("market", "行情", Icons.Outlined.CandlestickChart),
+    BottomDestination("research", "研究", Icons.Outlined.QueryStats),
+    BottomDestination("notifications", "通知", Icons.Outlined.Notifications),
+    BottomDestination("settings", "设置", Icons.Outlined.Settings),
+)
+
+@Composable
+private fun LiquidGlassBottomBar(
+    route: String,
+    unread: Int,
+    onNavigate: (String) -> Unit,
+) {
+    val dark = isSystemInDarkTheme()
+    val glassShape = RoundedCornerShape(28.dp)
+    val borderBrush = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = if (dark) 0.24f else 0.78f),
+            MaterialTheme.colorScheme.outline.copy(alpha = if (dark) 0.42f else 0.28f),
+        ),
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .shadow(18.dp, glassShape),
+            shape = glassShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.84f else 0.78f),
+            border = BorderStroke(1.dp, borderBrush),
+            tonalElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(64.dp).padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                bottomDestinations.forEach { destination ->
+                    LiquidGlassNavigationItem(
+                        destination = destination,
+                        selected = route == destination.route,
+                        unread = if (destination.route == "notifications") unread else 0,
+                        onClick = { onNavigate(destination.route) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiquidGlassNavigationItem(
+    destination: BottomDestination,
+    selected: Boolean,
+    unread: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f) else Color.Transparent,
+        label = "bottom-navigation-container",
+    )
+    val contentColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "bottom-navigation-content",
+    )
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(22.dp))
+            .background(containerColor)
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.Tab,
+            )
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        BadgedBox(
+            badge = {
+                if (unread > 0) Badge { Text(unread.coerceAtMost(99).toString()) }
+            },
+        ) {
+            Icon(
+                imageVector = destination.icon,
+                contentDescription = destination.label,
+                modifier = Modifier.size(23.dp),
+                tint = contentColor,
+            )
+        }
+        Text(
+            text = destination.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun GlassTopBar(route: String) {
+    val dark = isSystemInDarkTheme()
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.9f else 0.86f),
+        shadowElevation = 4.dp,
+        border = BorderStroke(
+            0.5.dp,
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = if (dark) 0.14f else 0.62f),
+                    MaterialTheme.colorScheme.outlineVariant,
+                ),
+            ),
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(48.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = routeTitle(route),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            Text(
+                text = "超级岛 A股 · 独立版",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -178,6 +346,9 @@ fun StandaloneAppRoot(
 private fun HomeScreen(
     viewModel: StandaloneViewModel,
     modifier: Modifier,
+    permissionState: DevicePermissionState,
+    onRequestNotifications: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
     navigate: (String) -> Unit,
 ) {
     val settings by viewModel.settings.collectAsState()
@@ -185,6 +356,13 @@ private fun HomeScreen(
     val reports by viewModel.reports.collectAsState()
     val runs by viewModel.researchRuns.collectAsState()
     ScreenColumn(modifier) {
+        if (!permissionState.notificationsGranted || !permissionState.batteryUnrestricted) {
+            PermissionCard(
+                state = permissionState,
+                onRequestNotifications = onRequestNotifications,
+                onOpenBatterySettings = onOpenBatterySettings,
+            )
+        }
         if (settings.firstRun) {
             InfoCard(
                 title = "欢迎使用本地独立版",
@@ -209,10 +387,10 @@ private fun HomeScreen(
         }
         SectionTitle("持仓与缓存报价")
         if (holdingsWithQuotes.isEmpty()) {
-            Text("尚未添加持仓。添加后才会启动后台行情监控。")
+            EmptyState("尚未添加持仓", "添加持仓后才会启动后台行情监控。")
         }
         holdingsWithQuotes.forEach { (holding, quote) ->
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(holding.name + " · " + holding.symbol, fontWeight = FontWeight.SemiBold)
                     val price = quote?.lastPrice?.toString() ?: "暂无报价"
@@ -227,25 +405,31 @@ private fun HomeScreen(
             }
         }
         SectionTitle("快速入口")
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf(
-                "行情" to "market",
-                "提醒" to "alerts",
-                "研究" to "research",
-                "报告" to "reports",
-                "候选" to "candidates",
-                "组合" to "portfolio",
-                "卖出研究" to "exit",
-                "AI 问答" to "chat",
-            ).forEach { (label, destination) ->
-                OutlinedButton(onClick = { navigate(destination) }) { Text(label) }
+        listOf(
+            "行情" to "market",
+            "提醒" to "alerts",
+            "研究" to "research",
+            "报告" to "reports",
+            "候选" to "candidates",
+            "组合" to "portfolio",
+            "卖出研究" to "exit",
+            "AI 问答" to "chat",
+        ).chunked(2).forEach { destinations ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                destinations.forEach { (label, destination) ->
+                    OutlinedButton(
+                        onClick = { navigate(destination) },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                    ) { Text(label) }
+                }
+                if (destinations.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         SectionTitle("研究状态")
-        if (runs.isEmpty()) Text("暂无研究任务")
+        if (runs.isEmpty()) EmptyState("暂无研究任务", "启动研究后可在这里查看最新进度。")
         runs.take(3).forEach {
             Text(it.state.name + " · " + it.completedCount + " / " + it.totalCount + " · " + formatTime(it.updatedAt))
         }
@@ -263,58 +447,338 @@ private fun MarketScreen(
     navigate: (String) -> Unit,
 ) {
     val state by viewModel.marketState.collectAsState()
+    var subChart by rememberSaveable { mutableStateOf(StandaloneSubChart.VOLUME) }
+    LaunchedEffect(Unit) {
+        if (state.quote == null) viewModel.refreshMarketSymbol()
+        if (state.indexQuotes.isEmpty()) viewModel.loadMarketIndices()
+    }
     ScreenColumn(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::updateMarketQuery,
                 label = { Text("证券代码") },
+                placeholder = { Text("例如 600519") },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
             )
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { viewModel.refreshMarketSymbol() }, enabled = !state.loading) {
-                Text(if (state.loading) "读取中" else "刷新")
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    onClick = {
+                        viewModel.refreshMarketSymbol()
+                        viewModel.loadMarketIndices(forceRefresh = true)
+                    },
+                    enabled = !state.loading,
+                ) {
+                    if (state.loading) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "刷新行情")
+                    }
+                }
             }
         }
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        state.quote?.let { quote ->
-            InfoCard(
-                title = quote.name + " · " + quote.symbol,
-                text = "现价 " + (quote.lastPrice?.toString() ?: "不可用") +
-                    " · 涨跌 " + (quote.changePercent?.toString() ?: "-") + "%" +
-                    "\n来源 " + quote.provider + " · " + freshnessLabel(quote.freshness) +
-                    " · " + formatTime(quote.fetchedAt),
+        MarketIndexStrip(
+            quotes = state.indexQuotes,
+            loading = state.indicesLoading,
+        )
+        state.message?.let {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
             ) {
-                Button(onClick = { viewModel.addWatchlist(quote.symbol, quote.name) }) { Text("加入自选") }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { navigate("assets") }) { Text("添加为持仓") }
+                Text(
+                    it,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
-        SectionTitle("日 K 线")
-        CandlePreview(state.candles)
+        state.quote?.let { quote ->
+            MarketQuotePanel(
+                quote = quote,
+                latestCandle = state.candles.lastOrNull(),
+                onAddWatchlist = { viewModel.addWatchlist(quote.symbol, quote.name) },
+                onAddHolding = { navigate("assets") },
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Text("日 K 线", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("前复权 · 最近 100 个交易日", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                if (state.candles.isEmpty()) "无数据" else "${state.candles.size} 根",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        GlassSubChartSelector(selected = subChart, onSelected = { subChart = it })
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(370.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            StandaloneCandlestickChart(
+                candles = state.candles,
+                subChart = subChart,
+                modifier = Modifier.fillMaxSize().padding(12.dp),
+            )
+        }
         Text(
-            if (state.candles.isEmpty()) "尚无 K 线缓存" else "最近 " + state.candles.size + " 根，数据采集于 " + formatTime(state.candles.last().fetchedAt),
-            style = MaterialTheme.typography.labelMedium,
+            if (state.candles.isEmpty()) {
+                "尚无 K 线缓存"
+            } else {
+                "双指缩放或拖动查看历史；长按显示十字光标 · 更新于 ${formatTime(state.candles.last().fetchedAt)}"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SectionTitle("证券目录")
         if (state.catalog.isEmpty()) {
-            Text("打开本页时按需读取证券目录；无网络时使用内置常用证券。")
-            OutlinedButton(onClick = { viewModel.loadCatalog() }) { Text("加载目录") }
+            EmptyState(
+                title = "证券目录尚未加载",
+                description = "无网络时会使用内置常用证券。",
+            )
+            OutlinedButton(onClick = { viewModel.loadCatalog() }, modifier = Modifier.fillMaxWidth()) {
+                Text("加载目录")
+            }
         }
         state.catalog.take(100).forEach { security ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { viewModel.refreshMarketSymbol(security.symbol) }
-                    .padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(security.name)
-                Text(security.symbol + " · " + security.exchange)
-            }
-            HorizontalDivider()
+            MarketCatalogRow(
+                name = security.name,
+                symbol = security.symbol,
+                exchange = security.exchange,
+                selected = state.quote?.symbol == security.symbol,
+                onClick = { viewModel.refreshMarketSymbol(security.symbol) },
+            )
         }
+    }
+}
+
+@Composable
+private fun MarketQuotePanel(
+    quote: MarketQuote,
+    latestCandle: DailyCandle?,
+    onAddWatchlist: () -> Unit,
+    onAddHolding: () -> Unit,
+) {
+    val change = if (quote.lastPrice != null && quote.previousClose != null) {
+        quote.lastPrice - quote.previousClose
+    } else {
+        null
+    }
+    val changeColor = stockChangeColor(quote.changePercent)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(quote.name, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "${quote.symbol} · ${quote.provider}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = when (quote.freshness) {
+                        MarketFreshness.FRESH -> MaterialTheme.colorScheme.primaryContainer
+                        MarketFreshness.STALE -> MaterialTheme.colorScheme.secondaryContainer
+                        MarketFreshness.UNAVAILABLE -> MaterialTheme.colorScheme.errorContainer
+                    },
+                ) {
+                    Text(
+                        freshnessLabel(quote.freshness),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    quote.lastPrice?.formatMarketNumber() ?: "--",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = changeColor,
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    change?.let { signedMarketNumber(it) } ?: "--",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = changeColor,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    quote.changePercent?.let { signedMarketNumber(it) + "%" } ?: "--",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = changeColor,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MarketDetailStat("今开", latestCandle?.open?.formatMarketNumber() ?: "--")
+                MarketDetailStat("最高", latestCandle?.high?.formatMarketNumber() ?: "--")
+                MarketDetailStat("最低", latestCandle?.low?.formatMarketNumber() ?: "--")
+                MarketDetailStat("昨收", quote.previousClose?.formatMarketNumber() ?: "--")
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MarketDetailStat("成交量", formatMarketVolume(quote.volume))
+                MarketDetailStat("K线日期", latestCandle?.tradingDate?.toString() ?: "--")
+                MarketDetailStat("采集时间", formatTime(quote.fetchedAt))
+            }
+            AdaptiveActionRow {
+                Button(onClick = onAddWatchlist) { Text("加入自选") }
+                OutlinedButton(onClick = onAddHolding) { Text("添加为持仓") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketDetailStat(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(2.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun GlassSubChartSelector(
+    selected: StandaloneSubChart,
+    onSelected: (StandaloneSubChart) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 5.dp,
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(46.dp).padding(4.dp)) {
+            StandaloneSubChart.entries.forEach { option ->
+                val active = selected == option
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f) else Color.Transparent,
+                        )
+                        .selectable(
+                            selected = active,
+                            onClick = { onSelected(option) },
+                            role = Role.Tab,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        option.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketCatalogRow(
+    name: String,
+    symbol: String,
+    exchange: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(name, fontWeight = FontWeight.SemiBold)
+                Text(symbol, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(exchange, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(title: String, description: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListItemSurface(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            content = content,
+        )
     }
 }
 
@@ -342,15 +806,19 @@ private fun AssetsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("保存持仓并生成 ATR 止损线") }
         SectionTitle("当前持仓")
+        if (holdings.isEmpty()) EmptyState("暂无持仓", "填写证券代码、数量和成本后保存。")
         holdings.forEach {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
+            ListItemSurface {
+                Column(Modifier.weight(1f)) {
                     Text(it.name + " · " + it.symbol, fontWeight = FontWeight.SemiBold)
-                    Text("数量 " + it.quantity + " · 成本 " + it.averageCost)
+                    Text(
+                        "数量 " + it.quantity + " · 成本 " + it.averageCost,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 TextButton(onClick = { viewModel.removeHolding(it.symbol) }) { Text("移除") }
             }
-            HorizontalDivider()
         }
         SectionTitle("新增自选")
         OutlinedTextField(watchSymbol, { watchSymbol = it }, label = { Text("证券代码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -362,12 +830,15 @@ private fun AssetsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("保存自选") }
+        if (watchlist.isEmpty()) EmptyState("暂无自选", "添加证券后可在行情页快速查看。")
         watchlist.forEach {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(it.name + " · " + it.symbol)
+            ListItemSurface {
+                Column(Modifier.weight(1f)) {
+                    Text(it.name, fontWeight = FontWeight.SemiBold)
+                    Text(it.symbol, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 TextButton(onClick = { viewModel.removeWatchlist(it.symbol) }) { Text("移除") }
             }
-            HorizontalDivider()
         }
     }
 }
@@ -410,16 +881,24 @@ private fun AlertsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("保存本地提醒") }
         SectionTitle("已保存提醒")
+        if (alerts.isEmpty()) EmptyState("暂无提醒", "创建价格区间、止损或止盈提醒。")
         alerts.forEach {
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            ListItemSurface {
                 Column(Modifier.weight(1f)) {
                     Text(it.name + " · " + alertKindLabel(it.kind), fontWeight = FontWeight.SemiBold)
-                    Text("下限 " + (it.lowerBound?.toString() ?: "-") + " · 上限 " + (it.upperBound?.toString() ?: "-"))
-                    Text("冷却 " + it.cooldownMinutes + " 分钟" + (it.expiresAt?.let { " · 到期 " + formatTime(it) } ?: ""))
+                    Text(
+                        "下限 " + (it.lowerBound?.toString() ?: "-") + " · 上限 " + (it.upperBound?.toString() ?: "-"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "冷却 " + it.cooldownMinutes + " 分钟" + (it.expiresAt?.let { " · 到期 " + formatTime(it) } ?: ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 TextButton(onClick = { viewModel.removeAlert(it.id) }) { Text("移除") }
             }
-            HorizontalDivider()
         }
     }
 }
@@ -504,8 +983,9 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("启动本地研究") }
         SectionTitle("研究运行")
+        if (runs.isEmpty()) EmptyState("暂无研究运行", "选择范围并启动本地研究。")
         runs.forEach {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(researchScopeLabel(it.scope) + " · " + it.state.name, fontWeight = FontWeight.SemiBold)
                     Text(it.completedCount.toString() + " / " + it.totalCount + " · " + formatTime(it.updatedAt))
@@ -523,9 +1003,9 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 private fun ReportsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     val reports by viewModel.reports.collectAsState()
     ScreenColumn(modifier) {
-        if (reports.isEmpty()) Text("尚无本地报告。研究完成后会生成确定性模板报告。")
+        if (reports.isEmpty()) EmptyState("尚无本地报告", "研究完成后会生成确定性模板报告。")
         reports.forEach {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(it.title + " · " + formatTime(it.createdAt), fontWeight = FontWeight.Bold)
                     Text(it.deterministicBody)
@@ -545,18 +1025,18 @@ private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier)
     val candidates by viewModel.candidates.collectAsState()
     ScreenColumn(modifier) {
         Text("候选完全按本地确定性评分排序，不代表交易指令。")
+        if (candidates.isEmpty()) EmptyState("暂无候选", "完成一次研究后会在这里显示评分结果。")
         candidates.forEachIndexed { index, candidate ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            ListItemSurface {
                 Column(Modifier.weight(1f)) {
                     Text((index + 1).toString() + ". " + candidate.name + " · " + candidate.symbol, fontWeight = FontWeight.SemiBold)
-                    Text(candidate.reason, style = MaterialTheme.typography.bodySmall)
+                    Text(candidate.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(candidate.score.toString())
-                    Text(candidate.risk, style = MaterialTheme.typography.labelSmall)
+                    Text(candidate.score.toString(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(candidate.risk, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            HorizontalDivider()
         }
     }
 }
@@ -566,8 +1046,9 @@ private fun PortfolioScreen(viewModel: StandaloneViewModel, modifier: Modifier) 
     val portfolios by viewModel.portfolios.collectAsState()
     ScreenColumn(modifier) {
         Text("模拟组合仅用于研究观察，不会向券商或服务器提交订单。")
+        if (portfolios.isEmpty()) EmptyState("暂无模拟组合", "满足组合生成条件的研究完成后会显示在这里。")
         portfolios.forEach {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(it.name + " · 评分 " + it.score, fontWeight = FontWeight.Bold)
                     Text(it.holdingsJson)
@@ -589,9 +1070,9 @@ private fun ExitResearchScreen(viewModel: StandaloneViewModel, modifier: Modifie
         Button(onClick = viewModel::refreshExitResearch, modifier = Modifier.fillMaxWidth()) {
             Text("刷新卖出研究")
         }
-        if (entries.isEmpty()) Text("请先添加持仓并刷新。")
+        if (entries.isEmpty()) EmptyState("暂无卖出研究", "请先添加持仓，然后刷新卖出研究。")
         entries.forEach {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(it.name + " · " + it.symbol + " · " + it.state, fontWeight = FontWeight.Bold)
                     Text(
@@ -614,9 +1095,9 @@ private fun NotificationsScreen(viewModel: StandaloneViewModel, modifier: Modifi
             Text("本地通知中心", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = viewModel::markAllNotificationsRead) { Text("全部已读") }
         }
-        if (notifications.isEmpty()) Text("暂无通知")
+        if (notifications.isEmpty()) EmptyState("暂无通知", "价格提醒和研究进度会保存在本机。")
         notifications.forEach {
-            Card(
+            ContentCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
@@ -671,7 +1152,7 @@ private fun ChatScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             }
         }
         messages.forEach {
-            Card(
+            ContentCard(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (it.role == "user") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
@@ -701,8 +1182,15 @@ private fun ChatScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 }
 
 @Composable
-private fun SettingsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
-    val context = LocalContext.current
+private fun SettingsScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    permissionState: DevicePermissionState,
+    onRequestNotifications: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+) {
+    val context = viewModel.appContext
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.collectAsState()
     val providers by viewModel.aiProviders.collectAsState()
@@ -746,6 +1234,11 @@ private fun SettingsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
         }
     }
     ScreenColumn(modifier) {
+        PermissionCard(
+            state = permissionState,
+            onRequestNotifications = onRequestNotifications,
+            onOpenBatterySettings = onOpenBatterySettings,
+        )
         SectionTitle("通知与后台")
         SwitchRow("持仓监控", settings.monitoringEnabled, onChange = viewModel::setMonitoringEnabled)
         SwitchRow("提醒开关", settings.alertsEnabled, onChange = viewModel::setAlertsEnabled)
@@ -767,23 +1260,17 @@ private fun SettingsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             title = "资源状态",
             text = "无任务及非交易时段不请求行情。前台服务超时后会停止并降级为约 15 分钟 WorkManager 检查。目标：监控 CPU < 1.5%，PSS < 120 MiB；系统策略可能仍会终止进程。",
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AdaptiveActionRow {
             OutlinedButton(onClick = viewModel::clearMarketCache) { Text("清除缓存") }
             OutlinedButton(onClick = viewModel::testMarketProvider) { Text("测试行情源") }
             OutlinedButton(onClick = viewModel::showIslandTest) { Text("测试超级岛") }
         }
         OutlinedButton(
-            onClick = {
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + context.packageName),
-                    ),
-                )
-            },
-        ) { Text("打开小米自启动/电量/通知设置") }
+            onClick = onOpenAppSettings,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("打开应用系统设置") }
         Text(
-            "请在系统设置中允许通知、开启自启动、设为无限制电量并锁定后台；这些设置不能保证绝对保活。",
+            "小米/HyperOS 用户还需在系统设置中开启自启动；系统后台策略仍可能终止进程。",
             style = MaterialTheme.typography.labelMedium,
         )
 
@@ -811,10 +1298,10 @@ private fun SettingsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("保存 AI Provider") }
         providers.forEach {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            ListItemSurface {
                 Column(Modifier.weight(1f)) {
                     Text(it.name + " · " + it.model, fontWeight = FontWeight.SemiBold)
-                    Text(it.baseUrl, style = MaterialTheme.typography.labelSmall)
+                    Text(it.baseUrl, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { viewModel.testAiProvider(it.id) }) { Text("测试") }
                 TextButton(onClick = { viewModel.removeAiProvider(it.id) }) { Text("删除") }
@@ -845,30 +1332,168 @@ private fun SettingsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 
 @Composable
 private fun ScreenColumn(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        content = content,
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ContentCard(
+    modifier: Modifier = Modifier,
+    colors: CardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    content: @Composable () -> Unit,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = colors,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        content = { content() },
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InfoCard(
     title: String,
     text: String,
     actions: @Composable (() -> Unit)? = null,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(text)
+            Spacer(Modifier.height(6.dp))
+            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (actions != null) {
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, content = { actions() })
+                Spacer(Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    content = { actions() },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdaptiveActionRow(content: @Composable () -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = { content() },
+    )
+}
+
+@Composable
+private fun PermissionCard(
+    state: DevicePermissionState,
+    onRequestNotifications: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
+) {
+    val allReady = state.notificationsGranted && state.batteryUnrestricted
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (allReady) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (allReady) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("权限与后台运行", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            PermissionRow(
+                title = "通知提醒（必须）",
+                description = "价格提醒、研究完成和超级岛降级通知需要此权限。",
+                granted = state.notificationsGranted,
+                actionLabel = "开启通知",
+                onAction = onRequestNotifications,
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            PermissionRow(
+                title = "无限制电量（建议）",
+                description = "减少系统在交易时段中断持仓监控的概率。",
+                granted = state.batteryUnrestricted,
+                actionLabel = "调整电量策略",
+                onAction = onOpenBatterySettings,
+                iconIsBattery = true,
+            )
+            Text(
+                "联网、前台服务和开机恢复权限随安装授予，无需单独操作。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    actionLabel: String,
+    onAction: () -> Unit,
+    iconIsBattery: Boolean = false,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = when {
+                    granted -> Icons.Outlined.CheckCircle
+                    iconIsBattery -> Icons.Outlined.BatterySaver
+                    else -> Icons.Outlined.ErrorOutline
+                },
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = if (granted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+            Text(
+                if (granted) "已开启" else "未开启",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (granted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!granted) {
+            OutlinedButton(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
+                Text(actionLabel)
             }
         }
     }
@@ -876,12 +1501,19 @@ private fun InfoCard(
 
 @Composable
 private fun SectionTitle(value: String) {
-    Text(
-        value,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 8.dp),
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
 }
 
 @Composable
@@ -891,38 +1523,19 @@ private fun SwitchRow(
     enabled: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
-    Row(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Text(label, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
-    }
-}
-
-@Composable
-private fun CandlePreview(candles: List<DailyCandle>) {
-    if (candles.isEmpty()) {
-        Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-            Text("无可绘制 K 线")
-        }
-        return
-    }
-    val subset = candles.takeLast(80)
-    Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-        val high = subset.maxOf(DailyCandle::high)
-        val low = subset.minOf(DailyCandle::low)
-        val range = max(high - low, 0.001)
-        val step = size.width / subset.size
-        subset.forEachIndexed { index, candle ->
-            val x = step * (index + 0.5f)
-            fun y(value: Double): Float = ((high - value) / range * size.height.toDouble()).toFloat()
-            val color = if (candle.close >= candle.open) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-            drawLine(color, Offset(x, y(candle.high)), Offset(x, y(candle.low)), 1.2f, StrokeCap.Round)
-            val top = minOf(y(candle.open), y(candle.close))
-            val bottom = maxOf(y(candle.open), y(candle.close))
-            drawLine(color, Offset(x, top), Offset(x, max(bottom, top + 1f)), step * 0.55f, StrokeCap.Butt)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
         }
     }
 }
@@ -985,4 +1598,24 @@ private fun notificationPriorityLabel(priority: NotificationPriority): String = 
     NotificationPriority.NORMAL -> "普通"
     NotificationPriority.WARNING -> "预警"
     NotificationPriority.PROGRESS -> "研究进度"
+}
+
+private fun Double.formatMarketNumber(): String = String.format(Locale.US, "%.2f", this)
+
+private fun signedMarketNumber(value: Double): String =
+    (if (value > 0) "+" else "") + value.formatMarketNumber()
+
+private fun formatMarketVolume(value: Double?): String = when {
+    value == null -> "--"
+    value >= 100_000_000 -> String.format(Locale.US, "%.2f 亿", value / 100_000_000)
+    value >= 10_000 -> String.format(Locale.US, "%.2f 万", value / 10_000)
+    else -> String.format(Locale.US, "%.0f", value)
+}
+
+@Composable
+private fun stockChangeColor(value: Double?): Color = when {
+    value == null -> MaterialTheme.colorScheme.onSurfaceVariant
+    value > 0 -> Color(0xFFE53935)
+    value < 0 -> Color(0xFF00A86B)
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
