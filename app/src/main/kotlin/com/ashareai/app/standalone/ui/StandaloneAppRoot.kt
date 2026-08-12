@@ -333,7 +333,7 @@ private fun GlassTopBar(route: String) {
                 maxLines = 1,
             )
             Text(
-                text = "超级岛 A股 · 独立版",
+                text = "霁衡智研",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -365,7 +365,7 @@ private fun HomeScreen(
         }
         if (settings.firstRun) {
             InfoCard(
-                title = "欢迎使用本地独立版",
+                title = "欢迎使用霁衡智研",
                 text = "没有登录和服务器地址。持仓、自选、提醒、报告与 AI 会话都保存于本机；公开行情会标记来源和更新时间。",
             ) {
                 Button(onClick = viewModel::completeFirstRun) { Text("我知道了") }

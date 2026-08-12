@@ -92,7 +92,7 @@ object FocusNotification {
         )
         val builder = NotificationCompat.Builder(context, StandaloneApp.CHANNEL_ALERT)
             .setSmallIcon(R.drawable.ic_stat_trend)
-            .setContentTitle("A股超级岛（独立版）")
+            .setContentTitle("霁衡智研")
             .setContentText("测试通知：行情监控正常")
             .setContentIntent(openApp)
             .setOnlyAlertOnce(true)
@@ -104,7 +104,7 @@ object FocusNotification {
             decorate(
                 context = context,
                 builder = builder,
-                title = "A股超级岛",
+                title = "霁衡智研",
                 content = "测试通知",
                 subContent = "标准通知与 v3 载荷已发送",
                 colorContent = "#E53935",
