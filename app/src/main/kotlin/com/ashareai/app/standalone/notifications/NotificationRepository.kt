@@ -30,6 +30,7 @@ class NotificationRepository(
         priority: NotificationPriority,
         deepLink: String = "notifications",
         notificationId: String = UUID.randomUUID().toString(),
+        systemNotificationId: Int? = null,
     ): LocalNotification {
         val item = LocalNotification(
             id = notificationId,
@@ -43,9 +44,18 @@ class NotificationRepository(
         // Persist first so a notification is never lost when the OS rejects delivery.
         local.saveNotification(item)
         if (canPostNotifications()) {
-            manager().notify(stableId(item.id), buildNotification(item))
+            manager().notify(systemNotificationId ?: stableId(item.id), buildNotification(item))
         }
         return item
+    }
+
+    fun showResearchProgress(title: String, body: String, progress: Int? = null) {
+        if (canPostNotifications()) {
+            manager().notify(
+                RESEARCH_ACTIVITY_NOTIFICATION_ID,
+                researchProgressNotification(title, body, progress),
+            )
+        }
     }
 
     fun monitoringNotification(title: String, body: String): Notification {
@@ -57,19 +67,21 @@ class NotificationRepository(
             route = route,
         ).setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)  // 静默通知，不打扰用户
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        // 监控服务通知：不显示超级岛，避免干扰
         return decorateIfEnabled(
             builder = builder,
             title = title,
             body = body,
             subContent = "持仓行情监控",
-            color = "#E53935",
-            enableFloat = false,
+            color = "#616161",  // 灰色，低调
+            enableFloat = false,  // 不启用超级岛
         )
     }
 
-    fun researchProgressNotification(title: String, body: String): Notification {
+    fun researchProgressNotification(title: String, body: String, progress: Int? = null): Notification {
         val builder = baseBuilder(
             channel = StandaloneApp.CHANNEL_PROGRESS,
             title = title,
@@ -77,15 +89,18 @@ class NotificationRepository(
             route = "research",
         ).setOnlyAlertOnce(true)
             .setOngoing(true)
+            .setSilent(true)  // 静默通知
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setProgress(100, progress?.coerceIn(0, 100) ?: 0, progress == null)
+        // 进度通知：不显示超级岛
         return decorateIfEnabled(
             builder = builder,
             title = title,
             body = body,
-            subContent = "本地研究进度",
+            subContent = progress?.let { "本地研究进度 $it%" } ?: "本地研究进度",
             color = "#1E88E5",
-            enableFloat = false,
+            enableFloat = false,  // 不启用超级岛
         )
     }
 
@@ -106,12 +121,17 @@ class NotificationRepository(
                     NotificationCompat.PRIORITY_DEFAULT
                 },
             )
+        // 只有 WARNING 类型才显示超级岛，其他类型普通通知即可
         return decorateIfEnabled(
             builder = builder,
             title = item.title,
             body = item.body,
-            subContent = null,
-            color = null,
+            subContent = when (item.priority) {
+                NotificationPriority.WARNING -> "重要行情提醒"
+                NotificationPriority.NORMAL -> null
+                NotificationPriority.PROGRESS -> null
+            },
+            color = if (item.priority == NotificationPriority.WARNING) "#E53935" else null,
             enableFloat = item.priority == NotificationPriority.WARNING,
         )
     }
@@ -181,4 +201,8 @@ class NotificationRepository(
             "settings",
         )
     } ?: "home"
+
+    companion object {
+        const val RESEARCH_ACTIVITY_NOTIFICATION_ID = 4402
+    }
 }

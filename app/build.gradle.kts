@@ -5,6 +5,7 @@ import java.io.FileInputStream
 val appMode = providers.gradleProperty("appMode").orElse("standalone").get()
 require(appMode == "connected" || appMode == "standalone") { "appMode must be connected or standalone." }
 val standaloneMode = appMode == "standalone"
+val xiaomiSuperIslandAppId = providers.gradleProperty("XIAOMI_SUPER_ISLAND_APP_ID").orElse("").get()
 
 // 签名配置：keystore 与密码存于根目录 keystore.properties（已被 .gitignore 排除，不入库）。
 // 该文件不存在时（如 CI/新克隆）release 构建退化为未签名，不中断构建。
@@ -53,9 +54,11 @@ android {
         applicationId = if (standaloneMode) "com.ashareai.app.standalone" else "com.ashareai.app"
         minSdk = 29
         targetSdk = if (standaloneMode) 36 else 35
-        versionCode = if (standaloneMode) 3 else 2
-        versionName = if (standaloneMode) "2.0.0" else "1.0.1"
+        versionCode = if (standaloneMode) 4 else 3
+        versionName = if (standaloneMode) "2.1.0" else "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["xiaomiSuperIslandAppId"] = xiaomiSuperIslandAppId
+        manifestPlaceholders["xiaomiSuperIslandBuildTypeDebug"] = "false"
         if (!standaloneMode) {
             buildConfigField("String", "MIPUSH_APP_ID", "\"${providers.gradleProperty("MIPUSH_APP_ID").orElse("").get()}\"")
             buildConfigField("String", "MIPUSH_APP_KEY", "\"${providers.gradleProperty("MIPUSH_APP_KEY").orElse("").get()}\"")
@@ -83,7 +86,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["xiaomiSuperIslandBuildTypeDebug"] = "true"
+        }
         release {
+            manifestPlaceholders["xiaomiSuperIslandBuildTypeDebug"] = "false"
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

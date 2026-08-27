@@ -43,6 +43,7 @@ object AiFallbackPolicy {
 class OpenAiCompatibleClient(
     private val providerRepository: AiProviderRepository,
     private val httpClient: OkHttpClient,
+    private val cacheManager: AiCacheManager? = null,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
     fun stream(request: AiRequest): Flow<AiStreamEvent> = callbackFlow {
@@ -53,7 +54,19 @@ class OpenAiCompatibleClient(
             close()
             return@callbackFlow
         }
+
+        // 尝试从缓存读取
+        val cached = cacheManager?.get(request.providerId, request.systemInstruction, request.prompt)
+        if (cached != null) {
+            trySend(AiStreamEvent.Started)
+            trySend(AiStreamEvent.Delta(cached))
+            trySend(AiStreamEvent.Completed)
+            close()
+            return@callbackFlow
+        }
+
         trySend(AiStreamEvent.Started)
+        val responseBuilder = StringBuilder()
         try {
             try {
                 streamEndpoint(
@@ -61,7 +74,10 @@ class OpenAiCompatibleClient(
                     path = "v1/responses",
                     payload = responsesPayload(credential, request),
                     responseFormat = ResponseFormat.RESPONSES,
-                    onDelta = { trySend(AiStreamEvent.Delta(it)) },
+                    onDelta = {
+                        responseBuilder.append(it)
+                        trySend(AiStreamEvent.Delta(it))
+                    },
                 )
             } catch (error: EndpointHttpException) {
                 if (!AiFallbackPolicy.mayFallbackFromResponses(error.statusCode)) throw error
@@ -71,8 +87,16 @@ class OpenAiCompatibleClient(
                     path = "v1/chat/completions",
                     payload = chatCompletionsPayload(credential, request),
                     responseFormat = ResponseFormat.CHAT_COMPLETIONS,
-                    onDelta = { trySend(AiStreamEvent.Delta(it)) },
+                    onDelta = {
+                        responseBuilder.append(it)
+                        trySend(AiStreamEvent.Delta(it))
+                    },
                 )
+            }
+            // 保存到缓存
+            val fullResponse = responseBuilder.toString()
+            if (fullResponse.isNotBlank()) {
+                cacheManager?.put(request.providerId, request.systemInstruction, request.prompt, fullResponse)
             }
             trySend(AiStreamEvent.Completed)
         } catch (error: Exception) {

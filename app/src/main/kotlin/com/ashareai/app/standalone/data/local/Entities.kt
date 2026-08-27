@@ -88,6 +88,12 @@ data class ResearchRunEntity(
     val errorMessage: String?,
     val includePortfolioDataForAi: Boolean,
     val aiProviderId: String?,
+    val triggerSource: String,
+    val automaticReportSlot: String?,
+    val totalBudget: Double,
+    val perSymbolBudget: Double,
+    val maxStockPrice: Double?,
+    val configVersion: Int,
 )
 
 @Entity(tableName = "research_reports")

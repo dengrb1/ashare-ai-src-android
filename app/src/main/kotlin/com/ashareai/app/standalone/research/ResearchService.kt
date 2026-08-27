@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,19 +25,20 @@ class ResearchService : Service() {
         activeRunId = runId
         val app = application as StandaloneApp
         startForeground(
-            NOTIFICATION_ID,
-            app.container.notifications.researchProgressNotification("本地研究启动中", "正在准备研究任务"),
+            NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
+            app.container.notifications.researchProgressNotification("本地研究", "正在准备研究任务"),
         )
         runJob?.cancel()
         runJob = serviceScope.launch {
+            val queuedRun = app.container.local.researchRun(runId)
+            val notificationTitle = queuedRun?.automaticReportSlot?.let { "自动研究报告 $it" } ?: "本地研究"
+            app.container.notifications.showResearchProgress(notificationTitle, "正在准备研究任务")
             app.container.research.run(runId) { run ->
                 val body = "已完成 " + run.completedCount + " / " + run.totalCount + " 只股票"
-                getSystemService(android.app.NotificationManager::class.java).notify(
-                    NOTIFICATION_ID,
-                    app.container.notifications.researchProgressNotification("本地研究进行中", body),
-                )
+                val progress = if (run.totalCount <= 0) 0 else run.completedCount * 100 / run.totalCount
+                app.container.notifications.showResearchProgress(notificationTitle, body, progress)
             }
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopForeground(STOP_FOREGROUND_DETACH)
             stopSelf(startId)
         }
         return START_NOT_STICKY
@@ -58,8 +60,6 @@ class ResearchService : Service() {
 
     companion object {
         private const val EXTRA_RUN_ID = "research_run_id"
-        private const val NOTIFICATION_ID = 4402
-
         fun start(context: Context, runId: String) {
             val intent = Intent(context, ResearchService::class.java).putExtra(EXTRA_RUN_ID, runId)
             runCatching { ContextCompat.startForegroundService(context, intent) }

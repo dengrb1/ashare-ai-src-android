@@ -23,9 +23,10 @@ class LocalDatabaseMigrationTest {
         helper.createDatabase(TEST_DB, 1).close()
         helper.runMigrationsAndValidate(
             TEST_DB,
-            2,
+            3,
             true,
             LocalDatabase.MIGRATION_1_2,
+            LocalDatabase.MIGRATION_2_3,
         ).close()
     }
 

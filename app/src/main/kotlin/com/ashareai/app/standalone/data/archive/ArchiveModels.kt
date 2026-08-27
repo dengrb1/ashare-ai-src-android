@@ -74,6 +74,12 @@ data class ArchiveResearchRun(
     val errorMessage: String? = null,
     val includePortfolioDataForAi: Boolean,
     val aiProviderId: String? = null,
+    val triggerSource: String = "MANUAL",
+    val automaticReportSlot: String? = null,
+    val totalBudget: Double = 1_000_000.0,
+    val perSymbolBudget: Double = 80_000.0,
+    val maxStockPrice: Double? = null,
+    val configVersion: Int = 1,
 )
 
 @Serializable

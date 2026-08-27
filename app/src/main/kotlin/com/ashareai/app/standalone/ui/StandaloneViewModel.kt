@@ -8,6 +8,7 @@ import com.ashareai.app.standalone.data.ai.AiPayloadBuilder
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
+import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.AlertRule
 import com.ashareai.app.standalone.domain.ChatMessage
@@ -110,19 +111,23 @@ class StandaloneViewModel(
     }
 
     fun updateMarketQuery(query: String) {
-        _marketState.update { it.copy(query = query.filter(Char::isDigit).take(6)) }
+        _marketState.update { it.copy(query = query.take(30), message = null) }
     }
 
     fun refreshMarketSymbol(symbol: String = marketState.value.query) {
-        val normalized = symbol.trim()
-        if (normalized.length != 6) {
-            _marketState.update { it.copy(message = "请输入 6 位证券代码") }
+        val input = symbol.trim()
+        val normalized = input.takeIf { it.length == 6 && it.all(Char::isDigit) }
+            ?: marketState.value.catalog.firstOrNull {
+                it.name.equals(input, ignoreCase = true) || it.name.contains(input, ignoreCase = true)
+            }?.symbol
+        if (normalized == null || normalized.length != 6) {
+            _marketState.update { it.copy(message = "请输入 6 位证券代码，或从搜索结果选择股票") }
             return
         }
         viewModelScope.launch {
             _marketState.update { it.copy(query = normalized, loading = true, message = null) }
             val quote = market.refreshQuote(normalized)
-            val candles = market.dailyCandles(normalized, 100, forceRefresh = true)
+            val candles = market.dailyCandles(normalized, 365, forceRefresh = true)
             _marketState.update {
                 it.copy(
                     quote = quote,
@@ -269,9 +274,24 @@ class StandaloneViewModel(
         scope: ResearchScope,
         customSymbols: String,
         marketLimit: Int,
+        totalBudget: Double,
+        perSymbolBudget: Double,
+        maxStockPrice: Double?,
         aiProviderId: String?,
         includePortfolioData: Boolean,
     ) {
+        if (!totalBudget.isFinite() || totalBudget <= 0.0) {
+            _message.value = "总预算必须大于 0"
+            return
+        }
+        if (!perSymbolBudget.isFinite() || perSymbolBudget <= 0.0 || perSymbolBudget > totalBudget) {
+            _message.value = "单股最高投入必须大于 0 且不超过总预算"
+            return
+        }
+        if (maxStockPrice != null && (!maxStockPrice.isFinite() || maxStockPrice <= 0.0)) {
+            _message.value = "最高可接受股价必须大于 0"
+            return
+        }
         viewModelScope.launch {
             runCatching {
                 app.container.research.enqueue(
@@ -281,6 +301,9 @@ class StandaloneViewModel(
                         marketLimit = ResearchBatchPlanner.clampMarketLimit(marketLimit),
                         includePortfolioDataForAi = includePortfolioData && settings.value.portfolioDataAllowedForAi,
                         aiProviderId = aiProviderId,
+                        totalBudget = totalBudget,
+                        perSymbolBudget = perSymbolBudget,
+                        maxStockPrice = maxStockPrice,
                     ),
                 )
             }.onSuccess {
@@ -338,6 +361,19 @@ class StandaloneViewModel(
 
     fun setDailyReportBEnabled(enabled: Boolean) {
         viewModelScope.launch { app.container.settings.setDailyReportBEnabled(enabled) }
+    }
+
+    fun saveAutomaticReports(reports: List<AutomaticResearchReportConfig>) {
+        viewModelScope.launch {
+            runCatching {
+                app.container.settings.saveAutomaticReports(reports)
+                app.container.dailyResearchScheduler.schedule()
+            }.onSuccess {
+                _message.value = "自动报告 A/B 配置已保存"
+            }.onFailure {
+                _message.value = it.message ?: "自动报告配置无效"
+            }
+        }
     }
 
     fun setMarketScanLimit(limit: Int) {

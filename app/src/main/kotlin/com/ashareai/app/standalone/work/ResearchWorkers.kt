@@ -27,7 +27,7 @@ class DailyResearchScheduler(
 ) {
     suspend fun schedule() {
         val currentSettings = settings.settings.first()
-        if (!currentSettings.dailyResearchEnabled) {
+        if (!currentSettings.dailyResearchEnabled || currentSettings.automaticReports.none { it.enabled }) {
             WorkManager.getInstance(context).cancelUniqueWork(DAILY_WORK_NAME)
             return
         }
@@ -61,7 +61,39 @@ class DailyResearchWorker(
         val app = applicationContext as StandaloneApp
         val calendar = app.container.calendar
         if (calendar.isTradingDay(java.time.LocalDate.now(ShanghaiTradingCalendar.ZONE))) {
-            app.container.research.enqueueDaily()
+            app.container.settings.settings.first().automaticReports
+                .filter { it.enabled }
+                .sortedBy { it.slot }
+                .forEach { config ->
+                    runCatching {
+                        val run = app.container.research.enqueueAutomatic(config, startImmediately = false)
+                        app.container.notifications.showResearchProgress(
+                            title = "自动研究报告 ${config.slot}",
+                            body = "正在准备研究任务",
+                        )
+                        app.container.research.run(run.id) { progressRun ->
+                            val progress = if (progressRun.totalCount <= 0) {
+                                0
+                            } else {
+                                progressRun.completedCount * 100 / progressRun.totalCount
+                            }
+                            app.container.notifications.showResearchProgress(
+                                title = "自动研究报告 ${config.slot}",
+                                body = "已完成 ${progressRun.completedCount} / ${progressRun.totalCount} 只股票",
+                                progress = progress,
+                            )
+                        }
+                    }.onFailure { error ->
+                        app.container.notifications.publish(
+                            title = "自动报告 ${config.slot} 未运行",
+                            body = error.message ?: "自动报告配置或研究范围不可用",
+                            priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
+                            deepLink = "research",
+                            systemNotificationId = com.ashareai.app.standalone.notifications.NotificationRepository
+                                .RESEARCH_ACTIVITY_NOTIFICATION_ID,
+                        )
+                    }
+                }
         }
         app.container.dailyResearchScheduler.schedule()
         return Result.success()

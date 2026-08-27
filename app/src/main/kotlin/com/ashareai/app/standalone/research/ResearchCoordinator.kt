@@ -6,6 +6,7 @@ import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
 import com.ashareai.app.standalone.data.ai.OpenAiCompatibleClient
 import com.ashareai.app.standalone.data.market.MarketRepository
+import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.standalone.domain.ResearchCandidate
 import com.ashareai.app.standalone.domain.ResearchReport
 import com.ashareai.app.standalone.domain.ResearchRequest
@@ -13,6 +14,7 @@ import com.ashareai.app.standalone.domain.ResearchResult
 import com.ashareai.app.standalone.domain.ResearchRun
 import com.ashareai.app.standalone.domain.ResearchRunState
 import com.ashareai.app.standalone.domain.ResearchScope
+import com.ashareai.app.standalone.domain.ResearchTriggerSource
 import com.ashareai.app.standalone.domain.SimulationPortfolio
 import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
@@ -31,7 +33,7 @@ class ResearchCoordinator(
     private val clock: () -> Long = System::currentTimeMillis,
     private val json: Json = Json,
 ) {
-    suspend fun enqueue(request: ResearchRequest): ResearchRun {
+    suspend fun enqueue(request: ResearchRequest, startImmediately: Boolean = true): ResearchRun {
         val symbols = resolveSymbols(request)
         require(symbols.isNotEmpty()) { "没有可研究的股票" }
         val now = clock()
@@ -48,11 +50,37 @@ class ResearchCoordinator(
             errorMessage = null,
             includePortfolioDataForAi = request.includePortfolioDataForAi,
             aiProviderId = request.aiProviderId,
+            triggerSource = request.triggerSource,
+            automaticReportSlot = request.automaticReportSlot,
+            totalBudget = request.totalBudget,
+            perSymbolBudget = request.perSymbolBudget,
+            maxStockPrice = request.maxStockPrice,
+            configVersion = request.configVersion,
         )
         local.createResearchRun(run)
-        ResearchService.start(context, run.id)
+        if (startImmediately) ResearchService.start(context, run.id)
         return run
     }
+
+    suspend fun enqueueAutomatic(
+        config: AutomaticResearchReportConfig,
+        startImmediately: Boolean = true,
+    ): ResearchRun = enqueue(
+        request = ResearchRequest(
+            scope = config.scope,
+            symbols = config.symbols,
+            marketLimit = config.marketLimit,
+            includePortfolioDataForAi = false,
+            aiProviderId = null,
+            triggerSource = ResearchTriggerSource.AUTO,
+            automaticReportSlot = config.slot,
+            totalBudget = config.totalBudget,
+            perSymbolBudget = config.perSymbolBudget,
+            maxStockPrice = config.maxStockPrice,
+            configVersion = config.configVersion,
+        ),
+        startImmediately = startImmediately,
+    )
 
     suspend fun enqueueDaily(): ResearchRun? {
         val holdings = local.holdingsNow()
@@ -133,13 +161,20 @@ class ResearchCoordinator(
             }
 
             val ranked = analysed.sortedByDescending { it.result.score.total }
-            saveDeterministicOutputs(original, ranked)
+            val buyAdvices = ResearchAdviceEngine.buildBuyAdvices(
+                ranked = ranked.map { it.result to it.candles },
+                totalBudget = original.totalBudget,
+                perSymbolBudget = original.perSymbolBudget,
+                maxStockPrice = original.maxStockPrice,
+            )
+            val exitAdvices = buildExitAdvices(ranked)
+            saveDeterministicOutputs(original, ranked, buyAdvices)
             val aiExplanation = requestAiExplanation(original, ranked, marketContext)
             val report = ResearchReport(
                 id = UUID.randomUUID().toString(),
                 runId = original.id,
-                title = "本地研究报告",
-                deterministicBody = reportBody(original, ranked, marketContext),
+                title = original.automaticReportSlot?.let { "自动研究报告 $it" } ?: "本地研究报告",
+                deterministicBody = reportBody(original, ranked, marketContext, buyAdvices, exitAdvices),
                 aiExplanation = aiExplanation,
                 createdAt = clock(),
             )
@@ -155,6 +190,7 @@ class ResearchCoordinator(
                 body = "已完成 " + completed + " 只股票的确定性研究",
                 priority = com.ashareai.app.standalone.domain.NotificationPriority.PROGRESS,
                 deepLink = "reports",
+                systemNotificationId = NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
             )
         } catch (error: Exception) {
             local.updateResearchRun(
@@ -169,20 +205,30 @@ class ResearchCoordinator(
                 body = error.message ?: "请检查网络或行情源",
                 priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
                 deepLink = "research",
+                systemNotificationId = NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
             )
         } finally {
             analysed.clear()
         }
     }
 
-    private suspend fun resolveSymbols(request: ResearchRequest): List<String> = when (request.scope) {
+    private suspend fun resolveSymbols(request: ResearchRequest): List<String> {
+        val resolved = when (request.scope) {
         ResearchScope.HOLDINGS -> local.holdingsNow().map { it.symbol }
-        ResearchScope.WATCHLIST -> local.watchlistNow().map { it.symbol }
+        ResearchScope.WATCHLIST -> if (request.triggerSource == ResearchTriggerSource.AUTO) {
+            local.watchlistNow().map { it.symbol } + local.holdingsNow().map { it.symbol }
+        } else {
+            local.watchlistNow().map { it.symbol }
+        }
         ResearchScope.CUSTOM -> request.symbols
         ResearchScope.MARKET -> market.catalog(
             ResearchBatchPlanner.clampMarketLimit(request.marketLimit),
         ).map { it.symbol }
-    }.map(String::trim).filter(String::isNotBlank).distinct()
+        }.map(String::trim).filter(String::isNotBlank).distinct()
+        val maximum = request.maxStockPrice ?: return resolved
+        val quotes = market.refreshQuotes(resolved).associateBy { it.symbol }
+        return resolved.filter { symbol -> quotes[symbol]?.lastPrice?.let { it <= maximum } == true }
+    }
 
     private suspend fun isCancellationRequested(runId: String): Boolean =
         local.researchRun(runId)?.cancellationRequested == true
@@ -194,13 +240,23 @@ class ResearchCoordinator(
             completedCount = run.completedCount,
             now = clock(),
         )
+        notifications.publish(
+            title = "本地研究已取消",
+            body = "已完成 ${run.completedCount} / ${run.totalCount} 只股票",
+            priority = com.ashareai.app.standalone.domain.NotificationPriority.NORMAL,
+            deepLink = "research",
+            systemNotificationId = NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
+        )
     }
 
     private suspend fun saveDeterministicOutputs(
         run: ResearchRun,
         ranked: List<AnalysedSecurity>,
+        buyAdvices: List<BuyAdvice>,
     ) {
+        val adviceBySymbol = buyAdvices.associateBy(BuyAdvice::symbol)
         val candidates = ranked.take(30).mapIndexed { index, item ->
+            val advice = adviceBySymbol[item.result.symbol]
             ResearchCandidate(
                 id = run.id + ":" + item.result.symbol,
                 runId = run.id,
@@ -208,17 +264,39 @@ class ResearchCoordinator(
                 name = item.result.name,
                 score = item.result.score.total,
                 risk = item.result.risk,
-                reason = (index + 1).toString() + " 名：" + item.result.summary,
+                reason = buildString {
+                    append(index + 1)
+                    append(" 名 · ")
+                    append(advice?.action?.label() ?: "观察")
+                    advice?.takeIf { it.action == BuyAdviceAction.BUY }?.let {
+                        append(" · 入场 ")
+                        append(it.entryLow)
+                        append("–")
+                        append(it.entryHigh)
+                        append(" · ")
+                        append(it.quantity)
+                        append(" 股")
+                    }
+                    append("：")
+                    append(item.result.summary)
+                },
                 createdAt = clock(),
             )
         }
         local.replaceCandidates(run.id, candidates)
-        val portfolioItems = candidates.take(10).map {
+        val portfolioItems = buyAdvices.filter { it.action == BuyAdviceAction.BUY }.take(10).map {
             mapOf(
                 "symbol" to it.symbol,
                 "name" to it.name,
                 "score" to it.score.toString(),
-                "weight" to (100.0 / minOf(10, candidates.size)).toString(),
+                "action" to it.action.name,
+                "quantity" to it.quantity.toString(),
+                "planned_amount" to it.plannedAmount.toString(),
+                "entry_low" to it.entryLow.toString(),
+                "entry_high" to it.entryHigh.toString(),
+                "stop_loss" to it.stopLoss.toString(),
+                "take_profit" to it.takeProfit.toString(),
+                "weight" to if (run.totalBudget > 0.0) (it.plannedAmount / run.totalBudget).toString() else "0",
             )
         }
         if (portfolioItems.isNotEmpty()) {
@@ -228,7 +306,7 @@ class ResearchCoordinator(
                     runId = run.id,
                     name = "本地模拟组合",
                     holdingsJson = json.encodeToString(portfolioItems),
-                    score = candidates.take(10).map(ResearchCandidate::score).average(),
+                    score = buyAdvices.filter { it.action == BuyAdviceAction.BUY }.take(10).map(BuyAdvice::score).average(),
                     createdAt = clock(),
                 ),
             )
@@ -278,19 +356,62 @@ class ResearchCoordinator(
         run: ResearchRun,
         ranked: List<AnalysedSecurity>,
         marketContext: MarketIndexContext,
+        buyAdvices: List<BuyAdvice>,
+        exitAdvices: List<ExitResearch>,
     ): String = buildString {
-        append("范围：")
-        append(run.scope.name)
-        append("；样本：")
-        append(run.totalCount)
-        append("；评分完全由本地规则生成。\n\n")
-        append(marketContext.reportSummary())
-        append("\n\n")
-        ranked.take(30).forEachIndexed { index, item ->
-            append(index + 1)
-            append(". ")
-            append(item.result.summary)
-            append("\n")
+        appendLine("# ${run.automaticReportSlot?.let { "自动研究报告 $it" } ?: "本地研究报告"}")
+        appendLine()
+        appendLine("## 运行快照")
+        appendLine("- 触发：${if (run.triggerSource == ResearchTriggerSource.AUTO) "自动日研" else "手动研究"}${run.automaticReportSlot?.let { " · 报告 $it" }.orEmpty()}")
+        appendLine("- 范围：${run.scope.name} · 样本：${run.totalCount} · 配置版本：${run.configVersion}")
+        appendLine("- 预算：${run.totalBudget.money()} 元 · 单股上限：${run.perSymbolBudget.money()} 元 · 最高股价：${run.maxStockPrice?.money() ?: "不限"}")
+        appendLine("- 结论只来自本地确定性规则；AI 解释不能修改动作、价格、数量或风险门槛。")
+        appendLine()
+        appendLine("## 冻结大盘环境")
+        appendLine(marketContext.reportSummary())
+        appendLine()
+        appendLine("## 买入与观察建议")
+        appendLine("| 动作 | 证券 | 分数 | 入场区间 | 数量/预算 | 止损/止盈 | 依据 |")
+        appendLine("| --- | --- | ---: | --- | --- | --- | --- |")
+        buyAdvices.take(30).forEach { advice ->
+            appendLine(
+                "| ${advice.action.label()} | ${advice.name} ${advice.symbol} | ${advice.score} | " +
+                    "${advice.entryLow ?: "--"}–${advice.entryHigh ?: "--"} | ${advice.quantity} 股 / ${advice.plannedAmount} 元 | " +
+                    "${advice.stopLoss ?: "--"} / ${advice.takeProfit ?: "--"} | ${advice.reasons.joinToString("；")} |",
+            )
+        }
+        appendLine()
+        appendLine("## 持仓卖出与持有建议")
+        if (exitAdvices.isEmpty()) {
+            appendLine("当前没有持仓，未生成卖出建议。")
+        } else {
+            appendLine("| 证券 | 动作 | 现价 | 止损线 | 浮盈退出参考 | 依据 |")
+            appendLine("| --- | --- | ---: | ---: | ---: | --- |")
+            exitAdvices.forEach { advice ->
+                appendLine("| ${advice.name} ${advice.symbol} | ${advice.state} | ${advice.currentPrice ?: "--"} | ${advice.stopLoss.money()} | ${advice.profitExit.money()} | ${advice.explanation} |")
+            }
+        }
+        appendLine()
+        appendLine("## 确定性评分明细")
+        ranked.take(30).forEachIndexed { index, item -> appendLine("${index + 1}. ${item.result.summary}") }
+        appendLine()
+        appendLine("> 所有买卖建议仅用于研究、回测和模拟，不会自动交易，也不构成投资建议。")
+    }
+
+    private suspend fun buildExitAdvices(ranked: List<AnalysedSecurity>): List<ExitResearch> {
+        val analysedBySymbol = ranked.associateBy { it.result.symbol }
+        val engine = ExitResearchEngine()
+        return local.holdingsNow().map { holding ->
+            val analysed = analysedBySymbol[holding.symbol]
+            if (analysed != null) {
+                engine.analyse(holding, analysed.result.quote, analysed.candles)
+            } else {
+                engine.analyse(
+                    holding = holding,
+                    quote = market.refreshQuote(holding.symbol),
+                    candles = market.dailyCandles(holding.symbol, limit = 100),
+                )
+            }
         }
     }
 
@@ -298,6 +419,12 @@ class ResearchCoordinator(
         val result: ResearchResult,
         val candles: List<com.ashareai.app.standalone.domain.DailyCandle>,
     )
+}
+
+private fun BuyAdviceAction.label(): String = when (this) {
+    BuyAdviceAction.BUY -> "买入"
+    BuyAdviceAction.WATCH -> "观察"
+    BuyAdviceAction.NO_BUY -> "暂不买入"
 }
 
 private fun MarketIndexContext.reportSummary(): String = buildString {

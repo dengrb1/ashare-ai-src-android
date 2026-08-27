@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ChatSessionEntity::class,
         ChatMessageEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class LocalDatabase : RoomDatabase() {
@@ -38,12 +38,24 @@ abstract class LocalDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN triggerSource TEXT NOT NULL DEFAULT 'MANUAL'")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN automaticReportSlot TEXT")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN totalBudget REAL NOT NULL DEFAULT 1000000")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN perSymbolBudget REAL NOT NULL DEFAULT 80000")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN maxStockPrice REAL")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN configVersion INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun create(context: Context): LocalDatabase = Room.databaseBuilder(
             context.applicationContext,
             LocalDatabase::class.java,
             DATABASE_NAME,
         ).addMigrations(
             MIGRATION_1_2,
+            MIGRATION_2_3,
         ).enableMultiInstanceInvalidation()
             .build()
 

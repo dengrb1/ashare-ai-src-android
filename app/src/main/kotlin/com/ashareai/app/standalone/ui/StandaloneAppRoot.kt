@@ -1,5 +1,6 @@
 package com.ashareai.app.standalone.ui
 
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -29,10 +30,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -44,6 +48,7 @@ import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -77,14 +82,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
+import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketFreshness
@@ -92,15 +105,59 @@ import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.NotificationPriority
 import com.ashareai.app.standalone.domain.ResearchRunState
 import com.ashareai.app.standalone.domain.ResearchScope
+import com.ashareai.app.standalone.island.FocusCapabilities
+import com.ashareai.app.standalone.island.FocusNotification
+import com.mikepenz.markdown.m3.Markdown
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 data class DevicePermissionState(
     val notificationsGranted: Boolean,
     val batteryUnrestricted: Boolean,
+)
+
+private data class AutomaticReportDraft(
+    val slot: String,
+    val enabled: Boolean,
+    val scope: ResearchScope,
+    val symbols: String,
+    val totalBudget: String,
+    val perSymbolBudget: String,
+    val maxStockPrice: String,
+    val marketLimit: String,
+    val configVersion: Int,
+)
+
+private fun AutomaticResearchReportConfig.toDraft() = AutomaticReportDraft(
+    slot = slot,
+    enabled = enabled,
+    scope = scope,
+    symbols = symbols.joinToString(", "),
+    totalBudget = totalBudget.toString(),
+    perSymbolBudget = perSymbolBudget.toString(),
+    maxStockPrice = maxStockPrice?.toString().orEmpty(),
+    marketLimit = marketLimit.toString(),
+    configVersion = configVersion,
+)
+
+private fun AutomaticReportDraft.toConfig() = AutomaticResearchReportConfig(
+    slot = slot,
+    enabled = enabled,
+    scope = scope,
+    symbols = symbols.split(",", " ", "\n", "、").map(String::trim)
+        .filter { it.length == 6 && it.all(Char::isDigit) }.distinct(),
+    totalBudget = totalBudget.toDoubleOrNull() ?: 0.0,
+    perSymbolBudget = perSymbolBudget.toDoubleOrNull() ?: 0.0,
+    maxStockPrice = maxStockPrice.toDoubleOrNull(),
+    marketLimit = marketLimit.toIntOrNull() ?: 0,
+    configVersion = configVersion,
 )
 
 @Composable
@@ -161,12 +218,23 @@ fun StandaloneAppRoot(
             "assets" -> AssetsScreen(viewModel, Modifier.padding(padding))
             "alerts" -> AlertsScreen(viewModel, Modifier.padding(padding))
             "research" -> ResearchScreen(viewModel, Modifier.padding(padding))
-            "reports" -> ReportsScreen(viewModel, Modifier.padding(padding))
+            "reports" -> ReportsScreen(viewModel, Modifier.padding(padding)) { symbol ->
+                viewModel.refreshMarketSymbol(symbol)
+                route = "market"
+            }
             "candidates" -> CandidatesScreen(viewModel, Modifier.padding(padding))
             "portfolio" -> PortfolioScreen(viewModel, Modifier.padding(padding))
             "exit" -> ExitResearchScreen(viewModel, Modifier.padding(padding))
             "notifications" -> NotificationsScreen(viewModel, Modifier.padding(padding))
             "chat" -> ChatScreen(viewModel, Modifier.padding(padding))
+            "ai_agents" -> AiAgentConfigScreen(
+                providers = viewModel.aiProviders.collectAsState().value,
+                agents = emptyList(), // TODO: 从ViewModel获取
+                onSaveAgent = { /* TODO: 实现保存逻辑 */ },
+                onDeleteAgent = { /* TODO: 实现删除逻辑 */ },
+                onNavigateToProviders = { route = "settings" },
+                modifier = Modifier.padding(padding),
+            )
             "settings" -> SettingsScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
@@ -233,7 +301,20 @@ private fun LiquidGlassBottomBar(
             tonalElevation = 0.dp,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().height(64.dp).padding(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.74f),
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.26f else 0.34f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.82f else 0.68f),
+                            ),
+                        ),
+                        glassShape,
+                    )
+                    .padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 bottomDestinations.forEach { destination ->
@@ -304,23 +385,64 @@ private fun LiquidGlassNavigationItem(
 @Composable
 private fun GlassTopBar(route: String) {
     val dark = isSystemInDarkTheme()
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.9f else 0.86f),
-        shadowElevation = 4.dp,
-        border = BorderStroke(
-            0.5.dp,
-            Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = if (dark) 0.14f else 0.62f),
-                    MaterialTheme.colorScheme.outlineVariant,
-                ),
-            ),
-        ),
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
     ) {
+        // 毛玻璃背景层
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.85f),
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.16f else 0.22f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.85f else 0.82f),
+                        ),
+                    ),
+                )
+                .then(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        Modifier.graphicsLayer {
+                            renderEffect = BlurEffect(18f, 18f, TileMode.Clamp)
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+                .drawWithContent {
+                    drawContent()
+                    // 顶部高光边框
+                    drawLine(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = if (dark) 0.12f else 0.38f),
+                                Color.Transparent,
+                            ),
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, 0f),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                    // 底部分隔线
+                    drawLine(
+                        color = outlineColor.copy(alpha = 0.5f),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 0.5.dp.toPx(),
+                    )
+                }
+        )
+
+        // 内容层
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .height(48.dp)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -447,10 +569,24 @@ private fun MarketScreen(
     navigate: (String) -> Unit,
 ) {
     val state by viewModel.marketState.collectAsState()
+    val holdings by viewModel.holdings.collectAsState()
+    val watchlist by viewModel.watchlist.collectAsState()
     var subChart by rememberSaveable { mutableStateOf(StandaloneSubChart.VOLUME) }
+    var range by rememberSaveable { mutableStateOf(StandaloneKlineRange.MONTH_3) }
+    val displayedCandles = remember(state.candles, range) { selectKlineRange(state.candles, range) }
+    val personalSecurities = remember(holdings, watchlist) {
+        (holdings.map { it.symbol to it.name } + watchlist.map { it.symbol to it.name }).distinctBy { it.first }
+    }
+    val searchResults = remember(state.catalog, state.query) {
+        val query = state.query.trim()
+        state.catalog.filter {
+            query.isBlank() || it.symbol.contains(query) || it.name.contains(query, ignoreCase = true)
+        }.take(16)
+    }
     LaunchedEffect(Unit) {
         if (state.quote == null) viewModel.refreshMarketSymbol()
         if (state.indexQuotes.isEmpty()) viewModel.loadMarketIndices()
+        if (state.catalog.isEmpty()) viewModel.loadCatalog(500)
     }
     ScreenColumn(modifier) {
         Surface(
@@ -466,11 +602,13 @@ private fun MarketScreen(
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::updateMarketQuery,
-                label = { Text("证券代码") },
-                placeholder = { Text("例如 600519") },
+                label = { Text("搜索股票") },
+                placeholder = { Text("代码或名称") },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { viewModel.refreshMarketSymbol() }),
             )
                 Spacer(Modifier.width(4.dp))
                 IconButton(
@@ -483,9 +621,36 @@ private fun MarketScreen(
                     if (state.loading) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "刷新行情")
+                        Icon(Icons.Outlined.Search, contentDescription = "查看股票")
                     }
                 }
+            }
+        }
+        if (personalSecurities.isNotEmpty()) {
+            Text("我的股票", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                personalSecurities.forEach { (symbol, name) ->
+                    FilterChip(
+                        selected = state.quote?.symbol == symbol,
+                        onClick = { viewModel.refreshMarketSymbol(symbol) },
+                        label = { Text("$name $symbol", maxLines = 1) },
+                    )
+                }
+            }
+        }
+        if (state.query.isNotBlank() && searchResults.none { it.symbol == state.quote?.symbol }) {
+            Text("搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            searchResults.take(6).forEach { security ->
+                MarketCatalogRow(
+                    name = security.name,
+                    symbol = security.symbol,
+                    exchange = security.exchange,
+                    selected = false,
+                    onClick = { viewModel.refreshMarketSymbol(security.symbol) },
+                )
             }
         }
         MarketIndexStrip(
@@ -522,14 +687,15 @@ private fun MarketScreen(
         ) {
             Column {
                 Text("日 K 线", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("前复权 · 最近 100 个交易日", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("前复权 · ${range.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                if (state.candles.isEmpty()) "无数据" else "${state.candles.size} 根",
+                if (displayedCandles.isEmpty()) "无数据" else "${displayedCandles.size} 根",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        GlassKlineRangeSelector(selected = range, onSelected = { range = it })
         GlassSubChartSelector(selected = subChart, onSelected = { subChart = it })
         Surface(
             modifier = Modifier.fillMaxWidth().height(370.dp),
@@ -538,21 +704,21 @@ private fun MarketScreen(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             StandaloneCandlestickChart(
-                candles = state.candles,
+                candles = displayedCandles,
                 subChart = subChart,
                 modifier = Modifier.fillMaxSize().padding(12.dp),
             )
         }
         Text(
-            if (state.candles.isEmpty()) {
+            if (displayedCandles.isEmpty()) {
                 "尚无 K 线缓存"
             } else {
-                "双指缩放或拖动查看历史；长按显示十字光标 · 更新于 ${formatTime(state.candles.last().fetchedAt)}"
+                "双指缩放或拖动查看历史；长按显示十字光标 · ${displayedCandles.first().tradingDate} 至 ${displayedCandles.last().tradingDate}"
             },
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SectionTitle("证券目录")
+        if (state.query.isBlank()) SectionTitle("证券目录")
         if (state.catalog.isEmpty()) {
             EmptyState(
                 title = "证券目录尚未加载",
@@ -562,15 +728,82 @@ private fun MarketScreen(
                 Text("加载目录")
             }
         }
-        state.catalog.take(100).forEach { security ->
-            MarketCatalogRow(
-                name = security.name,
-                symbol = security.symbol,
-                exchange = security.exchange,
-                selected = state.quote?.symbol == security.symbol,
-                onClick = { viewModel.refreshMarketSymbol(security.symbol) },
-            )
+        if (state.query.isBlank()) {
+            searchResults.forEach { security ->
+                MarketCatalogRow(
+                    name = security.name,
+                    symbol = security.symbol,
+                    exchange = security.exchange,
+                    selected = state.quote?.symbol == security.symbol,
+                    onClick = { viewModel.refreshMarketSymbol(security.symbol) },
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun GlassKlineRangeSelector(
+    selected: StandaloneKlineRange,
+    onSelected: (StandaloneKlineRange) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
+        border = BorderStroke(
+            1.dp,
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = if (isSystemInDarkTheme()) 0.18f else 0.72f),
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
+                ),
+            ),
+        ),
+        shadowElevation = 8.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            StandaloneKlineRange.entries.forEach { range ->
+                FilterChip(
+                    selected = selected == range,
+                    onClick = { onSelected(range) },
+                    label = { Text(range.label, maxLines = 1) },
+                    modifier = Modifier.wrapContentWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiquidGlassSegmentedControl(content: @Composable RowScope.() -> Unit) {
+    val dark = isSystemInDarkTheme()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.72f else 0.64f),
+        border = BorderStroke(
+            1.dp,
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = if (dark) 0.18f else 0.72f),
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
+                ),
+            ),
+        ),
+        shadowElevation = 8.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            content = content,
+        )
     }
 }
 
@@ -911,8 +1144,17 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     var scope by rememberSaveable { mutableStateOf(ResearchScope.HOLDINGS) }
     var customSymbols by rememberSaveable { mutableStateOf("") }
     var marketLimit by rememberSaveable { mutableStateOf(settings.marketScanLimit.toString()) }
+    var totalBudget by rememberSaveable { mutableStateOf("1000000") }
+    var perSymbolBudget by rememberSaveable { mutableStateOf("80000") }
+    var maxStockPrice by rememberSaveable { mutableStateOf("") }
     var providerId by rememberSaveable { mutableStateOf<String?>(null) }
     var includePortfolio by rememberSaveable { mutableStateOf(false) }
+    var automaticDrafts by remember(settings.automaticReports) {
+        mutableStateOf(settings.automaticReports.map { it.toDraft() })
+    }
+    fun updateAutomatic(slot: String, transform: (AutomaticReportDraft) -> AutomaticReportDraft) {
+        automaticDrafts = automaticDrafts.map { if (it.slot == slot) transform(it) else it }
+    }
     val estimate = viewModel.researchEstimate(
         scope,
         customSymbols,
@@ -924,6 +1166,98 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             title = "本地研究",
             text = "趋势、均线、MACD、RSI、ATR、波动率、成交量和行情新鲜度由本地规则计算。基本面或事件数据缺失时会明确标记，不会伪造分数。",
         )
+        SectionTitle("自动每日报告")
+        InfoCard(
+            title = if (automaticDrafts.any { it.enabled }) {
+                "已开启 ${automaticDrafts.count { it.enabled }} 份报告"
+            } else {
+                "自动报告已暂停"
+            },
+            text = "Asia/Shanghai 交易日 15:05 依次运行报告 A、B；配置与大盘指数环境会冻结到各自运行记录。",
+        )
+        automaticDrafts.forEach { draft ->
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("报告 ${draft.slot}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (draft.enabled) "每天运行" else "暂停",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = draft.enabled,
+                            onCheckedChange = { enabled -> updateAutomatic(draft.slot) { it.copy(enabled = enabled) } },
+                        )
+                    }
+                    LiquidGlassSegmentedControl {
+                        listOf(
+                            ResearchScope.MARKET to "全市场",
+                            ResearchScope.WATCHLIST to "自选+持仓",
+                            ResearchScope.CUSTOM to "指定股票",
+                        ).forEach { (value, label) ->
+                            FilterChip(
+                                selected = draft.scope == value,
+                                onClick = { updateAutomatic(draft.slot) { it.copy(scope = value) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    if (draft.scope == ResearchScope.CUSTOM) {
+                        OutlinedTextField(
+                            value = draft.symbols,
+                            onValueChange = { value -> updateAutomatic(draft.slot) { it.copy(symbols = value.take(2_000)) } },
+                            label = { Text("股票代码") },
+                            supportingText = { Text("逗号、空格或换行分隔") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 3,
+                        )
+                    }
+                    if (draft.scope == ResearchScope.MARKET) {
+                        OutlinedTextField(
+                            value = draft.marketLimit,
+                            onValueChange = { value -> updateAutomatic(draft.slot) { it.copy(marketLimit = value.filter(Char::isDigit).take(3)) } },
+                            label = { Text("扫描数量（1–500）") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                    }
+                    OutlinedTextField(
+                        value = draft.totalBudget,
+                        onValueChange = { value -> updateAutomatic(draft.slot) { it.copy(totalBudget = value.take(18)) } },
+                        label = { Text("总预算（元）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = draft.perSymbolBudget,
+                        onValueChange = { value -> updateAutomatic(draft.slot) { it.copy(perSymbolBudget = value.take(18)) } },
+                        label = { Text("单股最高投入（元）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = draft.maxStockPrice,
+                        onValueChange = { value -> updateAutomatic(draft.slot) { it.copy(maxStockPrice = value.take(18)) } },
+                        label = { Text("最高可接受股价（可选）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
+            }
+        }
+        Button(
+            onClick = { viewModel.saveAutomaticReports(automaticDrafts.map { it.toConfig() }) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("保存自动报告 A/B") }
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
         SectionTitle("研究范围")
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ResearchScope.entries.forEach {
@@ -947,6 +1281,31 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
                 singleLine = true,
             )
         }
+        SectionTitle("资金与价格约束")
+        OutlinedTextField(
+            value = totalBudget,
+            onValueChange = { totalBudget = it.take(18) },
+            label = { Text("总预算（元）") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = perSymbolBudget,
+            onValueChange = { perSymbolBudget = it.take(18) },
+            label = { Text("单股最高投入（元）") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = maxStockPrice,
+            onValueChange = { maxStockPrice = it.take(18) },
+            label = { Text("最高可接受股价（可选）") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
         SectionTitle("AI 解释（可选）")
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = providerId == null, onClick = { providerId = null }, label = { Text("仅本地规则") })
@@ -976,6 +1335,9 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
                     scope = scope,
                     customSymbols = customSymbols,
                     marketLimit = marketLimit.toIntOrNull() ?: settings.marketScanLimit,
+                    totalBudget = totalBudget.toDoubleOrNull() ?: 0.0,
+                    perSymbolBudget = perSymbolBudget.toDoubleOrNull() ?: 0.0,
+                    maxStockPrice = maxStockPrice.takeIf(String::isNotBlank)?.toDoubleOrNull() ?: if (maxStockPrice.isBlank()) null else 0.0,
                     aiProviderId = providerId,
                     includePortfolioData = includePortfolio,
                 )
@@ -1000,19 +1362,78 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 }
 
 @Composable
-private fun ReportsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
+private fun ReportsScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    openKline: (String) -> Unit,
+) {
     val reports by viewModel.reports.collectAsState()
+    val runs by viewModel.researchRuns.collectAsState()
+    val candidates by viewModel.candidates.collectAsState()
+    val portfolios by viewModel.portfolios.collectAsState()
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(reports) {
+        if (reports.none { it.id == selectedId }) selectedId = reports.firstOrNull()?.id
+    }
+    val selected = reports.firstOrNull { it.id == selectedId }
+    val run = selected?.let { report -> runs.firstOrNull { it.id == report.runId } }
+    val runCandidates = selected?.let { report -> candidates.filter { it.runId == report.runId } }.orEmpty()
+    val portfolio = selected?.let { report -> portfolios.firstOrNull { it.runId == report.runId } }
     ScreenColumn(modifier) {
         if (reports.isEmpty()) EmptyState("尚无本地报告", "研究完成后会生成确定性模板报告。")
-        reports.forEach {
+        if (reports.isNotEmpty()) {
+            LiquidGlassSegmentedControl {
+                reports.take(12).forEach { report ->
+                    val reportRun = runs.firstOrNull { it.id == report.runId }
+                    FilterChip(
+                        selected = report.id == selectedId,
+                        onClick = { selectedId = report.id },
+                        label = {
+                            Text(
+                                (reportRun?.automaticReportSlot?.let { "报告 $it · " }.orEmpty()) + formatTime(report.createdAt),
+                                maxLines = 1,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        selected?.let { report ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                InfoCard(
+                    title = run?.let { researchScopeLabel(it.scope) } ?: "研究报告",
+                    text = "${run?.completedCount ?: 0} / ${run?.totalCount ?: 0} 只 · ${run?.triggerSource?.name ?: "MANUAL"}",
+                )
+                InfoCard(
+                    title = "${runCandidates.count { it.reason.contains("名 · 买入") }} 只买入",
+                    text = portfolio?.let { "模拟组合分 ${it.score}" } ?: "未形成组合",
+                )
+            }
             ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(it.title + " · " + formatTime(it.createdAt), fontWeight = FontWeight.Bold)
-                    Text(it.deterministicBody)
-                    it.aiExplanation?.let { explanation ->
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                        Text("AI 解释", fontWeight = FontWeight.SemiBold)
-                        Text(explanation)
+                    Text(report.title + " · " + formatTime(report.createdAt), fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Markdown(report.deterministicBody)
+                }
+            }
+            if (runCandidates.isNotEmpty()) {
+                SectionTitle("股票工作台")
+                runCandidates.take(30).forEach { candidate ->
+                    ListItemSurface {
+                        Column(Modifier.weight(1f)) {
+                            Text("${candidate.name} · ${candidate.symbol}", fontWeight = FontWeight.SemiBold)
+                            Text(candidate.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { openKline(candidate.symbol) }) { Text("K线") }
+                    }
+                }
+            }
+            report.aiExplanation?.let { explanation ->
+                ContentCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("AI 中文解释", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(6.dp))
+                        Markdown(explanation)
                     }
                 }
             }
@@ -1023,10 +1444,13 @@ private fun ReportsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 @Composable
 private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     val candidates by viewModel.candidates.collectAsState()
+    val reports by viewModel.reports.collectAsState()
+    val latestRunId = reports.firstOrNull()?.runId
+    val visible = candidates.filter { latestRunId == null || it.runId == latestRunId }
     ScreenColumn(modifier) {
         Text("候选完全按本地确定性评分排序，不代表交易指令。")
-        if (candidates.isEmpty()) EmptyState("暂无候选", "完成一次研究后会在这里显示评分结果。")
-        candidates.forEachIndexed { index, candidate ->
+        if (visible.isEmpty()) EmptyState("暂无候选", "完成一次研究后会在这里显示评分结果。")
+        visible.forEachIndexed { index, candidate ->
             ListItemSurface {
                 Column(Modifier.weight(1f)) {
                     Text((index + 1).toString() + ". " + candidate.name + " · " + candidate.symbol, fontWeight = FontWeight.SemiBold)
@@ -1044,15 +1468,42 @@ private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier)
 @Composable
 private fun PortfolioScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     val portfolios by viewModel.portfolios.collectAsState()
+    val runs by viewModel.researchRuns.collectAsState()
+    val portfolio = portfolios.firstOrNull()
+    val run = portfolio?.let { selected -> runs.firstOrNull { it.id == selected.runId } }
+    val positions = remember(portfolio?.holdingsJson) {
+        portfolio?.holdingsJson?.let {
+            runCatching { Json.decodeFromString<List<Map<String, String>>>(it) }.getOrDefault(emptyList())
+        }.orEmpty()
+    }
     ScreenColumn(modifier) {
         Text("模拟组合仅用于研究观察，不会向券商或服务器提交订单。")
-        if (portfolios.isEmpty()) EmptyState("暂无模拟组合", "满足组合生成条件的研究完成后会显示在这里。")
-        portfolios.forEach {
+        if (portfolio == null) EmptyState("暂无模拟组合", "满足买入门槛且预算至少覆盖 1 手后会显示在这里。")
+        portfolio?.let { selected ->
             ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(it.name + " · 评分 " + it.score, fontWeight = FontWeight.Bold)
-                    Text(it.holdingsJson)
-                    Text(formatTime(it.createdAt), style = MaterialTheme.typography.labelSmall)
+                    Text(selected.name + " · 评分 " + selected.score, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${positions.size} 只 · 预算 ${run?.totalBudget ?: "--"} 元 · ${formatTime(selected.createdAt)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            positions.forEach { position ->
+                ListItemSurface {
+                    Column(Modifier.weight(1f)) {
+                        Text("${position["name"]} · ${position["symbol"]}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "入场 ${position["entry_low"]}–${position["entry_high"]} · 止损 ${position["stop_loss"]} · 止盈 ${position["take_profit"]}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("${position["quantity"]} 股", fontWeight = FontWeight.SemiBold)
+                        Text("${position["planned_amount"]} 元", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
@@ -1205,6 +1656,11 @@ private fun SettingsScreen(
     var exportPassphrase by rememberSaveable { mutableStateOf("") }
     var importPassphrase by rememberSaveable { mutableStateOf("") }
     var archiveStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
+    var showProviderTemplates by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
+    }
     val createArchive = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
@@ -1243,6 +1699,19 @@ private fun SettingsScreen(
         SwitchRow("持仓监控", settings.monitoringEnabled, onChange = viewModel::setMonitoringEnabled)
         SwitchRow("提醒开关", settings.alertsEnabled, onChange = viewModel::setAlertsEnabled)
         SwitchRow("超级岛 v3 载荷", settings.islandEnabled, onChange = viewModel::setIslandEnabled)
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("实时动态通知", fontWeight = FontWeight.SemiBold)
+                Text("焦点协议 ${focusCapabilities?.protocolVersion?.takeIf { it > 0 }?.let { "v$it" } ?: "未识别"}")
+                Text("焦点权限 ${if (focusCapabilities?.focusPermissionGranted == true) "已开启" else "未开启或不可查询"}")
+                Text("超级岛 App ID ${if (focusCapabilities?.appIdConfigured == true) "已配置" else "未配置"}")
+                Text(
+                    if (focusCapabilities?.superIslandReady == true) "本机条件就绪" else "未满足时自动显示普通通知",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         OutlinedTextField(
             intervalText,
             { intervalText = it.filter(Char::isDigit).take(3) },
@@ -1253,9 +1722,6 @@ private fun SettingsScreen(
         Button(onClick = { viewModel.setMonitoringInterval(intervalText.toIntOrNull() ?: 30) }) {
             Text("保存频率")
         }
-        SwitchRow("每日 15:05 研究", settings.dailyResearchEnabled, onChange = viewModel::setDailyResearchEnabled)
-        SwitchRow("日报 A", settings.dailyReportAEnabled, onChange = viewModel::setDailyReportAEnabled)
-        SwitchRow("日报 B", settings.dailyReportBEnabled, onChange = viewModel::setDailyReportBEnabled)
         InfoCard(
             title = "资源状态",
             text = "无任务及非交易时段不请求行情。前台服务超时后会停止并降级为约 15 分钟 WorkManager 检查。目标：监控 CPU < 1.5%，PSS < 120 MiB；系统策略可能仍会终止进程。",
@@ -1275,6 +1741,56 @@ private fun SettingsScreen(
         )
 
         SectionTitle("AI Provider（本机 Keystore 加密）")
+
+        // AI Agent 配置入口
+        OutlinedButton(
+            onClick = { /* TODO: 导航到 ai_agents 路由 */ },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Outlined.SmartToy, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("AI Agent 多模型配置")
+        }
+
+        InfoCard(
+            title = "AI Agent 系统",
+            text = "支持为不同任务（研究分析、对话助手、报告摘要、卖出顾问）分配专门的模型和供应商，支持自动缓存和失败重试。",
+        )
+
+        // Provider模板按钮
+        if (!showProviderTemplates) {
+            OutlinedButton(
+                onClick = { showProviderTemplates = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("显示常用 Provider 模板") }
+        }
+
+        // 显示模板
+        if (showProviderTemplates) {
+            InfoCard(
+                title = "常用 Provider 模板",
+                text = "以下是常用的AI供应商配置模板，复制相关信息填写到下方表单。",
+            )
+            com.ashareai.app.standalone.data.ai.ProviderTemplates.all().forEach { template ->
+                ContentCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(template.name, fontWeight = FontWeight.SemiBold)
+                        Text("Base URL: ${template.baseUrl}", style = MaterialTheme.typography.bodySmall)
+                        Text("默认模型: ${template.model}", style = MaterialTheme.typography.bodySmall)
+                        TextButton(
+                            onClick = {
+                                providerName = template.name
+                                providerUrl = template.baseUrl
+                                providerModel = template.model
+                                showProviderTemplates = false
+                            },
+                        ) { Text("使用此模板") }
+                    }
+                }
+            }
+            TextButton(onClick = { showProviderTemplates = false }) { Text("收起模板") }
+        }
+
         OutlinedTextField(providerName, { providerName = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(providerUrl, { providerUrl = it }, label = { Text("Base URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(providerKey, { providerKey = it }, label = { Text("API Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1370,10 +1886,11 @@ private fun ContentCard(
 private fun InfoCard(
     title: String,
     text: String,
+    modifier: Modifier = Modifier,
     actions: @Composable (() -> Unit)? = null,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -1552,6 +2069,7 @@ private fun routeTitle(route: String): String = when (route) {
     "exit" -> "卖出研究"
     "notifications" -> "通知中心"
     "chat" -> "AI 问答"
+    "ai_agents" -> "AI Agent 配置"
     "settings" -> "设置与本机档案"
     else -> "本地总览"
 }
@@ -1568,6 +2086,7 @@ private val routes = setOf(
     "exit",
     "notifications",
     "chat",
+    "ai_agents",
     "settings",
 )
 

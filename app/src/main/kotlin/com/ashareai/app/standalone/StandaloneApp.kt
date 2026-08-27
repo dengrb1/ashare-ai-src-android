@@ -27,24 +27,29 @@ class StandaloneApp : Application() {
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = "持仓常驻盈亏与一般本地通知"
+                setShowBadge(false)  // 普通通知不显示角标
             },
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ALERT,
-                "交易预警",
+                "重要行情提醒",
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "止损、浮盈退出和手动价位提醒"
+                description = "止损、浮盈退出和手动价位提醒 - 显示超级岛"
+                setShowBadge(true)  // 重要通知显示角标
+                enableVibration(true)  // 震动
+                enableLights(true)  // 呼吸灯
             },
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_PROGRESS,
                 "研究进度",
-                NotificationManager.IMPORTANCE_DEFAULT,
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = "每日与手动本地研究进度"
+                setShowBadge(false)  // 进度通知不显示角标
             },
         )
     }

@@ -5,7 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
+import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.ashareai.app.AShareApp
@@ -16,19 +19,18 @@ import com.xzakota.hyper.notification.focus.FocusNotification as HyperFocusNotif
 data class FocusCapabilities(
     val protocolVersion: Int,
     val islandSupported: Boolean,
+    val focusPermissionGranted: Boolean,
+    val appIdConfigured: Boolean,
 ) {
     val focusSupported: Boolean get() = protocolVersion > 0
-    val superIslandReady: Boolean get() = protocolVersion >= MIN_SUPER_ISLAND_PROTOCOL
+    val superIslandReady: Boolean get() = islandSupported && focusPermissionGranted && appIdConfigured
     /** HyperOS does not consistently expose the protocol setting to third-party apps. */
     val v3PayloadAttached: Boolean get() = true
 
-    private companion object {
-        const val MIN_SUPER_ISLAND_PROTOCOL = 3
-    }
 }
 
 /**
- * Normalized input for HyperOS's undocumented local focus-notification protocol.
+ * Normalized input for HyperOS's official local focus-notification protocol.
  *
  * Keeping normalization separate makes all notification sources use the same limits and
  * permits JVM tests without a Xiaomi device.
@@ -63,18 +65,17 @@ object FocusNotification {
         }.getOrDefault(0)
         return FocusCapabilities(
             protocolVersion = protocol,
-            // Protocol v3 is the capability used by InstallerX and contains the Island schema.
-            islandSupported = protocol >= 3,
+            islandSupported = protocol >= 3 || islandSystemProperty(),
+            focusPermissionGranted = hasFocusPermission(context),
+            appIdConfigured = hasConfiguredAppId(context),
         )
     }
 
     /**
      * Builds a standard Android notification and always adds the local HyperOS v3 payload.
      *
-     * InstallerX-Revived submits the v3 bundle directly.  Its approach is important because
-     * HyperOS 3 devices often leave `notification_focus_protocol` unreadable to regular apps;
-     * using that value as a gate made this app silently emit a normal notification.  ROMs that
-     * do not consume the bundle ignore it and retain the standard Android notification.
+     * The payload is attached even when the ROM capability query is unavailable. ROMs that do
+     * not consume the bundle ignore it and retain the standard Android notification.
      */
     fun decorate(
         context: Context,
@@ -195,4 +196,27 @@ object FocusNotification {
                 }
             }
         }
+
+    private fun hasFocusPermission(context: Context): Boolean = runCatching {
+        val extras = Bundle().apply { putString("package", context.packageName) }
+        context.contentResolver.call(
+            Uri.parse("content://miui.statusbar.notification.public"),
+            "canShowFocus",
+            null,
+            extras,
+        )?.getBoolean("canShowFocus", false) == true
+    }.getOrDefault(false)
+
+    @Suppress("DEPRECATION")
+    private fun hasConfiguredAppId(context: Context): Boolean = runCatching {
+        context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
+            .metaData?.getString("com.xiaomi.xms.APP_ID")
+            ?.isNotBlank() == true
+    }.getOrDefault(false)
+
+    private fun islandSystemProperty(): Boolean = runCatching {
+        val systemProperties = Class.forName("android.os.SystemProperties")
+        val getBoolean = systemProperties.getDeclaredMethod("getBoolean", String::class.java, Boolean::class.javaPrimitiveType)
+        getBoolean.invoke(null, "persist.sys.feature.island", false) as? Boolean ?: false
+    }.getOrDefault(false)
 }

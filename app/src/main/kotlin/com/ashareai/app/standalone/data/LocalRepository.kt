@@ -320,6 +320,12 @@ class LocalRepository(
                 errorMessage = it.errorMessage,
                 includePortfolioDataForAi = it.includePortfolioDataForAi,
                 aiProviderId = null,
+                triggerSource = it.triggerSource,
+                automaticReportSlot = it.automaticReportSlot,
+                totalBudget = it.totalBudget,
+                perSymbolBudget = it.perSymbolBudget,
+                maxStockPrice = it.maxStockPrice,
+                configVersion = it.configVersion,
             )
         },
         reports = dao.reports().map {
@@ -400,6 +406,12 @@ class LocalRepository(
                     errorMessage = it.errorMessage,
                     includePortfolioDataForAi = it.includePortfolioDataForAi,
                     aiProviderId = null,
+                    triggerSource = it.triggerSource,
+                    automaticReportSlot = it.automaticReportSlot,
+                    totalBudget = it.totalBudget,
+                    perSymbolBudget = it.perSymbolBudget,
+                    maxStockPrice = it.maxStockPrice,
+                    configVersion = it.configVersion,
                 ),
             )
         }
@@ -453,6 +465,12 @@ class LocalRepository(
         errorMessage = errorMessage,
         includePortfolioDataForAi = includePortfolioDataForAi,
         aiProviderId = aiProviderId,
+        triggerSource = triggerSource.name,
+        automaticReportSlot = automaticReportSlot,
+        totalBudget = totalBudget,
+        perSymbolBudget = perSymbolBudget,
+        maxStockPrice = maxStockPrice,
+        configVersion = configVersion,
     )
 
     private fun HoldingEntity.toDomain() = Holding(symbol, name, quantity, averageCost, updatedAt)
@@ -520,6 +538,14 @@ class LocalRepository(
         errorMessage = errorMessage,
         includePortfolioDataForAi = includePortfolioDataForAi,
         aiProviderId = aiProviderId,
+        triggerSource = runCatching {
+            com.ashareai.app.standalone.domain.ResearchTriggerSource.valueOf(triggerSource)
+        }.getOrDefault(com.ashareai.app.standalone.domain.ResearchTriggerSource.MANUAL),
+        automaticReportSlot = automaticReportSlot,
+        totalBudget = totalBudget,
+        perSymbolBudget = perSymbolBudget,
+        maxStockPrice = maxStockPrice,
+        configVersion = configVersion,
     )
 
     private fun ResearchReportEntity.toDomain() = ResearchReport(

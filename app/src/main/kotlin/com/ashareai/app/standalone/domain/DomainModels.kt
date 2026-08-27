@@ -122,7 +122,18 @@ data class ResearchRequest(
     val marketLimit: Int,
     val includePortfolioDataForAi: Boolean,
     val aiProviderId: String?,
+    val triggerSource: ResearchTriggerSource = ResearchTriggerSource.MANUAL,
+    val automaticReportSlot: String? = null,
+    val totalBudget: Double = 1_000_000.0,
+    val perSymbolBudget: Double = 80_000.0,
+    val maxStockPrice: Double? = null,
+    val configVersion: Int = 1,
 )
+
+enum class ResearchTriggerSource {
+    MANUAL,
+    AUTO,
+}
 
 data class ResearchRun(
     val id: String,
@@ -137,6 +148,12 @@ data class ResearchRun(
     val errorMessage: String?,
     val includePortfolioDataForAi: Boolean = false,
     val aiProviderId: String? = null,
+    val triggerSource: ResearchTriggerSource = ResearchTriggerSource.MANUAL,
+    val automaticReportSlot: String? = null,
+    val totalBudget: Double = 1_000_000.0,
+    val perSymbolBudget: Double = 80_000.0,
+    val maxStockPrice: Double? = null,
+    val configVersion: Int = 1,
 )
 
 data class ResearchScore(

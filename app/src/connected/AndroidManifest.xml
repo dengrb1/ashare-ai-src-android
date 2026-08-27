@@ -20,6 +20,13 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="35">
 
+        <meta-data
+            android:name="com.xiaomi.xms.APP_ID"
+            android:value="${xiaomiSuperIslandAppId}" />
+        <meta-data
+            android:name="com.xiaomi.xms.BUILD_TYPE_DEBUG"
+            android:value="${xiaomiSuperIslandBuildTypeDebug}" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"

@@ -2,12 +2,15 @@ package com.ashareai.app.standalone.data.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.ashareai.app.standalone.domain.ResearchScope
 
 private val Context.standaloneDataStore by preferencesDataStore(name = "standalone_settings")
 
@@ -23,12 +26,42 @@ data class LocalSettings(
     val marketScanLimit: Int = 100,
     val portfolioDataAllowedForAi: Boolean = false,
     val lastDailyScheduleAt: Long = 0,
+    val automaticReports: List<AutomaticResearchReportConfig> = defaultAutomaticReports(),
+)
+
+data class AutomaticResearchReportConfig(
+    val slot: String,
+    val enabled: Boolean,
+    val scope: ResearchScope,
+    val symbols: List<String>,
+    val totalBudget: Double,
+    val perSymbolBudget: Double,
+    val maxStockPrice: Double?,
+    val marketLimit: Int,
+    val configVersion: Int = 1,
+)
+
+fun defaultAutomaticReports(): List<AutomaticResearchReportConfig> = listOf(
+    AutomaticResearchReportConfig("A", true, ResearchScope.MARKET, emptyList(), 1_000_000.0, 80_000.0, null, 100),
+    AutomaticResearchReportConfig("B", false, ResearchScope.MARKET, emptyList(), 1_000_000.0, 80_000.0, null, 100),
 )
 
 class SettingsStore(
     private val context: Context,
 ) {
     val settings: Flow<LocalSettings> = context.standaloneDataStore.data.map { preferences ->
+        val automaticReports = listOf(
+            automaticReport(
+                "A",
+                preferences,
+                preferences[reportEnabledKey("A")] ?: preferences[DAILY_REPORT_A_ENABLED] ?: true,
+            ),
+            automaticReport(
+                "B",
+                preferences,
+                preferences[reportEnabledKey("B")] ?: preferences[DAILY_REPORT_B_ENABLED] ?: false,
+            ),
+        )
         LocalSettings(
             firstRun = preferences[FIRST_RUN] ?: true,
             monitoringEnabled = preferences[MONITORING_ENABLED] ?: true,
@@ -41,6 +74,7 @@ class SettingsStore(
             marketScanLimit = (preferences[MARKET_SCAN_LIMIT] ?: 100).coerceIn(1, 500),
             portfolioDataAllowedForAi = preferences[PORTFOLIO_DATA_ALLOWED_FOR_AI] ?: false,
             lastDailyScheduleAt = preferences[LAST_DAILY_SCHEDULE_AT] ?: 0,
+            automaticReports = automaticReports,
         )
     }
 
@@ -64,6 +98,28 @@ class SettingsStore(
 
     suspend fun setDailyReportBEnabled(enabled: Boolean) = setBoolean(DAILY_REPORT_B_ENABLED, enabled)
 
+    suspend fun saveAutomaticReports(reports: List<AutomaticResearchReportConfig>) {
+        require(reports.map { it.slot }.toSet() == setOf("A", "B")) { "自动报告必须同时包含 A 和 B" }
+        reports.forEach(::validateAutomaticReport)
+        context.standaloneDataStore.edit { preferences ->
+            reports.forEach { report ->
+                preferences[reportEnabledKey(report.slot)] = report.enabled
+                preferences[reportScopeKey(report.slot)] = report.scope.name
+                preferences[reportSymbolsKey(report.slot)] = report.symbols.joinToString(",")
+                preferences[reportTotalBudgetKey(report.slot)] = report.totalBudget
+                preferences[reportPerSymbolBudgetKey(report.slot)] = report.perSymbolBudget
+                preferences[reportMaxPriceKey(report.slot)] = report.maxStockPrice?.toString().orEmpty()
+                preferences[reportMarketLimitKey(report.slot)] = report.marketLimit.coerceIn(1, 500)
+                val versionKey = reportConfigVersionKey(report.slot)
+                val previousVersion = preferences[versionKey] ?: report.configVersion
+                preferences[versionKey] = maxOf(previousVersion, report.configVersion).coerceAtLeast(1) + 1
+            }
+            preferences[DAILY_REPORT_A_ENABLED] = reports.first { it.slot == "A" }.enabled
+            preferences[DAILY_REPORT_B_ENABLED] = reports.first { it.slot == "B" }.enabled
+            preferences[DAILY_RESEARCH_ENABLED] = reports.any { it.enabled }
+        }
+    }
+
     suspend fun setMarketScanLimit(limit: Int) {
         context.standaloneDataStore.edit {
             it[MARKET_SCAN_LIMIT] = limit.coerceIn(1, 500)
@@ -84,6 +140,45 @@ class SettingsStore(
         }
     }
 
+    private fun automaticReport(
+        slot: String,
+        preferences: androidx.datastore.preferences.core.Preferences,
+        enabled: Boolean,
+    ): AutomaticResearchReportConfig {
+        val defaults = defaultAutomaticReports().first { it.slot == slot }
+        val scope = preferences[reportScopeKey(slot)]
+            ?.let { value -> runCatching { ResearchScope.valueOf(value) }.getOrNull() }
+            ?.takeIf { it in setOf(ResearchScope.MARKET, ResearchScope.WATCHLIST, ResearchScope.CUSTOM) }
+            ?: defaults.scope
+        return defaults.copy(
+            enabled = enabled,
+            scope = scope,
+            symbols = preferences[reportSymbolsKey(slot)].orEmpty()
+                .split(",", " ", "\n")
+                .map(String::trim)
+                .filter { it.length == 6 && it.all(Char::isDigit) }
+                .distinct(),
+            totalBudget = (preferences[reportTotalBudgetKey(slot)] ?: defaults.totalBudget).coerceAtLeast(1.0),
+            perSymbolBudget = (preferences[reportPerSymbolBudgetKey(slot)] ?: defaults.perSymbolBudget).coerceAtLeast(1.0),
+            maxStockPrice = preferences[reportMaxPriceKey(slot)]?.toDoubleOrNull()?.takeIf { it > 0.0 },
+            marketLimit = (preferences[reportMarketLimitKey(slot)] ?: defaults.marketLimit).coerceIn(1, 500),
+            configVersion = (preferences[reportConfigVersionKey(slot)] ?: defaults.configVersion).coerceAtLeast(1),
+        )
+    }
+
+    private fun validateAutomaticReport(report: AutomaticResearchReportConfig) {
+        require(report.slot in setOf("A", "B")) { "未知自动报告槽位" }
+        require(report.scope in setOf(ResearchScope.MARKET, ResearchScope.WATCHLIST, ResearchScope.CUSTOM)) { "自动报告范围无效" }
+        require(report.totalBudget > 0.0) { "报告 ${report.slot} 总预算必须大于 0" }
+        require(report.perSymbolBudget > 0.0 && report.perSymbolBudget <= report.totalBudget) {
+            "报告 ${report.slot} 单股预算必须大于 0 且不超过总预算"
+        }
+        require(report.maxStockPrice == null || report.maxStockPrice > 0.0) { "报告 ${report.slot} 最高股价必须大于 0" }
+        require(!report.enabled || report.scope != ResearchScope.CUSTOM || report.symbols.isNotEmpty()) {
+            "报告 ${report.slot} 至少需要一只股票"
+        }
+    }
+
     private companion object {
         val FIRST_RUN = booleanPreferencesKey("first_run")
         val MONITORING_ENABLED = booleanPreferencesKey("monitoring_enabled")
@@ -96,5 +191,14 @@ class SettingsStore(
         val MARKET_SCAN_LIMIT = intPreferencesKey("market_scan_limit")
         val PORTFOLIO_DATA_ALLOWED_FOR_AI = booleanPreferencesKey("portfolio_data_allowed_for_ai")
         val LAST_DAILY_SCHEDULE_AT = longPreferencesKey("last_daily_schedule_at")
+
+        fun reportEnabledKey(slot: String) = booleanPreferencesKey("automatic_report_${slot.lowercase()}_enabled")
+        fun reportScopeKey(slot: String) = stringPreferencesKey("automatic_report_${slot.lowercase()}_scope")
+        fun reportSymbolsKey(slot: String) = stringPreferencesKey("automatic_report_${slot.lowercase()}_symbols")
+        fun reportTotalBudgetKey(slot: String) = doublePreferencesKey("automatic_report_${slot.lowercase()}_total_budget")
+        fun reportPerSymbolBudgetKey(slot: String) = doublePreferencesKey("automatic_report_${slot.lowercase()}_per_symbol_budget")
+        fun reportMaxPriceKey(slot: String) = stringPreferencesKey("automatic_report_${slot.lowercase()}_max_price")
+        fun reportMarketLimitKey(slot: String) = intPreferencesKey("automatic_report_${slot.lowercase()}_market_limit")
+        fun reportConfigVersionKey(slot: String) = intPreferencesKey("automatic_report_${slot.lowercase()}_config_version")
     }
 }
