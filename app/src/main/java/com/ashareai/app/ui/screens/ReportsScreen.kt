@@ -18,19 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.*
-import com.ashareai.app.data.newIdempotencyKey
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 
-/** 研究报告页：日报正文（WebView 沙箱）+ 逐股详情 + 生成买入方案。 */
+/** 研究报告页：日报正文（WebView 沙箱）+ 逐股详情 + 生成模拟方案。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
@@ -39,66 +37,40 @@ fun ReportsScreen(
     initialDate: String? = null,
     initialRunId: String? = null,
 ) {
-    val scope = rememberCoroutineScope()
+    val reportsViewModel: ReportsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val reportsState by reportsViewModel.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
     var date by remember { mutableStateOf(initialDate ?: todayTradingDate()) }
     var runId by remember { mutableStateOf(initialRunId) }
-    var report by remember { mutableStateOf<Report?>(null) }
-    var content by remember { mutableStateOf<String?>(null) }
-    var symbols by remember { mutableStateOf<List<ReportSymbol>>(emptyList()) }
-    var tradePlans by remember { mutableStateOf<List<TradePlan>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(0) }
     var selectedSymbol by remember { mutableStateOf<ReportSymbol?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(StockSortOption.SCORE_DESC.name) }
     val sortOption = StockSortOption.valueOf(sortOptionName)
 
-    suspend fun load() {
-        loading = true
-        error = null
-        try {
-            val r = ApiClient.api.report(date, runId = runId)
-            report = r
-            val reportId = r.report_id
-            if (reportId != null) {
-                coroutineScope {
-                    val contentDeferred = async {
-                        runCatching {
-                            val c = ApiClient.api.reportContent(reportId)
-                            c.content ?: c.body
-                        }.getOrNull()
-                    }
-                    val symbolsDeferred = async {
-                        runCatching { ApiClient.api.reportSymbols(reportId) }.getOrDefault(emptyList())
-                    }
-                    val plansDeferred = async {
-                        runCatching { ApiClient.api.reportTradePlans(reportId) }.getOrDefault(emptyList())
-                    }
-                    content = contentDeferred.await()
-                    symbols = symbolsDeferred.await()
-                    tradePlans = plansDeferred.await()
-                }
-            }
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-            report = null
-            content = null
-            symbols = emptyList()
-        } finally {
-            loading = false
-        }
+    val reportContent = when (val state = reportsState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
     }
+    val report = reportContent?.report
+    val content = reportContent?.body
+    val symbols = reportContent?.symbols.orEmpty()
+    val tradePlans = reportContent?.tradePlans.orEmpty()
+    val loading = reportsState is ScreenState.Loading
+    val serverError = (reportsState as? ScreenState.Error)?.message
 
-    LaunchedEffect(date) { load() }
+    LaunchedEffect(date) { reportsViewModel.load(date, runId) }
 
     // 有生成中的方案时轮询
-    LaunchedEffect(tradePlans.any { isActiveStatus(it.status) }) {
-        while (tradePlans.any { isActiveStatus(it.status) }) {
-            delay(2500)
-            report?.report_id?.let { id ->
-                try {
-                    tradePlans = ApiClient.api.reportTradePlans(id)
-                } catch (_: Exception) {
+    val hasActiveTradePlan = tradePlans.any { isActiveStatus(it.status) }
+    LaunchedEffect(lifecycleOwner, hasActiveTradePlan) {
+        if (!hasActiveTradePlan) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                delay(2500)
+                report?.report_id?.let { id ->
+                    reportsViewModel.refreshTradePlans(id)
                 }
             }
         }
@@ -121,7 +93,9 @@ fun ReportsScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         )
 
-        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
+        (serverError ?: error)?.let { message ->
+            Box(Modifier.padding(16.dp)) { ErrorBanner(message) { error = null; reportsViewModel.retry(date, runId) } }
+        }
 
         if (loading) {
             LoadingBox()
@@ -132,7 +106,7 @@ fun ReportsScreen(
                 Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("日报正文") })
                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("研究个股(${symbols.size})") })
             }
-            report?.market_index_snapshot?.let { snapshot ->
+            report.market_index_snapshot?.let { snapshot ->
                 MarketIndexSnapshotSummary(snapshot, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             }
             when (selectedTab) {
@@ -144,18 +118,8 @@ fun ReportsScreen(
                     onSortOptionChange = { sortOptionName = it.name },
                     onSelect = { selectedSymbol = it },
                     onSubmitPlan = { symbol ->
-                        report?.report_id?.let { reportId ->
-                            scope.launch {
-                                try {
-                                    ApiClient.api.submitTradePlan(
-                                        reportId, newIdempotencyKey(),
-                                        TradePlanRequest(symbols = listOf(symbol)),
-                                    )
-                                    tradePlans = ApiClient.api.reportTradePlans(reportId)
-                                } catch (e: Exception) {
-                                    error = e.toUserMessage()
-                                }
-                            }
+                        report.report_id?.let { reportId ->
+                            reportsViewModel.submitTradePlan(reportId, symbol) { message -> error = message }
                         }
                     },
                 )
@@ -266,7 +230,7 @@ private fun SymbolListView(
                         TextButton(
                             onClick = { onSubmitPlan(sym.symbol) },
                             contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) { Text("生成买入方案") }
+                        ) { Text("生成模拟方案") }
                     }
                 }
             }

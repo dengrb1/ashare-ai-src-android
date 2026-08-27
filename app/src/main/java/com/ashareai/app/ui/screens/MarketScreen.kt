@@ -12,12 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.AssetStateRequest
 import com.ashareai.app.data.model.MarketIndicesResponse
 import com.ashareai.app.data.normalizeSymbol
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.LocalMarketViewModel
+import com.ashareai.app.ui.SecurityResolveViewModel
 import com.ashareai.app.ui.fmt2
 import com.ashareai.app.ui.components.ChangeText
 import com.ashareai.app.ui.components.EmptyPlaceholder
@@ -28,16 +28,16 @@ import kotlinx.coroutines.launch
 /** 行情页：自选列表 + 添加自选（支持代码或名称搜索）。 */
 @Composable
 fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val assets by appViewModel.assets.collectAsState()
-    val quotes by appViewModel.quotes.collectAsState()
-    val marketIndices by appViewModel.marketIndices.collectAsState()
-    val scope = rememberCoroutineScope()
+    val marketViewModel = LocalMarketViewModel.current
+    val assets by marketViewModel.assets.collectAsState()
+    val quotes by marketViewModel.quotes.collectAsState()
+    val marketIndices by marketViewModel.marketIndices.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        if (marketIndices.quotes.isEmpty()) appViewModel.loadMarketIndices()
+        if (marketIndices.quotes.isEmpty()) marketViewModel.refreshMarketIndices()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -80,6 +80,7 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
 
     if (showAddDialog) {
         AddSymbolDialog(
+            appViewModel = appViewModel,
             onDismiss = { showAddDialog = false },
             onAdd = { symbol ->
                 showAddDialog = false
@@ -89,7 +90,7 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
                     error = "自选股最多 100 只"
                     return@AddSymbolDialog
                 }
-                appViewModel.saveAssets(
+                marketViewModel.saveAssets(
                     AssetStateRequest(
                         watchlist = current.watchlist + symbol,
                         positions = current.positions,
@@ -100,7 +101,7 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
                         buy_monitor_enabled = current.buy_monitor_enabled,
                         market_refresh_interval_seconds = current.market_refresh_interval_seconds,
                     )
-                ) { msg -> if (msg != null) error = msg else appViewModel.forceRefresh() }
+                ) { msg -> if (msg != null) error = msg else marketViewModel.refreshAll() }
             },
         )
     }
@@ -149,12 +150,14 @@ private fun MarketIndicesStrip(indices: MarketIndicesResponse) {
 
 /** 添加自选对话框：输入 6 位代码自动补后缀；也可名称搜索（securities/resolve）。 */
 @Composable
-fun AddSymbolDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
+fun AddSymbolDialog(appViewModel: AppViewModel, onDismiss: () -> Unit, onAdd: (String) -> Unit) {
+    val securityResolveViewModel: SecurityResolveViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val resolveState by securityResolveViewModel.state.collectAsState()
     var input by remember { mutableStateOf("") }
-    var searching by remember { mutableStateOf(false) }
     var candidates by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var message by remember { mutableStateOf<String?>(null) }
+    val searching = resolveState is com.ashareai.app.ui.ScreenState.Loading
+    val resolveError = (resolveState as? com.ashareai.app.ui.ScreenState.Error)?.message
 
     fun search() {
         val normalized = normalizeSymbol(input)
@@ -163,26 +166,14 @@ fun AddSymbolDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
             return
         }
         if (input.isBlank()) return
-        searching = true
         message = null
-        scope.launch {
-            try {
-                val resp = ApiClient.api.resolveSecurity(input.trim())
-                val found = buildList {
-                    resp.match?.let { m -> if (m.symbol != null) add(m.symbol to (m.name ?: "")) }
-                    resp.candidates.forEach { c -> if (c.symbol != null) add(c.symbol to (c.name ?: "")) }
-                }.distinctBy { it.first }
-                if (found.isEmpty()) {
-                    message = "未找到匹配的证券"
-                } else if (found.size == 1) {
-                    onAdd(found.first().first)
-                } else {
-                    candidates = found
-                }
-            } catch (e: Exception) {
-                message = e.toUserMessage()
-            } finally {
-                searching = false
+        securityResolveViewModel.resolve(input.trim()) { found ->
+            if (found.isEmpty()) {
+                message = "未找到匹配的证券"
+            } else if (found.size == 1) {
+                onAdd(found.first().first)
+            } else {
+                candidates = found
             }
         }
     }
@@ -205,7 +196,7 @@ fun AddSymbolDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                message?.let {
+                (message ?: resolveError)?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }

@@ -18,7 +18,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.data.normalizeServerUrl
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.ConnectionUiState
+import com.ashareai.app.ui.ConnectionViewModel
 import com.ashareai.app.ui.components.ErrorBanner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -35,7 +38,10 @@ fun ConnectionFailedScreen(
     onRetry: () -> Unit,
     onReturnToLogin: () -> Unit,
 ) {
+    val connectionViewModel: ConnectionViewModel = viewModel()
+    val connectionState by connectionViewModel.state.collectAsState()
     var serverUrl by remember { mutableStateOf("") }
+    var probeMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { serverUrl = appViewModel.settings.currentBaseUrl() }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -48,12 +54,55 @@ fun ConnectionFailedScreen(
             Text("无法连接服务器", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Text(message, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (serverUrl.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text("当前地址：$serverUrl", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { serverUrl = it; probeMessage = null },
+                label = { Text("服务器地址") },
+                placeholder = { Text("https://research.example.com") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            when (val state = connectionState) {
+                ConnectionUiState.Probing -> Text("正在探测服务…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                is ConnectionUiState.Result -> Text(
+                    "连接分类：${ConnectionViewModel.label(state.probe.classification)} · ${state.probe.message.orEmpty()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (state.probe.canEstablishSession) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+                is ConnectionUiState.Error -> Text(state.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                ConnectionUiState.Idle -> Unit
             }
+            probeMessage?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("重试") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { connectionViewModel.probe(serverUrl) },
+                    enabled = serverUrl.isNotBlank() && connectionState !is ConnectionUiState.Probing,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                ) { Text("探测") }
+                Button(onClick = onRetry, modifier = Modifier.weight(1f).height(48.dp)) { Text("重试") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    connectionViewModel.saveAndProbe(
+                        serverUrl,
+                        onResult = { probe ->
+                            serverUrl = probe.address ?: serverUrl
+                            if (probe.canEstablishSession) {
+                                if (probe.sessionInvalidated) onReturnToLogin() else onRetry()
+                            } else {
+                                probeMessage = probe.message ?: "服务器无法建立研究会话。"
+                            }
+                        },
+                        onError = { probeMessage = it },
+                    )
+                },
+                enabled = serverUrl.isNotBlank() && connectionState !is ConnectionUiState.Probing,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) { Text("保存地址并继续") }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onReturnToLogin, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("返回登录页面") }
         }
@@ -63,6 +112,8 @@ fun ConnectionFailedScreen(
 @Composable
 fun LoginScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
+    val connectionViewModel: ConnectionViewModel = viewModel()
+    val connectionState by connectionViewModel.state.collectAsState()
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -91,14 +142,24 @@ fun LoginScreen(appViewModel: AppViewModel) {
         }
         serverUrl = normalizedUrl
         loading = true
-        scope.launch {
-            appViewModel.settings.setBaseUrl(normalizedUrl)
-            com.ashareai.app.data.ApiClient.rebuild()
-            appViewModel.login(username.trim(), password, rememberPassword) { msg ->
+        connectionViewModel.saveAndProbe(
+            address = normalizedUrl,
+            onResult = { probe ->
+                if (!probe.canEstablishSession) {
+                    error = probe.message ?: "服务器无法建立研究会话。"
+                    loading = false
+                    return@saveAndProbe
+                }
+                appViewModel.login(username.trim(), password, rememberPassword) { msg ->
+                    error = msg
+                    loading = false
+                }
+            },
+            onError = { msg ->
                 error = msg
                 loading = false
-            }
-        }
+            },
+        )
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -124,15 +185,40 @@ fun LoginScreen(appViewModel: AppViewModel) {
             )
             Spacer(Modifier.height(40.dp))
 
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = { serverUrl = it },
-                label = { Text("服务器地址") },
-                placeholder = { Text("http://192.168.1.10:8000") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("http://192.168.1.10:8000") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        connectionViewModel.probe(
+                            serverUrl,
+                            onError = { error = it },
+                            onResult = { probe ->
+                            serverUrl = probe.address ?: serverUrl
+                            error = probe.message?.takeIf { !probe.canEstablishSession }
+                            },
+                        )
+                    },
+                    enabled = !loading && serverUrl.isNotBlank(),
+                ) { Text("探测") }
+            }
+            when (val state = connectionState) {
+                ConnectionUiState.Probing -> Text("正在探测服务…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                is ConnectionUiState.Result -> Text(
+                    "连接分类：${ConnectionViewModel.label(state.probe.classification)} · ${state.probe.message.orEmpty()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (state.probe.canEstablishSession) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+                is ConnectionUiState.Error -> Text(state.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                ConnectionUiState.Idle -> Unit
+            }
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = username,

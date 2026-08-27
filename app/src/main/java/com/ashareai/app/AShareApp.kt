@@ -4,18 +4,25 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.ashareai.app.data.ApiClient
+import com.ashareai.app.data.AppContainer
 import com.ashareai.app.data.SettingsStore
+import kotlinx.coroutines.runBlocking
 
 class AShareApp : Application() {
 
     lateinit var settings: SettingsStore
         private set
 
+    lateinit var container: AppContainer
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         settings = SettingsStore(this)
+        runBlocking { settings.migrateLegacyServerAddress() }
         ApiClient.init(settings)
+        container = AppContainer(settings)
         createNotificationChannels()
     }
 
@@ -29,9 +36,9 @@ class AShareApp : Application() {
         )
         manager.createNotificationChannel(
             NotificationChannel(
-                CHANNEL_ALERT, "交易预警",
+                CHANNEL_ALERT, "研究预警",
                 NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = "卖出建议与止损预警" }
+            ).apply { description = "模拟退出建议与止损预警" }
         )
         manager.createNotificationChannel(
             NotificationChannel(

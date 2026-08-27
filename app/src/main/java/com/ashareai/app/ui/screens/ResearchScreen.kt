@@ -15,18 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.newIdempotencyKey
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.data.model.*
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 
 internal val researchScopes = listOf(
     "MARKET" to "全市场",
@@ -37,16 +34,16 @@ internal val researchScopes = listOf(
 /** 每日研究：手动研究、A/B 自动报告和运行状态集中在一个工作台。 */
 @Composable
 fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val coroutineScope = rememberCoroutineScope()
-    val assets by appViewModel.assets.collectAsState()
-    val quotes by appViewModel.quotes.collectAsState()
+    val researchViewModel: ResearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val researchState by researchViewModel.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val marketViewModel = LocalMarketViewModel.current
+    val assets by marketViewModel.assets.collectAsState()
+    val quotes by marketViewModel.quotes.collectAsState()
     val assetSymbols = remember(assets) {
         ((assets?.watchlist ?: emptyList()) + (assets?.positions?.map { it.symbol } ?: emptyList())).distinct()
     }
 
-    var runs by remember { mutableStateOf<List<Run>>(emptyList()) }
-    var settings by remember { mutableStateOf<ResearchSettings?>(null) }
-    var loading by remember { mutableStateOf(true) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -62,47 +59,27 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
     var maxStockPrice by remember { mutableStateOf("") }
     var supremeMode by remember { mutableStateOf(false) }
 
-    suspend fun refresh(loadSettings: Boolean = false) {
-        try {
-            if (loadSettings) {
-                coroutineScope {
-                    val runsDeferred = async { ApiClient.api.researchRuns(limit = 20, mine = true) }
-                    val settingsDeferred = async { runCatching { ApiClient.api.researchSettings() }.getOrNull() }
-                    runs = runsDeferred.await()
-                    settingsDeferred.await()?.let { settings = it }
-                }
-            } else {
-                runs = ApiClient.api.researchRuns(limit = 20, mine = true)
-            }
-            error = null
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-        } finally {
-            loading = false
-        }
+    val workspace = when (val state = researchState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
     }
+    val runs = workspace?.runs.orEmpty()
+    val settings = workspace?.settings
+    val loading = researchState is ScreenState.Loading
+    val serverError = (researchState as? ScreenState.Error)?.message
 
-    suspend fun refreshActiveRuns() {
-        val activeIds = runs.filter { isActiveStatus(it.status) }.map { it.run_id }
-        if (activeIds.isEmpty()) return
-        val updates = coroutineScope {
-            activeIds.map { runId ->
-                async { runCatching { ApiClient.api.researchRun(runId) }.getOrNull() }
-            }.awaitAll().filterNotNull()
-        }
-        if (updates.isNotEmpty()) {
-            val byId = updates.associateBy { it.run_id }
-            runs = runs.map { byId[it.run_id] ?: it }
-        }
-    }
-
-    LaunchedEffect(Unit) { refresh(loadSettings = true) }
-    LaunchedEffect(runs.any { isActiveStatus(it.status) }) {
+    LaunchedEffect(Unit) { researchViewModel.load(loadSettings = true) }
+    val hasActiveRuns = runs.any { isActiveStatus(it.status) }
+    LaunchedEffect(lifecycleOwner, hasActiveRuns) {
+        if (!hasActiveRuns) return@LaunchedEffect
         var intervalMillis = 2_500L
-        while (runs.any { isActiveStatus(it.status) }) {
-            delay(intervalMillis)
-            refreshActiveRuns()
-            intervalMillis = 5_000L
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                delay(intervalMillis)
+                researchViewModel.refreshActiveRuns()
+                intervalMillis = 5_000L
+            }
         }
     }
 
@@ -264,7 +241,9 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
                     }
                 }
             }
-            error?.let { message -> item { ErrorBanner(message) { coroutineScope.launch { refresh() } } } }
+            (serverError ?: error)?.let { message ->
+                item { ErrorBanner(message) { error = null; researchViewModel.retry() } }
+            }
             item {
                 Button(
                     enabled = !submitting,
@@ -283,26 +262,19 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
                         )
                         if (error != null) return@Button
                         submitting = true
-                        coroutineScope.launch {
-                            try {
-                                ApiClient.api.submitResearch(
-                                    newIdempotencyKey(),
-                                    ResearchRequest(
-                                        trading_date = date,
-                                        scope = researchScope,
-                                        symbols = selectedSymbols.takeIf { researchScope != "MARKET" },
-                                        total_budget = total,
-                                        per_symbol_budget = perSymbol,
-                                        max_stock_price = maxPrice,
-                                        supreme_mode = supremeMode,
-                                    ),
-                                )
-                                refresh(loadSettings = false)
-                            } catch (e: Exception) {
-                                error = e.toUserMessage()
-                            } finally {
-                                submitting = false
-                            }
+                        researchViewModel.submit(
+                            ResearchRequest(
+                                trading_date = date,
+                                scope = researchScope,
+                                symbols = selectedSymbols.takeIf { researchScope != "MARKET" },
+                                total_budget = total,
+                                per_symbol_budget = perSymbol,
+                                max_stock_price = maxPrice,
+                                supreme_mode = supremeMode,
+                            ),
+                        ) { message ->
+                            error = message
+                            submitting = false
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -340,14 +312,7 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
             confirmButton = {
                 TextButton(onClick = {
                     cancelTarget = null
-                    coroutineScope.launch {
-                        try {
-                            ApiClient.api.cancelResearch(run.run_id)
-                            refresh(loadSettings = false)
-                        } catch (e: Exception) {
-                            error = e.toUserMessage()
-                        }
-                    }
+                    researchViewModel.cancel(run.run_id) { message -> error = message }
                 }) { Text("确认停止", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { cancelTarget = null }) { Text("继续运行") } },
@@ -359,9 +324,9 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
             settings = requireNotNull(settings),
             onDismiss = { settingsOpen = false },
             onSaved = {
-                settings = it
                 settingsOpen = false
             },
+            saveSettings = researchViewModel::saveSettings,
         )
     }
 }

@@ -13,38 +13,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.Candidate
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.launch
 
 /** 候选池：确定性评分排名。 */
 @Composable
 fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val scope = rememberCoroutineScope()
+    val candidatesViewModel: CandidatesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val candidatesState by candidatesViewModel.state.collectAsState()
     var date by remember { mutableStateOf(todayTradingDate()) }
-    var candidates by remember { mutableStateOf<List<Candidate>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(StockSortOption.SCORE_DESC.name) }
     val sortOption = StockSortOption.valueOf(sortOptionName)
 
-    suspend fun load() {
-        loading = true
-        error = null
-        try {
-            candidates = ApiClient.api.candidates(date)
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-            candidates = emptyList()
-        } finally {
-            loading = false
-        }
+    val candidates = when (val state = candidatesState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous.orEmpty()
+        ScreenState.Loading, ScreenState.Empty -> emptyList()
     }
+    val loading = candidatesState is ScreenState.Loading
+    val error = (candidatesState as? ScreenState.Error)?.message
 
-    LaunchedEffect(date) { load() }
+    LaunchedEffect(date) { candidatesViewModel.load(date) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(title = "候选池")
@@ -55,7 +45,7 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         )
 
-        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
+        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { candidatesViewModel.retry(date) } } }
 
         if (loading) {
             LoadingBox()

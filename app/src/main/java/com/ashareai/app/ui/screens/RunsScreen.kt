@@ -11,59 +11,44 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.AuditEvent
 import com.ashareai.app.data.model.RunActivity
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 
 private val typeFilters = listOf(
     null to "全部", "RESEARCH" to "研究", "BACKTEST" to "回测",
-    "TRADE_PLAN" to "买入方案", "EXIT_ADVICE" to "卖出建议",
+    "TRADE_PLAN" to "买入模拟方案", "EXIT_ADVICE" to "退出研究建议",
 )
 
 /** 运行与审计：活动流（游标分页）+ 审计时间线。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RunsScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
-    var items by remember { mutableStateOf<List<RunActivity>>(emptyList()) }
-    var cursor by remember { mutableStateOf<String?>(null) }
+    val runsViewModel: RunsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val runsState by runsViewModel.state.collectAsState()
     var typeFilter by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<RunActivity?>(null) }
-    var auditEvents by remember { mutableStateOf<List<AuditEvent>>(emptyList()) }
 
-    suspend fun load(reset: Boolean) {
-        if (reset) {
-            loading = true
-            cursor = null
-        } else {
-            loadingMore = true
-        }
-        try {
-            val page = ApiClient.api.runsActivity(
-                cursor = if (reset) null else cursor,
-                type = typeFilter,
-                limit = 20,
-            )
-            items = if (reset) page.items else items + page.items
-            cursor = page.next_cursor
-            error = null
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-        } finally {
-            loading = false
-            loadingMore = false
-        }
+    val runContent = when (val state = runsState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
+    }
+    val items = runContent?.items.orEmpty()
+    val cursor = runContent?.cursor
+    val auditEvents = runContent?.auditEvents.orEmpty()
+    val loading = runsState is ScreenState.Loading
+    val error = (runsState as? ScreenState.Error)?.message
+
+    fun load(reset: Boolean) {
+        loadingMore = !reset
+        runsViewModel.load(typeFilter, reset)
     }
 
     LaunchedEffect(typeFilter) { load(reset = true) }
+    LaunchedEffect(runsState) { loadingMore = false }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(title = "运行与审计")
@@ -84,7 +69,7 @@ fun RunsScreen(appViewModel: AppViewModel) {
             }
         }
 
-        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load(true) } } } }
+        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { load(true) } } }
 
         if (loading) {
             LoadingBox()
@@ -98,13 +83,7 @@ fun RunsScreen(appViewModel: AppViewModel) {
                 items(items, key = { "${it.run_id}-${it.activity_type}" }) { activity ->
                     AppCard(modifier = Modifier.clickable {
                         selected = activity
-                        auditEvents = emptyList()
-                        scope.launch {
-                            try {
-                                auditEvents = ApiClient.api.runAudit(activity.run_id)
-                            } catch (_: Exception) {
-                            }
-                        }
+                        runsViewModel.loadAudit(activity.run_id)
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -130,7 +109,7 @@ fun RunsScreen(appViewModel: AppViewModel) {
                     item {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             TextButton(
-                                onClick = { scope.launch { load(reset = false) } },
+                                onClick = { load(reset = false) },
                                 enabled = !loadingMore,
                             ) {
                                 if (loadingMore) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
@@ -195,7 +174,7 @@ fun RunsScreen(appViewModel: AppViewModel) {
 private fun runTypeLabel(type: String?): String = when (type?.uppercase()) {
     "RESEARCH" -> "研究"
     "BACKTEST" -> "回测"
-    "TRADE_PLAN" -> "买入方案"
-    "EXIT_ADVICE" -> "卖出建议"
+    "TRADE_PLAN" -> "买入模拟方案"
+    "EXIT_ADVICE" -> "退出研究建议"
     else -> type ?: "任务"
 }

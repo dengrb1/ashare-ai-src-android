@@ -23,7 +23,7 @@ import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore(name = "ashare_settings")
 
-class SettingsStore(context: Context) {
+class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
     private val context = context.applicationContext
 
     companion object {
@@ -42,7 +42,8 @@ class SettingsStore(context: Context) {
         private val KEY_INSTALLATION_ID = stringPreferencesKey("push_installation_id")
         private val KEY_PUSH_DEVICE_ID = stringPreferencesKey("push_device_id")
 
-        const val DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+        /** An empty address is an explicit pending-configuration state. */
+        const val DEFAULT_BASE_URL = ""
     }
 
     val baseUrl: Flow<String> = context.dataStore.data.map { it[KEY_BASE_URL] ?: DEFAULT_BASE_URL }
@@ -54,12 +55,12 @@ class SettingsStore(context: Context) {
         it[KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS] ?: 5
     }
 
-    suspend fun currentBaseUrl(): String = baseUrl.first()
+    override suspend fun currentBaseUrl(): String = baseUrl.first()
     suspend fun currentUsername(): String? = username.first()
     suspend fun isRememberPasswordEnabled(): Boolean = rememberPassword.first()
     suspend fun currentRememberedPassword(): String? = readSecret(KEY_REMEMBERED_PASSWORD, CredentialCipher)
-    suspend fun currentAccessToken(): String? = readToken(KEY_ACCESS_TOKEN)
-    suspend fun currentRefreshToken(): String? = readToken(KEY_REFRESH_TOKEN)
+    override suspend fun currentAccessToken(): String? = readToken(KEY_ACCESS_TOKEN)
+    override suspend fun currentRefreshToken(): String? = readToken(KEY_REFRESH_TOKEN)
     suspend fun accessExpiresAt(): Long = context.dataStore.data.map { it[KEY_ACCESS_EXPIRES_AT] ?: 0L }.first()
     suspend fun installationId(): String {
         context.dataStore.data.map { it[KEY_INSTALLATION_ID] }.first()?.let { return it }
@@ -75,8 +76,26 @@ class SettingsStore(context: Context) {
         }
     }
 
-    suspend fun setBaseUrl(url: String) {
-        context.dataStore.edit { it[KEY_BASE_URL] = url.trimEnd('/') }
+    override suspend fun setBaseUrl(url: String) {
+        val normalized = normalizeServerUrl(url).getOrThrow()
+        context.dataStore.edit { it[KEY_BASE_URL] = normalized }
+    }
+
+    /**
+     * Old connected builds defaulted to the phone's own loopback address. It can
+     * never reach a desktop Fusion service, so migrate it to an explicit setup
+     * state and invalidate its session tokens.
+     */
+    suspend fun migrateLegacyServerAddress() {
+        context.dataStore.edit { preferences ->
+            val stored = preferences[KEY_BASE_URL] ?: return@edit
+            if (stored.isLegacyLoopbackAddress()) {
+                preferences.remove(KEY_BASE_URL)
+                preferences.remove(KEY_ACCESS_TOKEN)
+                preferences.remove(KEY_REFRESH_TOKEN)
+                preferences.remove(KEY_ACCESS_EXPIRES_AT)
+            }
+        }
     }
 
     suspend fun setDarkMode(mode: String) {
@@ -104,13 +123,13 @@ class SettingsStore(context: Context) {
         return unseen
     }
 
-    suspend fun saveTokens(
+    override suspend fun saveTokens(
         access: String,
         refresh: String,
         expiresInSeconds: Long,
-        username: String? = null,
-        password: String? = null,
-        rememberPassword: Boolean? = null,
+        username: String?,
+        password: String?,
+        rememberPassword: Boolean?,
     ) {
         context.dataStore.edit {
             it[KEY_ACCESS_TOKEN] = TokenCipher.encrypt(access)
@@ -128,6 +147,11 @@ class SettingsStore(context: Context) {
         }
     }
 
+    /** Compatibility overload for callers that only refresh an existing session. */
+    suspend fun saveTokens(access: String, refresh: String, expiresInSeconds: Long) {
+        saveTokens(access, refresh, expiresInSeconds, null, null, null)
+    }
+
     suspend fun clearRememberedPassword() {
         context.dataStore.edit {
             it[KEY_REMEMBER_PASSWORD] = false
@@ -135,7 +159,7 @@ class SettingsStore(context: Context) {
         }
     }
 
-    suspend fun clearTokens() {
+    override suspend fun clearTokens() {
         context.dataStore.edit {
             it.remove(KEY_ACCESS_TOKEN)
             it.remove(KEY_REFRESH_TOKEN)

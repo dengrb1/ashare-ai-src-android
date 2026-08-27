@@ -15,12 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.ResearchSettings
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.ResearchViewModel
+import com.ashareai.app.ui.ScreenState
 import com.ashareai.app.ui.components.CompactTopBar
 import com.ashareai.app.ui.components.SectionTitle
 import com.ashareai.app.ui.navigation.Routes
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private data class HubEntry(val title: String, val subtitle: String, val route: String, val icon: ImageVector)
 
@@ -32,19 +33,21 @@ private val primaryResearchEntries = listOf(
 )
 
 private val toolEntries = listOf(
-    HubEntry("卖出建议", "盘中触发的退出与止损方案", Routes.EXIT_ADVICE, Icons.AutoMirrored.Outlined.ExitToApp),
+    HubEntry("退出研究", "盘中触发的退出与止损方案", Routes.EXIT_ADVICE, Icons.AutoMirrored.Outlined.ExitToApp),
     HubEntry("金融搜索", "按公司、证券和财务问题检索", Routes.SEARCH, Icons.Outlined.Search),
-    HubEntry("回测工作台", "在版本快照上执行事件回测", Routes.BACKTEST, Icons.Outlined.Timeline),
+    HubEntry("回测工作台", "在版本快照上模拟事件回测", Routes.BACKTEST, Icons.Outlined.Timeline),
     HubEntry("运行与审计", "任务记录、失败原因和审计时间线", Routes.RUNS, Icons.Outlined.History),
 )
 
 @Composable
 fun ResearchHubScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    var settings by remember { mutableStateOf<ResearchSettings?>(null) }
-    LaunchedEffect(Unit) { settings = runCatching { ApiClient.api.researchSettings() }.getOrNull() }
+    val researchViewModel: ResearchViewModel = viewModel()
+    val researchState by researchViewModel.state.collectAsState()
+    val settings = (researchState as? ScreenState.Content)?.value?.settings
+    LaunchedEffect(Unit) { researchViewModel.load(loadSettings = true) }
 
     Column(Modifier.fillMaxSize()) {
-        CompactTopBar(title = "研究中心")
+        CompactTopBar(title = "研究工作台")
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -61,7 +64,7 @@ fun ResearchHubScreen(appViewModel: AppViewModel, navController: NavHostControll
                         Column(Modifier.weight(1f)) {
                             Text("自动每日研究", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                if (settings?.auto_enabled == true) "${settings?.automatic_reports?.count { it.enabled }} 个报告已开启 · 15:05 检查" else "当前未启用 · 点击配置报告 A/B",
+                                if (settings?.auto_enabled == true) "${settings.automatic_reports.count { it.enabled }} 个报告已开启 · 15:05 检查" else "当前未启用 · 点击配置报告 A/B",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )

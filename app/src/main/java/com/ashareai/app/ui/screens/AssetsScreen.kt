@@ -15,39 +15,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.*
-import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.normalizeSymbol
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.launch
 
 /** 自选与持仓管理：持仓增删改、账户总资金、监控开关。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val assets by appViewModel.assets.collectAsState()
-    val quotes by appViewModel.quotes.collectAsState()
-    val scope = rememberCoroutineScope()
+    val marketViewModel = LocalMarketViewModel.current
+    val simulationViewModel: SimulationViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val assets by marketViewModel.assets.collectAsState()
+    val quotes by marketViewModel.quotes.collectAsState()
+    val buyMonitorState by simulationViewModel.buyMonitorState.collectAsState()
 
     var error by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<PaperPosition?>(null) }
     var showAddPosition by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<PaperPosition?>(null) }
-    var buyMonitors by remember { mutableStateOf<List<BuyEntryMonitor>>(emptyList()) }
-    var buyMonitorError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { simulationViewModel.loadBuyMonitors() }
 
-    suspend fun loadBuyMonitors() {
-        try {
-            buyMonitors = ApiClient.api.buyEntryMonitors()
-            buyMonitorError = null
-        } catch (e: Exception) {
-            buyMonitorError = e.toUserMessage()
-        }
-    }
-    LaunchedEffect(Unit) { loadBuyMonitors() }
+    val buyMonitors = (buyMonitorState as? ScreenState.Content)?.value?.monitors.orEmpty()
+    val buyMonitorError = (buyMonitorState as? ScreenState.Error)?.message
 
     fun currentRequest(): AssetStateRequest? {
         val a = assets ?: return null
@@ -65,8 +55,8 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
 
     fun savePositions(positions: List<PaperPosition>) {
         val req = currentRequest() ?: return
-        appViewModel.saveAssets(req.copy(positions = positions)) { msg ->
-            if (msg != null) error = msg else appViewModel.forceRefresh()
+        marketViewModel.saveAssets(req.copy(positions = positions)) { msg ->
+            if (msg != null) error = msg else marketViewModel.refreshAll()
         }
     }
 
@@ -100,7 +90,7 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
                     totalAssets = assets?.total_assets,
                     onSave = { value ->
                         val req = currentRequest() ?: return@TotalAssetsCard
-                        appViewModel.saveAssets(req.copy(total_assets = value)) { msg -> if (msg != null) error = msg }
+                        marketViewModel.saveAssets(req.copy(total_assets = value)) { msg -> if (msg != null) error = msg }
                     },
                 )
             }
@@ -110,18 +100,18 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
                 MonitorCard(
                     assets = assets,
                     onSave = { req ->
-                        appViewModel.saveExitMonitor(req) { msg -> if (msg != null) error = msg }
+                        marketViewModel.saveExitMonitor(req) { msg -> if (msg != null) error = msg }
                     },
                 )
             }
 
-            // 买入区间监控：正式 BUY Trade Plan 派生的次交易日入场区间提醒
+            // 买入区间监控：正式模拟方案派生的次交易日入场区间提醒
             item {
                 BuyMonitorCard(
                     monitors = buyMonitors,
                     error = buyMonitorError,
                     enabled = assets?.buy_monitor_enabled == true,
-                    onRetry = { scope.launch { loadBuyMonitors() } },
+                    onRetry = { simulationViewModel.loadBuyMonitors() },
                 )
             }
 
@@ -138,14 +128,7 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
                         onEdit = { editing = p },
                         onDelete = { confirmDelete = p },
                         onExitResearch = {
-                            scope.launch {
-                                try {
-                                    ApiClient.api.manualExitAdvice(newIdempotencyKey(), ManualExitRequest(p.symbol))
-                                    error = null
-                                } catch (e: Exception) {
-                                    error = e.toUserMessage()
-                                }
-                            }
+                            simulationViewModel.manualExitAdvice(p.symbol) { message -> error = message }
                         },
                     )
                 }
@@ -287,7 +270,7 @@ private fun MonitorSwitch(label: String, checked: Boolean, onChange: (Boolean) -
     }
 }
 
-/** 当前买入区间状态：展示由正式 BUY Trade Plan 派生的次交易日入场区间提醒。 */
+/** 当前买入区间状态：展示由正式模拟方案派生的次交易日入场区间提醒。 */
 @Composable
 private fun BuyMonitorCard(
     monitors: List<BuyEntryMonitor>,
@@ -300,7 +283,7 @@ private fun BuyMonitorCard(
             Column(Modifier.weight(1f)) {
                 Text("当前买入区间状态", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    if (enabled) "只展示由正式 BUY Trade Plan 生成的提醒" else "总开关已关闭，不会生成新的买入区间提醒",
+                    if (enabled) "只展示由正式模拟方案生成的提醒" else "总开关已关闭，不会生成新的买入区间提醒",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -314,7 +297,7 @@ private fun BuyMonitorCard(
         when {
             error != null -> ErrorBanner(error, onRetry)
             monitors.isEmpty() -> Text(
-                "尚无有效入场区间。开启后，等待正式研究完成并生成符合条件的 BUY Trade Plan。",
+                "尚无有效入场区间。开启后，等待正式研究完成并生成符合条件的模拟方案。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

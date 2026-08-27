@@ -12,7 +12,6 @@ import com.ashareai.app.AShareApp
 import com.ashareai.app.BuildConfig
 import com.ashareai.app.MainActivity
 import com.ashareai.app.R
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.SettingsStore
 import com.ashareai.app.data.model.Notification
 import com.ashareai.app.data.model.PushDeliveryReceipt
@@ -48,7 +47,7 @@ object PushManager {
         scope.launch {
             val registrationId = registrationId(context) ?: return@launch
             val settings = (context.applicationContext as AShareApp).settings
-            val device = ApiClient.api.registerDevice(
+            val device = (context.applicationContext as AShareApp).container.notificationRepository.registerDevice(
                 PushDeviceRequest(
                     installation_id = settings.installationId(),
                     registration_id = registrationId,
@@ -64,7 +63,7 @@ object PushManager {
     suspend fun unbindAuthenticatedDevice(context: Context) {
         val settings = (context.applicationContext as AShareApp).settings
         settings.currentPushDeviceId()?.let { deviceId ->
-            runCatching { ApiClient.api.unregisterDevice(deviceId) }
+            runCatching { (context.applicationContext as AShareApp).container.notificationRepository.unregisterDevice(deviceId) }
         }
         settings.setPushDeviceId(null)
         runCatching {
@@ -98,7 +97,7 @@ object PushManager {
         arrived: Boolean,
         clicked: Boolean,
     ) {
-        val notice = runCatching { ApiClient.api.notification(notificationId) }.getOrNull() ?: return
+        val notice = runCatching { (context.applicationContext as AShareApp).container.notificationRepository.notification(notificationId) }.getOrNull() ?: return
         events.tryEmit(Unit)
         acknowledge(context, notificationId, if (clicked) "OPENED" else "DELIVERED")
         val settings = (context.applicationContext as AShareApp).settings
@@ -134,7 +133,7 @@ object PushManager {
         val settings: SettingsStore = (context.applicationContext as AShareApp).settings
         val deviceId = settings.currentPushDeviceId() ?: return
         runCatching {
-            ApiClient.api.acknowledgeDelivery(
+            (context.applicationContext as AShareApp).container.notificationRepository.acknowledgeDelivery(
                 deviceId,
                 PushDeliveryReceipt(notification_id = notificationId, status = status),
             )

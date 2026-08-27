@@ -19,12 +19,13 @@ import androidx.navigation.NavHostController
 import com.ashareai.app.data.model.Notification
 import com.ashareai.app.island.NotificationNavigation
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.fmtTime
 
 @Composable
 fun NotificationsScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val center = appViewModel.notificationCenter
+    val center = LocalMarketViewModel.current.notificationCenter
     val state by center.state.collectAsState()
 
     LaunchedEffect(Unit) { center.refresh() }

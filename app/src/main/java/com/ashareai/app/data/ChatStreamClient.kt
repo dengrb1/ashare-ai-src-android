@@ -35,6 +35,7 @@ object ChatStreamClient {
         settings: SettingsStore,
         threadId: String,
         request: AIChatSendRequest,
+        services: ApiServiceProvider = ApiClient,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val base = runBlocking { settings.currentBaseUrl() }.trimEnd('/')
         val token = runBlocking { settings.currentAccessToken() }
@@ -68,7 +69,7 @@ object ChatStreamClient {
             }
         }
 
-        val source = EventSources.createFactory(ApiClient.okHttp()).newEventSource(httpRequest, listener)
+        val source = EventSources.createFactory(services.httpClient() ?: ApiClient.okHttp()).newEventSource(httpRequest, listener)
         awaitClose { source.cancel() }
     }
 

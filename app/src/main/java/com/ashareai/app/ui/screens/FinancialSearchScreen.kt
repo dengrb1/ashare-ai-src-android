@@ -9,12 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.FinancialSearchResult
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.FinancialSearchViewModel
+import com.ashareai.app.ui.ScreenState
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.launch
 
 private val exampleQueries = listOf(
     "浦发银行现在多少钱", "沪深300今年走势", "贵州茅台市盈率", "宁德时代最新财报",
@@ -23,25 +21,16 @@ private val exampleQueries = listOf(
 /** 金融数据搜索：自然语言查询。 */
 @Composable
 fun FinancialSearchScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
+    val searchViewModel: FinancialSearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val searchState by searchViewModel.state.collectAsState()
     var query by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf<FinancialSearchResult?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val result = (searchState as? ScreenState.Content)?.value
+    val loading = searchState is ScreenState.Loading
+    val error = (searchState as? ScreenState.Error)?.message
 
     fun search(q: String) {
         if (q.isBlank() || loading) return
-        loading = true
-        error = null
-        scope.launch {
-            try {
-                result = ApiClient.api.financialSearch(q.trim())
-            } catch (e: Exception) {
-                error = e.toUserMessage()
-            } finally {
-                loading = false
-            }
-        }
+        searchViewModel.search(q)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -76,7 +65,7 @@ fun FinancialSearchScreen(appViewModel: AppViewModel) {
                 }
             }
         } else {
-            val r = result!!
+            val r = requireNotNull(result)
             LazyColumn(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),

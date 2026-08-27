@@ -13,7 +13,6 @@ import androidx.core.app.NotificationCompat
 import com.ashareai.app.AShareApp
 import com.ashareai.app.MainActivity
 import com.ashareai.app.R
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +26,7 @@ import java.text.DecimalFormat
 /**
  * 持仓监控前台服务：
  * 1. 常驻通知（超级岛）显示总浮动盈亏，按用户刷新间隔轮询行情。
- * 2. 轮询通知 summary，出现卖出/止损/高风险通知时以焦点浮窗弹出。
+ * 2. 轮询通知 summary，出现退出研究/止损/高风险通知时以焦点浮窗弹出。
  * 3. 存在活动研究任务时展示进度。
  */
 class MonitorService : Service() {
@@ -86,18 +85,21 @@ class MonitorService : Service() {
             notifyMonitor("持仓监控", "未登录", null, null)
             return 60
         }
-        val api = ApiClient.api
+        val container = (application as AShareApp).container
+        val market = container.marketRepository
+        val notifications = container.notificationRepository
+        val research = container.researchRepository
 
         // 1) 持仓盈亏
         var interval = 30
         try {
-            val assets = api.assets()
+            val assets = market.assets()
             interval = assets.market_refresh_interval_seconds.coerceAtLeast(15)
             val symbols = assets.positions.map { it.symbol }.distinct()
             if (symbols.isEmpty()) {
                 notifyMonitor("持仓监控", "暂无持仓", null, null)
             } else {
-                val quotes = api.quotes(symbols.joinToString(",")).associateBy { it.symbol }
+                val quotes = market.quotes(symbols).associateBy { it.symbol }
                 var cost = 0.0
                 var value = 0.0
                 assets.positions.forEach { p ->
@@ -119,9 +121,9 @@ class MonitorService : Service() {
             // 保持上次内容
         }
 
-        // 2) 预警通知（卖出建议 / 止损 / 高风险）
+        // 2) 预警通知（退出研究建议 / 止损 / 高风险）
         try {
-            val summary = api.notificationSummary()
+            val summary = notifications.summary()
             val unseen = settings.claimUnseenNotificationIds(
                 summary.latest.filter { it.read_at == null }.map { it.notification_id },
             )
@@ -142,7 +144,7 @@ class MonitorService : Service() {
 
         // 3) 活动研究任务进度
         try {
-            val active = api.researchRuns(limit = 5, mine = true)
+            val active = research.runs(limit = 5, mine = true)
                 .firstOrNull { it.status.uppercase() in setOf("PENDING", "QUEUED", "RUNNING", "PROCESSING") }
             if (active != null) {
                 notifyProgress(active.phase ?: "研究进行中", active.progress ?: 0)

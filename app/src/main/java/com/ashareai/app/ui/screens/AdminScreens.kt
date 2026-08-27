@@ -36,7 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ashareai.app.data.model.EdgeGatewayConfiguration
 import com.ashareai.app.data.model.EdgeGatewayDraft
 import com.ashareai.app.data.model.EdgeGatewayLogs
@@ -49,9 +49,9 @@ import com.ashareai.app.data.model.SystemSettings
 import com.ashareai.app.data.model.SystemSettingsUnlockRequest
 import com.ashareai.app.data.model.RuntimeIdentity
 import com.ashareai.app.data.model.RuntimeIdentityRequest
-import com.ashareai.app.data.newIdempotencyKey
 import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.AdminViewModel
 import com.ashareai.app.ui.components.AppCard
 import com.ashareai.app.ui.components.ErrorBanner
 import com.ashareai.app.ui.components.KeyValueRow
@@ -62,7 +62,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 private fun adminUser(appViewModel: AppViewModel): Boolean =
-    (appViewModel.authState.value as? AppViewModel.AuthState.LoggedIn)?.user?.role?.equals("ADMIN", true) == true
+    (appViewModel.authState.value as? AppViewModel.AuthState.LoggedIn)?.user?.let { user ->
+        user.role.equals("ADMIN", true) || user.is_admin_account
+    } == true
 
 private fun bytes(value: Long?): String {
     if (value == null) return "--"
@@ -90,7 +92,7 @@ private val systemEditorSections = listOf(
         SystemEditorField("api_runtime_auto_close", "收盘后自动释放行情进程", SystemFieldKind.BOOLEAN),
         SystemEditorField("energy_saving_enabled", "自动节能", SystemFieldKind.BOOLEAN),
         SystemEditorField("llm_agent_max_concurrency", "AI Agent 并发", SystemFieldKind.INTEGER),
-        SystemEditorField("research_execution_mode", "研究执行模式（SERIAL / DUAL）", SystemFieldKind.TEXT),
+        SystemEditorField("research_execution_mode", "研究运行模式（SERIAL / DUAL）", SystemFieldKind.TEXT),
         SystemEditorField("auto_restart_enabled", "拓扑变更后自动重启", SystemFieldKind.BOOLEAN),
     ),
     "行情与搜索" to listOf(
@@ -153,6 +155,7 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
         return
     }
     val scope = rememberCoroutineScope()
+    val admin: AdminViewModel = viewModel()
     var current by remember { mutableStateOf<ModelSettings?>(null) }
     var draft by remember { mutableStateOf(ModelSettingsDraft(base_url = "")) }
     var logs by remember { mutableStateOf(emptyList<com.ashareai.app.data.model.ModelProbeLog>()) }
@@ -164,7 +167,7 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
     fun load() {
         scope.launch {
             runCatching {
-                val result = ApiClient.api.modelSettings()
+                val result = admin.modelSettings()
                 current = result
                 draft = ModelSettingsDraft(
                     base_url = result.base_url,
@@ -176,7 +179,7 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
                     timeout_seconds = result.timeout_seconds,
                     enabled = result.enabled,
                 )
-                logs = ApiClient.api.modelProbeLogs()
+                logs = admin.modelProbeLogs()
             }.onFailure { error = it.toUserMessage() }
         }
     }
@@ -198,7 +201,15 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
                     KeyValueRow("版本", if (current?.configured == true) "v${current?.version}" else "未配置")
                     KeyValueRow("连通性", when { current?.reachable == true -> "可用"; current?.configured == true -> "已配置 / 不可达"; else -> "未配置" })
                     KeyValueRow("协议", listOfNotNull(current?.structured_output_supported?.let { if (it) "JSON Schema" else null }, current?.streaming_supported?.let { if (it) "流式" else null }).ifEmpty { listOf("兼容模式") }.joinToString(" · "))
-                    current?.status_message?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Text(
+                        when {
+                            current?.reachable == true -> "模型网关状态：可用"
+                            current?.configured == true -> "模型网关状态：已配置，当前不可达"
+                            else -> "模型网关状态：未配置"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             item {
@@ -225,15 +236,15 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = !busy, onClick = {
                             busy = true; message = null; error = null
-                            scope.launch { runCatching { ApiClient.api.testModelSettings(draft) }.onSuccess { message = it.message }.onFailure { error = it.toUserMessage() }; busy = false; load() }
+                            scope.launch { runCatching { admin.testModelSettings(draft) }.onSuccess { message = it.message }.onFailure { error = it.toUserMessage() }; busy = false; load() }
                         }) { Text(if (busy) "测试中…" else "测试连接") }
                         TextButton(enabled = !busy, onClick = {
                             busy = true; message = null; error = null
-                            scope.launch { runCatching { ApiClient.api.listConfiguredModels(draft) }.onSuccess { message = "已读取 ${it.models.size} 个模型：${it.models.take(4).joinToString()}" }.onFailure { error = it.toUserMessage() }; busy = false }
+                            scope.launch { runCatching { admin.listConfiguredModels(draft) }.onSuccess { message = "已读取 ${it.models.size} 个模型：${it.models.take(4).joinToString()}" }.onFailure { error = it.toUserMessage() }; busy = false }
                         }) { Text("读取模型") }
                         Button(enabled = !busy, onClick = {
                             busy = true; message = null; error = null
-                            scope.launch { runCatching { ApiClient.api.saveModelSettings(draft.copy(api_key = draft.api_key?.takeIf { it.isNotBlank() })) }.onSuccess { message = "模型配置 v${it.version} 已启用" }.onFailure { error = it.toUserMessage() }; busy = false; load() }
+                            scope.launch { runCatching { admin.saveModelSettings(draft.copy(api_key = draft.api_key?.takeIf { it.isNotBlank() })) }.onSuccess { message = "模型配置 v${it.version} 已启用" }.onFailure { error = it.toUserMessage() }; busy = false; load() }
                         }) { Text("验证并启用") }
                     }
                     message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -306,6 +317,7 @@ private fun ProfileEditor(profile: ModelProfileSettings, onChange: (ModelProfile
 fun SystemSettingsScreen(appViewModel: AppViewModel) {
     if (!adminUser(appViewModel)) { AccessDeniedScreen(); return }
     val scope = rememberCoroutineScope()
+    val admin: AdminViewModel = viewModel()
     var resources by remember { mutableStateOf<SystemResources?>(null) }
     var settings by remember { mutableStateOf<SystemSettings?>(null) }
     var identity by remember { mutableStateOf<RuntimeIdentity?>(null) }
@@ -322,10 +334,10 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
 
     fun load() = scope.launch {
         runCatching {
-            resources = ApiClient.api.systemResources()
-            settings = ApiClient.api.systemSettings()
-            identity = ApiClient.api.runtimeIdentity()
-            energy = ApiClient.api.energySaving().enabled
+            resources = admin.systemResources()
+            settings = admin.systemSettings()
+            identity = admin.runtimeIdentity()
+            energy = admin.energySaving().enabled
             lowResident = settings?.values?.get("api_runtime_mode")?.toString()?.contains("LIGHTWEIGHT") != false
             val loaded = settings ?: return@runCatching
             editorValues = systemEditorSections.flatMap { it.second }
@@ -402,13 +414,13 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
                                 }
                             }
                             if (payload.isEmpty()) { message = "没有有效的修改"; return@Button }
-                            scope.launch { runCatching { ApiClient.api.saveSystemSettings(newIdempotencyKey(), activeUnlock, payload) }.onSuccess { settings = it; message = "$title 已保存"; editorSecrets = emptyMap() }.onFailure { error = it.toUserMessage() } }
+                            scope.launch { runCatching { admin.saveSystemSettings(activeUnlock, payload) }.onSuccess { settings = it; message = "$title 已保存"; editorSecrets = emptyMap() }.onFailure { error = it.toUserMessage() } }
                         }) { Text("保存$title") }
                         TextButton(enabled = unlock != null, onClick = {
                             val activeUnlock = unlock ?: return@TextButton
                             scope.launch {
                                 runCatching {
-                                    fields.forEach { ApiClient.api.restoreSystemSetting(it.key, activeUnlock) }
+                                    fields.forEach { admin.restoreSystemSetting(it.key, activeUnlock) }
                                 }.onSuccess {
                                     message = "$title 已恢复为环境变量基线"
                                     load()
@@ -429,12 +441,12 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(energy, { energy = it; scope.launch { runCatching { if (it) ApiClient.api.rearmEnergySaving() else ApiClient.api.wakeEnergySaving() }.onFailure { error = it.toUserMessage() } } })
+                        Switch(energy, { energy = it; scope.launch { runCatching { if (it) admin.rearmEnergySaving() else admin.wakeEnergySaving() }.onFailure { error = it.toUserMessage() } } })
                         Text("自动节能 / 深度待机", style = MaterialTheme.typography.bodyMedium)
                     }
                     Button(enabled = unlock != null, onClick = {
                         val token = unlock ?: return@Button
-                        scope.launch { runCatching { ApiClient.api.saveSystemSettings(newIdempotencyKey(), token, buildJsonObject { put("api_runtime_mode", if (lowResident) "LIGHTWEIGHT" else "SUPREME"); put("energy_saving_enabled", energy) }) }.onSuccess { settings = it; message = "运行策略已保存" }.onFailure { error = it.toUserMessage() } }
+                        scope.launch { runCatching { admin.saveSystemSettings(token, buildJsonObject { put("api_runtime_mode", if (lowResident) "LIGHTWEIGHT" else "SUPREME"); put("energy_saving_enabled", energy) }) }.onSuccess { settings = it; message = "运行策略已保存" }.onFailure { error = it.toUserMessage() } }
                     }) { Text("保存运行策略") }
                 }
             }
@@ -443,7 +455,7 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
                     Text("运行身份", style = MaterialTheme.typography.titleSmall)
                     if (identity?.applicable == true) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { identity?.supported_modes.orEmpty().filter { it != "system" }.forEach { option -> FilterChip(selected = identity?.mode == option, onClick = { identity = identity?.copy(mode = option) }, label = { Text(option) }) } }
-                        Button(enabled = unlock != null && identity?.mode != null, onClick = { scope.launch { runCatching { ApiClient.api.saveRuntimeIdentity(newIdempotencyKey(), unlock!!, RuntimeIdentityRequest(identity!!.mode!!)) }.onSuccess { identity = it; message = "运行身份已保存" }.onFailure { error = it.toUserMessage() } } }) { Text("保存运行身份") }
+                        Button(enabled = unlock != null && identity?.mode != null, onClick = { scope.launch { runCatching { admin.saveRuntimeIdentity(unlock!!, RuntimeIdentityRequest(identity!!.mode!!)) }.onSuccess { identity = it; message = "运行身份已保存" }.onFailure { error = it.toUserMessage() } } }) { Text("保存运行身份") }
                     } else {
                         Text(identity?.note ?: "当前部署由 Docker 管理，无需在手机端设置运行身份。", style = MaterialTheme.typography.bodySmall)
                     }
@@ -461,7 +473,7 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
         }
     }
     if (showUnlock) {
-        AlertDialog(onDismissRequest = { showUnlock = false }, title = { Text("解锁系统设置") }, text = { OutlinedTextField(password, { password = it }, label = { Text("当前账户密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { TextButton(onClick = { scope.launch { runCatching { ApiClient.api.unlockSystemSettings(SystemSettingsUnlockRequest(password)) }.onSuccess { unlock = it.unlock_token; password = ""; showUnlock = false }.onFailure { error = it.toUserMessage() } } }) { Text("验证") } }, dismissButton = { TextButton(onClick = { showUnlock = false }) { Text("取消") } })
+        AlertDialog(onDismissRequest = { showUnlock = false }, title = { Text("解锁系统设置") }, text = { OutlinedTextField(password, { password = it }, label = { Text("当前账户密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { TextButton(onClick = { scope.launch { runCatching { admin.unlockSystemSettings(SystemSettingsUnlockRequest(password)) }.onSuccess { unlock = it.unlock_token; password = ""; showUnlock = false }.onFailure { error = it.toUserMessage() } } }) { Text("验证") } }, dismissButton = { TextButton(onClick = { showUnlock = false }) { Text("取消") } })
     }
 }
 
@@ -469,6 +481,7 @@ fun SystemSettingsScreen(appViewModel: AppViewModel) {
 fun EdgeGatewayScreen(appViewModel: AppViewModel) {
     if (!adminUser(appViewModel)) { AccessDeniedScreen(); return }
     val scope = rememberCoroutineScope()
+    val admin: AdminViewModel = viewModel()
     var config by remember { mutableStateOf<EdgeGatewayConfiguration?>(null) }
     var logs by remember { mutableStateOf<EdgeGatewayLogs?>(null) }
     var token by remember { mutableStateOf<String?>(null) }
@@ -482,7 +495,7 @@ fun EdgeGatewayScreen(appViewModel: AppViewModel) {
     var error by remember { mutableStateOf<String?>(null) }
 
     fun load() = scope.launch {
-        runCatching { config = ApiClient.api.edgeGateway(token); logs = ApiClient.api.edgeGatewayLogs(); config?.let { enabled = it.enabled; mode = it.validation_mode; hosts = it.proxy_hosts; if (token != null) frpc = it.frpc_toml } }.onFailure { error = it.toUserMessage() }
+        runCatching { config = admin.edgeGateway(token); logs = admin.edgeGatewayLogs(); config?.let { enabled = it.enabled; mode = it.validation_mode; hosts = it.proxy_hosts; if (token != null) frpc = it.frpc_toml } }.onFailure { error = it.toUserMessage() }
     }
     LaunchedEffect(Unit) { load() }
 
@@ -503,9 +516,9 @@ fun EdgeGatewayScreen(appViewModel: AppViewModel) {
                     Text("FRP 配置", style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(frpc, { frpc = it }, label = { Text(if (token == null) "解锁后可编辑 frpc.toml" else "frpc.toml") }, enabled = token != null, minLines = 8, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { scope.launch { runCatching { ApiClient.api.validateEdgeGateway(EdgeGatewayDraft(enabled, mode, hosts, frpc)) }.onSuccess { message = "校验通过：${it.proxy_count} 个入口" }.onFailure { error = it.toUserMessage() } } }) { Text("校验") }
-                        Button(enabled = token != null, onClick = { scope.launch { runCatching { ApiClient.api.saveEdgeGateway(newIdempotencyKey(), token!!, EdgeGatewayDraft(enabled, mode, hosts, frpc)) }.onSuccess { config = it; message = "网关配置已保存" }.onFailure { error = it.toUserMessage() } } }) { Text("保存") }
-                        TextButton(enabled = token != null, onClick = { scope.launch { runCatching { ApiClient.api.rollbackEdgeGateway(token!!) }.onSuccess { config = it; hosts = it.proxy_hosts; frpc = it.frpc_toml; message = "已回滚上一版配置" }.onFailure { error = it.toUserMessage() } } }) { Text("回滚") }
+                        Button(onClick = { scope.launch { runCatching { admin.validateEdgeGateway(EdgeGatewayDraft(enabled, mode, hosts, frpc)) }.onSuccess { message = "校验通过：${it.proxy_count} 个入口" }.onFailure { error = it.toUserMessage() } } }) { Text("校验") }
+                        Button(enabled = token != null, onClick = { scope.launch { runCatching { admin.saveEdgeGateway(token!!, EdgeGatewayDraft(enabled, mode, hosts, frpc)) }.onSuccess { config = it; message = "网关配置已保存" }.onFailure { error = it.toUserMessage() } } }) { Text("保存") }
+                        TextButton(enabled = token != null, onClick = { scope.launch { runCatching { admin.rollbackEdgeGateway(token!!) }.onSuccess { config = it; hosts = it.proxy_hosts; frpc = it.frpc_toml; message = "已回滚上一版配置" }.onFailure { error = it.toUserMessage() } } }) { Text("回滚") }
                     }
                 }
             }
@@ -530,7 +543,7 @@ fun EdgeGatewayScreen(appViewModel: AppViewModel) {
             }
         }
     }
-    if (showUnlock) AlertDialog(onDismissRequest = { showUnlock = false }, title = { Text("解锁网关配置") }, text = { OutlinedTextField(password, { password = it }, label = { Text("当前账户密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { TextButton(onClick = { scope.launch { runCatching { ApiClient.api.unlockSystemSettings(SystemSettingsUnlockRequest(password)) }.onSuccess { token = it.unlock_token; password = ""; showUnlock = false; load() }.onFailure { error = it.toUserMessage() } } }) { Text("验证") } }, dismissButton = { TextButton(onClick = { showUnlock = false }) { Text("取消") } })
+    if (showUnlock) AlertDialog(onDismissRequest = { showUnlock = false }, title = { Text("解锁网关配置") }, text = { OutlinedTextField(password, { password = it }, label = { Text("当前账户密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { TextButton(onClick = { scope.launch { runCatching { admin.unlockSystemSettings(SystemSettingsUnlockRequest(password)) }.onSuccess { token = it.unlock_token; password = ""; showUnlock = false; load() }.onFailure { error = it.toUserMessage() } } }) { Text("验证") } }, dismissButton = { TextButton(onClick = { showUnlock = false }) { Text("取消") } })
 }
 
 @Composable

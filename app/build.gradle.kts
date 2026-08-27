@@ -133,6 +133,16 @@ android {
     }
 }
 
+kotlin {
+    sourceSets {
+        getByName("main").kotlin.setSrcDirs(listOf(if (standaloneMode) "src/main/kotlin" else "src/main/java"))
+        getByName("test").kotlin.setSrcDirs(listOf(if (standaloneMode) "src/test/kotlin" else "src/test/java"))
+        getByName("androidTest").kotlin.setSrcDirs(
+            listOf(if (standaloneMode) "src/androidTest/kotlin" else "src/androidTest/java"),
+        )
+    }
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }

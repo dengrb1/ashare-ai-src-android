@@ -21,19 +21,26 @@ import com.ashareai.app.island.FocusCapabilities
 import com.ashareai.app.island.FocusNotification
 import com.ashareai.app.data.normalizeServerUrl
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.ConnectionUiState
+import com.ashareai.app.ui.ConnectionViewModel
+import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.MarketRefreshIntervals
 import com.ashareai.app.ui.components.AppCard
 import com.ashareai.app.ui.components.KeyValueRow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 /** 设置：服务器地址、前台行情刷新间隔、深浅色、超级岛监控开关。 */
 @Composable
 fun SettingsScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
+    val connectionViewModel: ConnectionViewModel = viewModel()
+    val connectionState by connectionViewModel.state.collectAsState()
     val context = appViewModel.screenContext()
-    val foregroundRefreshIntervalSeconds by appViewModel.foregroundRefreshIntervalSeconds.collectAsState()
+    val marketViewModel = LocalMarketViewModel.current
+    val foregroundRefreshIntervalSeconds by marketViewModel.refreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = true)
 
@@ -68,6 +75,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
 
     LaunchedEffect(Unit) {
         baseUrl = appViewModel.settings.currentBaseUrl()
+        connectionViewModel.probeConfigured()
         focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
     }
 
@@ -102,19 +110,45 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = {
-                        val normalizedUrl = normalizeServerUrl(baseUrl).getOrElse {
-                            message = it.message ?: "服务器地址格式不正确"
-                            return@Button
-                        }
-                        baseUrl = normalizedUrl
-                        scope.launch {
-                            appViewModel.settings.setBaseUrl(normalizedUrl)
-                            com.ashareai.app.data.ApiClient.rebuild()
-                            message = "已保存，新地址将在下次请求生效"
-                        }
-                    }) { Text("保存") }
+                        connectionViewModel.saveAndProbe(
+                            address = baseUrl,
+                            onResult = { probe ->
+                                baseUrl = probe.address ?: baseUrl
+                                message = probe.message
+                                if (probe.sessionInvalidated) appViewModel.showLogin()
+                            },
+                        )
+                    }) { Text("保存并探测") }
+                    when (val state = connectionState) {
+                        ConnectionUiState.Probing -> Text("正在探测服务…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        is ConnectionUiState.Result -> Text(
+                            "连接分类：${ConnectionViewModel.label(state.probe.classification)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (state.probe.canEstablishSession) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
+                        is ConnectionUiState.Error -> Text(state.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        ConnectionUiState.Idle -> Unit
+                    }
                     Text(
                         "修改后如果登录态失效，请重新登录。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            item {
+                val probe = (connectionState as? ConnectionUiState.Result)?.probe
+                AppCard {
+                    Text("Fusion 基础设施", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    KeyValueRow("API", probe?.infrastructure?.api?.label() ?: "未知")
+                    KeyValueRow("数据库", probe?.infrastructure?.database?.label() ?: "未知")
+                    KeyValueRow("行情桥", probe?.infrastructure?.quoteBridge?.label() ?: "未知")
+                    KeyValueRow("新闻桥", probe?.infrastructure?.newsBridge?.label() ?: "未知")
+                    KeyValueRow("模型网关", probe?.infrastructure?.modelGateway?.label() ?: "未知")
+                    Text(
+                        "仅展示聚合状态，不展示服务端内部地址或错误详情。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -138,7 +172,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                                     FilterChip(
                                         selected = foregroundRefreshIntervalSeconds == sec,
                                         onClick = {
-                                            appViewModel.saveForegroundRefreshInterval(sec) { msg ->
+                                            marketViewModel.saveRefreshInterval(sec) { msg ->
                                                 message = msg ?: "刷新间隔已改为 ${sec}s"
                                             }
                                         },
@@ -174,7 +208,7 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                             Text("行情与研究通知", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "后台监控持仓、交易预警和研究进度。所有设备使用标准通知；系统允许时会提交焦点通知协议。",
+                                "后台监控持仓、风险提醒和研究进度。所有设备使用标准通知；系统允许时会提交焦点通知协议。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -204,12 +238,14 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     KeyValueRow("普通通知", if (notificationsGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()) "可用" else "未授权")
                     val capabilities = focusCapabilities
                     KeyValueRow("HyperOS 焦点协议", capabilities?.protocolVersion?.takeIf { it > 0 }?.let { "v$it" } ?: "不支持")
+                    KeyValueRow("焦点通知权限", if (capabilities?.focusPermissionGranted == true) "已开启" else "未开启或不可查询")
+                    KeyValueRow("小米超级岛 App ID", if (capabilities?.appIdConfigured == true) "已配置" else "未配置")
                     KeyValueRow(
                         "HyperOS 3 超级岛",
-                        if (capabilities?.superIslandReady == true) "已确认 v3 协议" else "已提交 v3 载荷（系统未公开回报）",
+                        if (capabilities?.superIslandReady == true) "本机条件就绪" else "普通通知降级可用",
                     )
                     Text(
-                        "实现采用 InstallerX-Revived 同款 focus-api v3 通知结构。系统仍可能按 ROM 版本、通知设置或应用授权决定是否上岛。",
+                        "客户端按小米超级岛 param_v2 规范持续更新同一通知；正式展示仍取决于平台场景审核、证书指纹、ROM 与用户通知设置。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -254,4 +290,10 @@ fun SettingsScreen(appViewModel: AppViewModel) {
             }
         }
     }
+}
+
+private fun com.ashareai.app.data.InfrastructureAvailability.label(): String = when (this) {
+    com.ashareai.app.data.InfrastructureAvailability.Available -> "可用"
+    com.ashareai.app.data.InfrastructureAvailability.Unavailable -> "不可用"
+    com.ashareai.app.data.InfrastructureAvailability.Unknown -> "未知"
 }

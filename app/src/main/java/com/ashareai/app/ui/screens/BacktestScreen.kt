@@ -8,51 +8,45 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.Backtest
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.ashareai.app.data.model.BacktestRequest
 import com.ashareai.app.data.model.Snapshot
-import com.ashareai.app.data.newIdempotencyKey
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonPrimitive
 
 /** 回测工作台：提交回测 + 任务列表（活动任务 3s 轮询）。 */
 @Composable
 fun BacktestScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
-    var backtests by remember { mutableStateOf<List<Backtest>>(emptyList()) }
-    var snapshots by remember { mutableStateOf<List<Snapshot>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val simulationViewModel: SimulationViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val backtestState by simulationViewModel.backtestState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showSubmit by remember { mutableStateOf(false) }
 
-    suspend fun load() {
-        try {
-            backtests = ApiClient.api.backtests(limit = 20)
-            error = null
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-        } finally {
-            loading = false
-        }
+    val workspace = when (val state = backtestState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
     }
+    val backtests = workspace?.backtests.orEmpty()
+    val snapshots = workspace?.snapshots.orEmpty()
+    val loading = backtestState is ScreenState.Loading
+    val error = (backtestState as? ScreenState.Error)?.message
 
-    LaunchedEffect(Unit) {
-        load()
-        try {
-            snapshots = ApiClient.api.snapshots()
-        } catch (_: Exception) {
-        }
-    }
+    LaunchedEffect(Unit) { simulationViewModel.loadBacktests() }
 
-    LaunchedEffect(backtests.any { isActiveStatus(it.status) }) {
-        while (backtests.any { isActiveStatus(it.status) }) {
-            delay(3000)
-            load()
+    val hasActiveBacktest = backtests.any { isActiveStatus(it.status) }
+    LaunchedEffect(lifecycleOwner, hasActiveBacktest) {
+        if (!hasActiveBacktest) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                delay(3000)
+                simulationViewModel.refreshBacktests()
+            }
         }
     }
 
@@ -64,7 +58,7 @@ fun BacktestScreen(appViewModel: AppViewModel) {
             TextButton(onClick = { showSubmit = true }) { Text("新建回测") }
         }
 
-        error?.let { Box(Modifier.padding(horizontal = 16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
+        error?.let { Box(Modifier.padding(horizontal = 16.dp)) { ErrorBanner(it) { simulationViewModel.refreshBacktests() } } }
 
         if (loading) {
             LoadingBox()
@@ -106,14 +100,7 @@ fun BacktestScreen(appViewModel: AppViewModel) {
                             Row {
                                 Spacer(Modifier.weight(1f))
                                 TextButton(onClick = {
-                                    scope.launch {
-                                        try {
-                                            ApiClient.api.retryBacktest(bt.backtest_id)
-                                            load()
-                                        } catch (e: Exception) {
-                                            error = e.toUserMessage()
-                                        }
-                                    }
+                                    simulationViewModel.retryBacktest(bt.backtest_id)
                                 }) { Text("重试") }
                             }
                         }
@@ -129,14 +116,7 @@ fun BacktestScreen(appViewModel: AppViewModel) {
             onDismiss = { showSubmit = false },
             onSubmit = { request ->
                 showSubmit = false
-                scope.launch {
-                    try {
-                        ApiClient.api.submitBacktest(newIdempotencyKey(), request)
-                        load()
-                    } catch (e: Exception) {
-                        error = e.toUserMessage()
-                    }
-                }
+                simulationViewModel.submitBacktest(request)
             },
         )
     }

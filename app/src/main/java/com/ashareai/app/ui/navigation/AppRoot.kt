@@ -3,6 +3,7 @@ package com.ashareai.app.ui.navigation
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -61,11 +63,11 @@ object Routes {
 private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
 
 private val bottomTabs = listOf(
-    BottomTab(Routes.HOME, "首页", Icons.Outlined.Home),
+    BottomTab(Routes.HOME, "研究概览", Icons.Outlined.Home),
     BottomTab(Routes.MARKET, "行情", Icons.Outlined.CandlestickChart),
     BottomTab(Routes.RESEARCH_HUB, "研究", Icons.Outlined.Science),
-    BottomTab(Routes.AI_CHAT, "问答", Icons.AutoMirrored.Outlined.Chat),
-    BottomTab(Routes.PROFILE, "我的", Icons.Outlined.AccountCircle),
+    BottomTab(Routes.AI_CHAT, "AI 问答", Icons.AutoMirrored.Outlined.Chat),
+    BottomTab(Routes.PROFILE, "个人与系统", Icons.Outlined.AccountCircle),
 )
 
 @Composable
@@ -126,7 +128,17 @@ private fun MainScaffold(
                     shadowElevation = 8.dp,
                 ) {
                     NavigationBar(
-                        modifier = Modifier.height(56.dp),
+                        modifier = Modifier
+                            .height(56.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+                                    ),
+                                ),
+                            ),
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
                     ) {

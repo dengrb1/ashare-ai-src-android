@@ -19,65 +19,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.KlinePeriod
 import com.ashareai.app.data.KlineRange
-import com.ashareai.app.data.KlineRepository
 import com.ashareai.app.data.model.AssetStateRequest
-import com.ashareai.app.data.model.KlineBar
 import com.ashareai.app.data.model.Quote
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.theme.changeColor
-import kotlinx.coroutines.launch
 
 /** 个股详情：报价 + K线（周期/副图切换）+ 明细字段。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostController, symbol: String) {
-    val quotes by appViewModel.quotes.collectAsState()
-    val assets by appViewModel.assets.collectAsState()
-    val scope = rememberCoroutineScope()
+    val klineViewModel: KlineViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val klineState by klineViewModel.state.collectAsState()
+    val requestCount by klineViewModel.requestCount.collectAsState()
+    val marketViewModel = LocalMarketViewModel.current
+    val quotes by marketViewModel.quotes.collectAsState()
+    val assets by marketViewModel.assets.collectAsState()
     var fetchedQuote by remember(symbol) { mutableStateOf<Quote?>(null) }
     val quote = quotes[symbol] ?: fetchedQuote
 
     var period by remember { mutableStateOf(KlinePeriod.DAY) }
     var range by remember { mutableStateOf(KlineRange.MONTH_3) }
     var subChart by remember { mutableStateOf(SubChart.VOLUME) }
-    var bars by remember { mutableStateOf<List<KlineBar>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var requestCount by remember { mutableIntStateOf(0) }
-    var retryKey by remember { mutableIntStateOf(0) }
     var showPeriodSheet by remember { mutableStateOf(false) }
     var showRangeSheet by remember { mutableStateOf(false) }
-    val repository = remember { KlineRepository(ApiClient.api) }
+
+    val klineContent = when (val state = klineState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous ?: KlineContent()
+        ScreenState.Loading, ScreenState.Empty -> KlineContent()
+    }
+    val bars = klineContent.bars
+    val loading = klineState is ScreenState.Loading
+    val error = (klineState as? ScreenState.Error)?.message
 
     val inWatchlist = symbol in (assets?.watchlist ?: emptyList())
 
-    LaunchedEffect(symbol, period, range, retryKey) {
-        loading = true
-        error = null
-        requestCount = 0
-        try {
-            val result = repository.load(symbol, period, range) { requestCount = it }
-            bars = result.bars
-            requestCount = result.requestCount
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-        } finally {
-            loading = false
-        }
-    }
+    LaunchedEffect(symbol, period, range) { klineViewModel.load(symbol, period, range) }
 
     LaunchedEffect(symbol) {
         // 进入详情立即拉一次最新报价
-        try {
-            fetchedQuote = ApiClient.api.quote(symbol, refresh = true)
-            appViewModel.refreshQuotes()
-        } catch (_: Exception) {
-        }
+        marketViewModel.refreshQuote(symbol) { quote, _ -> fetchedQuote = quote }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -92,7 +76,7 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                 IconButton(onClick = {
                     val current = assets ?: return@IconButton
                     val newList = if (inWatchlist) current.watchlist - symbol else current.watchlist + symbol
-                    appViewModel.saveAssets(
+                    marketViewModel.saveAssets(
                         AssetStateRequest(
                             watchlist = newList,
                             positions = current.positions,
@@ -187,8 +171,8 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                         Text("正在加载第 ${requestCount + 1} 段", style = MaterialTheme.typography.labelSmall)
                     }
                 } else if (error != null) {
-                    ErrorBanner(error!!) {
-                        retryKey += 1
+                    ErrorBanner(requireNotNull(error)) {
+                        klineViewModel.load(symbol, period, range)
                     }
                 } else {
                     CandlestickChart(

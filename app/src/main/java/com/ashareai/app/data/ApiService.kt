@@ -7,11 +7,11 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
-interface ApiService {
+interface ApiService : HealthApi {
 
     // ---- 健康 / 认证 ----
     @GET("api/v1/health")
-    suspend fun health(): HealthResponse
+    override suspend fun health(): HealthResponse
 
     @POST("api/v1/auth/token")
     suspend fun token(@Body body: LoginRequest): TokenResponse

@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,9 @@ import androidx.core.content.ContextCompat
 import com.ashareai.app.island.MonitorService
 import com.ashareai.app.island.PushManager
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.LocalAppContainer
+import com.ashareai.app.ui.LocalMarketViewModel
+import com.ashareai.app.ui.MarketViewModel
 import com.ashareai.app.ui.navigation.AppRoot
 import com.ashareai.app.ui.theme.AShareTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,16 +34,19 @@ class MainActivity : ComponentActivity() {
 
     private val pendingRoute = MutableStateFlow<String?>(null)
     private lateinit var appViewModel: AppViewModel
+    private lateinit var marketViewModel: MarketViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         consumeIntent(intent)
         appViewModel = ViewModelProvider(this)[AppViewModel::class.java]
+        marketViewModel = ViewModelProvider(this)[MarketViewModel::class.java]
         appViewModel.attachHostContext(this)
         setContent {
             val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
             val authState by appViewModel.authState.collectAsState()
+            val foreground by appViewModel.foreground.collectAsState()
             val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = false)
             var notificationsGranted by remember {
                 mutableStateOf(
@@ -61,8 +68,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            LaunchedEffect(authState, foreground) {
+                marketViewModel.bindSession(
+                    isSignedIn = authState is AppViewModel.AuthState.LoggedIn,
+                    isForeground = foreground,
+                )
+            }
+
             AShareTheme(darkModePref = darkMode) {
-                AppRoot(appViewModel, pendingRoute) { pendingRoute.value = null }
+                CompositionLocalProvider(
+                    LocalAppContainer provides appViewModel.container,
+                    LocalMarketViewModel provides marketViewModel,
+                ) {
+                    AppRoot(appViewModel, pendingRoute) { pendingRoute.value = null }
+                }
             }
         }
     }

@@ -35,7 +35,7 @@ fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) 
                     Text(user?.username ?: "--", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        if (user?.role?.uppercase() == "ADMIN") "管理员" else "普通用户",
+                        if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) "管理员" else "普通用户",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -45,7 +45,7 @@ fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) 
             item { ProfileEntry("通知中心") { navController.navigate(Routes.NOTIFICATIONS) } }
             item { ProfileEntry("个人档案（导出/导入）") { navController.navigate(Routes.PERSONAL_DATA) } }
             item { ProfileEntry("设置") { navController.navigate(Routes.SETTINGS) } }
-            if (user?.role?.uppercase() == "ADMIN") {
+            if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) {
                 item {
                     Text(
                         "管理员控制台",
@@ -70,7 +70,7 @@ fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) 
 
             item {
                 Text(
-                    "本应用仅提供模拟研究与观察建议，不构成投资建议，不执行任何真实交易。",
+                    "本应用仅提供研究、模拟组合与观察建议，不执行真实交易。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

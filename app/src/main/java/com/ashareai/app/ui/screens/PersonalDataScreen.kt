@@ -7,41 +7,45 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.model.ArchiveApplyRequest
-import com.ashareai.app.data.model.ArchiveExportRequest
-import com.ashareai.app.data.model.PersonalArchiveJob
-import com.ashareai.app.data.newIdempotencyKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.ProfileDataViewModel
 import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.isActiveStatus
 import com.ashareai.app.ui.statusLabel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** 个人档案：加密导出（下载 .ashare 文件到下载目录）。导入建议在 Web 端操作。 */
 @Composable
 fun PersonalDataScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
+    val profileViewModel: ProfileDataViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val profileState by profileViewModel.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val context = appViewModel.screenContext()
+    val scope = rememberCoroutineScope()
     var passphrase by remember { mutableStateOf("") }
-    var job by remember { mutableStateOf<PersonalArchiveJob?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
 
+    val job = (profileState as? com.ashareai.app.ui.ScreenState.Content)?.value?.job
+        ?: (profileState as? com.ashareai.app.ui.ScreenState.Error)?.previous?.job
+    val stateError = (profileState as? com.ashareai.app.ui.ScreenState.Error)?.message
+
     // 任务态轮询
-    LaunchedEffect(job?.status) {
+    LaunchedEffect(lifecycleOwner, job?.status) {
         val current = job ?: return@LaunchedEffect
         val id = current.export_id ?: current.job_id ?: return@LaunchedEffect
-        while (isActiveStatus(job?.status)) {
-            delay(1500)
-            try {
-                job = ApiClient.api.exportStatus(id)
-            } catch (e: Exception) {
-                error = e.toUserMessage()
-                break
+        if (!isActiveStatus(current.status)) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                delay(1500)
+                profileViewModel.refreshExport(id)
             }
         }
     }
@@ -80,15 +84,9 @@ fun PersonalDataScreen(appViewModel: AppViewModel) {
                             }
                             working = true
                             error = null
-                            scope.launch {
-                                try {
-                                    job = ApiClient.api.createExport(ArchiveExportRequest(passphrase))
-                                    info = "导出任务已提交"
-                                } catch (e: Exception) {
-                                    error = e.toUserMessage()
-                                } finally {
-                                    working = false
-                                }
+                            profileViewModel.createExport(passphrase) { message ->
+                                if (message == null) info = "导出任务已提交" else error = message
+                                working = false
                             }
                         },
                         enabled = !working,
@@ -115,7 +113,7 @@ fun PersonalDataScreen(appViewModel: AppViewModel) {
                                     working = true
                                     scope.launch {
                                         try {
-                                            val body = ApiClient.api.downloadExport(id)
+                                            val body = profileViewModel.downloadExport(id)
                                             val fileName = "ashare-export-${System.currentTimeMillis()}.ashare"
                                             val values = android.content.ContentValues().apply {
                                                 put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
@@ -160,7 +158,16 @@ fun PersonalDataScreen(appViewModel: AppViewModel) {
                 }
             }
 
-            error?.let { item { ErrorBanner(it) { error = null } } }
+            (stateError ?: error)?.let {
+                item {
+                    ErrorBanner(it) {
+                        error = null
+                        job?.let { current ->
+                            (current.export_id ?: current.job_id)?.let(profileViewModel::refreshExport)
+                        }
+                    }
+                }
+            }
             info?.let {
                 item {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)

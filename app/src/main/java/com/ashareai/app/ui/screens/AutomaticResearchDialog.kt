@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.AutomaticResearchReportSettings
 import com.ashareai.app.data.model.ResearchSettings
 import com.ashareai.app.data.model.ResearchSettingsRequest
@@ -35,6 +34,7 @@ internal fun AutomaticResearchDialog(
     settings: ResearchSettings,
     onDismiss: () -> Unit,
     onSaved: (ResearchSettings) -> Unit,
+    saveSettings: suspend (ResearchSettingsRequest) -> ResearchSettings,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val fallback = listOf(
@@ -98,7 +98,7 @@ internal fun AutomaticResearchDialog(
                             saving = true
                             coroutineScope.launch {
                                 try {
-                                    onSaved(ApiClient.api.saveResearchSettings(ResearchSettingsRequest(reports)))
+                                onSaved(saveSettings(ResearchSettingsRequest(reports)))
                                 } catch (e: Exception) {
                                     error = e.toUserMessage()
                                 } finally {

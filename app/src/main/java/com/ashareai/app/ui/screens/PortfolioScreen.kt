@@ -12,12 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.data.model.Portfolio
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -25,26 +22,18 @@ import kotlinx.serialization.json.jsonPrimitive
 /** 模拟组合：权重条形展示 + 持仓明细。 */
 @Composable
 fun PortfolioScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
+    val portfolioViewModel: PortfolioViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val portfolioState by portfolioViewModel.state.collectAsState()
     var date by remember { mutableStateOf(todayTradingDate()) }
-    var portfolio by remember { mutableStateOf<Portfolio?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    suspend fun load() {
-        loading = true
-        error = null
-        try {
-            portfolio = ApiClient.api.portfolio(date)
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-            portfolio = null
-        } finally {
-            loading = false
-        }
+    val portfolio = when (val state = portfolioState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
     }
+    val loading = portfolioState is ScreenState.Loading
+    val error = (portfolioState as? ScreenState.Error)?.message
 
-    LaunchedEffect(date) { load() }
+    LaunchedEffect(date) { portfolioViewModel.load(date) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(title = "模拟组合")
@@ -55,7 +44,7 @@ fun PortfolioScreen(appViewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         )
 
-        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
+        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { portfolioViewModel.retry(date) } } }
 
         if (loading) {
             LoadingBox()

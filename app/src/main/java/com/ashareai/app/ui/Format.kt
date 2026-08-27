@@ -66,7 +66,7 @@ fun todayTradingDate(): String =
 /** 运行状态中文标签 */
 fun statusLabel(status: String?): String = when (status?.uppercase()) {
     "PENDING", "QUEUED" -> "排队中"
-    "RUNNING", "PROCESSING" -> "执行中"
+    "RUNNING", "PROCESSING" -> "研究中"
     "SUCCEEDED", "COMPLETED", "SUCCESS" -> "已完成"
     "FAILED", "ERROR" -> "失败"
     "CANCELLED", "CANCELED" -> "已取消"

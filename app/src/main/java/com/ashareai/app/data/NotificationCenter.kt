@@ -18,10 +18,15 @@ data class NotificationCenterState(
 )
 
 class NotificationCenter(
-    private val api: ApiService,
+    private val repository: NotificationRepository,
     private val scope: CoroutineScope,
     private val onUnreadChanged: (Int) -> Unit,
 ) {
+    constructor(
+        api: ApiService,
+        scope: CoroutineScope,
+        onUnreadChanged: (Int) -> Unit,
+    ) : this(NotificationRepository(ApiServiceProvider { api }), scope, onUnreadChanged)
     private val _state = MutableStateFlow(NotificationCenterState())
     val state: StateFlow<NotificationCenterState> = _state.asStateFlow()
 
@@ -41,7 +46,7 @@ class NotificationCenter(
         val target = _state.value.items.firstOrNull { it.notification_id == notificationId }
         if (target?.read_at != null) return@launch
         runCatching {
-            api.markRead(newIdempotencyKey(), NotificationReadRequest(listOf(notificationId)))
+            repository.markRead(listOf(notificationId))
             _state.value = _state.value.copy(
                 items = _state.value.items.map {
                     if (it.notification_id == notificationId) it.copy(read_at = "read") else it
@@ -54,7 +59,7 @@ class NotificationCenter(
     }
 
     fun markAllRead() = scope.launch {
-        runCatching { api.markAllRead(newIdempotencyKey()) }
+        runCatching { repository.markAllRead() }
             .onSuccess {
                 _state.value = _state.value.copy(
                     items = if (_state.value.unreadOnly) emptyList() else {
@@ -81,7 +86,7 @@ class NotificationCenter(
             error = null,
         )
         runCatching {
-            api.notifications(
+            repository.notifications(
                 limit = 30,
                 cursor = if (reset) null else current.nextCursor,
                 unreadOnly = current.unreadOnly.takeIf { it },
@@ -105,7 +110,7 @@ class NotificationCenter(
     }
 
     private suspend fun refreshSummary() {
-        runCatching { api.notificationSummary() }
+        runCatching { repository.summary() }
             .onSuccess { onUnreadChanged(it.unread_count) }
     }
 }

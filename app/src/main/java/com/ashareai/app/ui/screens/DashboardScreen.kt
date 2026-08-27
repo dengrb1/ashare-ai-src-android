@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ashareai.app.data.model.PaperPosition
 import com.ashareai.app.data.model.Quote
 import com.ashareai.app.ui.*
@@ -20,21 +21,25 @@ import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.navigation.Routes
 import com.ashareai.app.ui.theme.changeColor
 
-/** 首页仪表盘：持仓盈亏总览 + 自选行情速览 + 收盘提示。 */
+/** Fusion 研究概览：模拟组合 + 自选行情 + 连接基础摘要。 */
 @Composable
 fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController) {
-    val assets by appViewModel.assets.collectAsState()
-    val quotes by appViewModel.quotes.collectAsState()
-    val session by appViewModel.marketSession.collectAsState()
-    val unread by appViewModel.unreadCount.collectAsState()
+    val dashboardViewModel: com.ashareai.app.ui.DashboardViewModel = viewModel()
+    val dashboardState by dashboardViewModel.state.collectAsState()
+    val marketViewModel = LocalMarketViewModel.current
+    val assets by marketViewModel.assets.collectAsState()
+    val quotes by marketViewModel.quotes.collectAsState()
+    val session by marketViewModel.marketSession.collectAsState()
+    val unread by marketViewModel.unreadCount.collectAsState()
 
     LaunchedEffect(Unit) {
-        if (assets == null) appViewModel.loadAssets()
+        if (assets == null) marketViewModel.loadWorkspace()
+        dashboardViewModel.load()
     }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBarSimple(
-            title = "霁衡智研",
+            title = "研究概览",
             unread = unread,
             onNotifications = { navController.navigate(Routes.NOTIFICATIONS) },
         )
@@ -64,6 +69,49 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             }
 
             item {
+                val connection by appViewModel.connection.collectAsState()
+                connection?.let { probe ->
+                    AppCard {
+                        Text("Fusion 研究工作台", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${com.ashareai.app.ui.ConnectionViewModel.label(probe.classification)} · 研究只读",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        probe.message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+                        Spacer(Modifier.height(8.dp))
+                        KeyValueRow("API", probe.infrastructure.api.dashboardLabel())
+                        KeyValueRow("数据库", probe.infrastructure.database.dashboardLabel())
+                        KeyValueRow("行情桥", probe.infrastructure.quoteBridge.dashboardLabel())
+                        KeyValueRow("新闻桥", probe.infrastructure.newsBridge.dashboardLabel())
+                        KeyValueRow("模型网关", probe.infrastructure.modelGateway.dashboardLabel())
+                    }
+                }
+            }
+
+            item {
+                AppCard {
+                    Text("最近研究运行", style = MaterialTheme.typography.titleSmall)
+                    when (val state = dashboardState) {
+                        ScreenState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                        ScreenState.Empty -> Text("暂无研究记录", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        is ScreenState.Error -> ErrorBanner(state.message) { dashboardViewModel.retry() }
+                        is ScreenState.Content -> {
+                            val run = state.value.latestRun
+                            if (run == null) {
+                                Text("暂无研究记录", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                KeyValueRow("状态", statusLabel(run.status))
+                                KeyValueRow("研究日", run.trading_date ?: run.requested_date ?: "--")
+                                run.phase?.let { KeyValueRow("阶段", it) }
+                                run.progress?.let { KeyValueRow("进度", "$it%") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 PnlSummaryCard(
                     positions = assets?.positions ?: emptyList(),
                     totalAssets = assets?.total_assets,
@@ -73,14 +121,14 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             }
 
             item {
-                SectionTitle("自选速览", trailing = {
+                SectionTitle("观察行情", trailing = {
                     TextButton(onClick = { navController.navigate(Routes.MARKET) }) { Text("全部行情") }
                 })
             }
 
             val watchSymbols = (assets?.watchlist ?: emptyList()).take(6)
             if (watchSymbols.isEmpty()) {
-                item { EmptyPlaceholder("暂无自选股，去行情页添加") }
+                item { EmptyPlaceholder("暂无观察标的，去行情页添加") }
             } else {
                 items(watchSymbols) { symbol ->
                     val quote = quotes[symbol]
@@ -92,17 +140,23 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
 
             item { Spacer(Modifier.height(4.dp)) }
             item {
-                SectionTitle("快捷入口")
+                SectionTitle("研究入口")
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    QuickEntry("自选持仓", Modifier.weight(1f)) { navController.navigate(Routes.ASSETS) }
-                    QuickEntry("卖出建议", Modifier.weight(1f)) { navController.navigate(Routes.EXIT_ADVICE) }
-                    QuickEntry("每日研究", Modifier.weight(1f)) { navController.navigate(Routes.RESEARCH) }
+                    QuickEntry("资产观察", Modifier.weight(1f)) { navController.navigate(Routes.ASSETS) }
+                    QuickEntry("模拟建议", Modifier.weight(1f)) { navController.navigate(Routes.EXIT_ADVICE) }
+                    QuickEntry("研究运行", Modifier.weight(1f)) { navController.navigate(Routes.RESEARCH) }
                 }
             }
         }
     }
+}
+
+private fun com.ashareai.app.data.InfrastructureAvailability.dashboardLabel(): String = when (this) {
+    com.ashareai.app.data.InfrastructureAvailability.Available -> "可用"
+    com.ashareai.app.data.InfrastructureAvailability.Unavailable -> "不可用"
+    com.ashareai.app.data.InfrastructureAvailability.Unknown -> "未知"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
  * 单例网络栈。baseUrl 可在设置页修改，修改后调用 [rebuild] 重建。
  * Token 刷新采用同步互斥：多个并发 401 只触发一次 refresh。
  */
-object ApiClient {
+object ApiClient : ApiServiceProvider {
 
     val json = Json {
         ignoreUnknownKeys = true
@@ -42,6 +42,12 @@ object ApiClient {
     private var httpClient: OkHttpClient? = null
 
     @Volatile
+    private var serviceOverride: ApiService? = null
+
+    @Volatile
+    private var providerOverride: ApiServiceProvider? = null
+
+    @Volatile
     var onSessionExpired: (() -> Unit)? = null
 
     fun init(store: SettingsStore) {
@@ -56,7 +62,30 @@ object ApiClient {
     }
 
     val api: ApiService
-        get() = getRetrofit().create(ApiService::class.java)
+        get() = service()
+
+    override fun service(): ApiService = providerOverride?.service()
+        ?: serviceOverride
+        ?: getRetrofit().create(ApiService::class.java)
+
+    override fun httpClient(): OkHttpClient = okHttp()
+
+    fun setServiceProvider(provider: ApiServiceProvider?) {
+        synchronized(this) {
+            providerOverride = provider?.takeUnless { it === this }
+            serviceOverride = null
+        }
+    }
+
+    /** Test-only replacement point; token refresh remains exercised by the normal service. */
+    fun replaceServiceForTesting(service: ApiService?) {
+        synchronized(this) {
+            providerOverride = null
+            serviceOverride = service
+        }
+    }
+
+    fun clearServiceProviderForTesting() = replaceServiceForTesting(null)
 
     fun okHttp(): OkHttpClient = getOrCreateClient()
 
@@ -65,11 +94,31 @@ object ApiClient {
         return runBlocking { store.currentBaseUrl() }
     }
 
+    /** Unauthenticated, short-lived Retrofit instance for explicit health diagnostics. */
+    override fun healthService(baseUrl: String): HealthApi {
+        val normalizedAddress = normalizeServerUrl(baseUrl).getOrThrow()
+        providerOverride?.let { return it.healthService(normalizedAddress) }
+        val normalized = normalizedAddress.trimEnd('/') + "/"
+        val client = OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .writeTimeout(6, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl(normalized)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(ApiService::class.java)
+    }
+
     private fun getRetrofit(): Retrofit {
         retrofit?.let { return it }
         synchronized(this) {
             retrofit?.let { return it }
-            val base = currentBaseUrl().trimEnd('/') + "/"
+            val configuredBaseUrl = currentBaseUrl().trim()
+            require(configuredBaseUrl.isNotEmpty()) { "请先配置 Fusion 服务地址" }
+            val base = configuredBaseUrl.trimEnd('/') + "/"
             val built = Retrofit.Builder()
                 .baseUrl(base)
                 .client(getOrCreateClient())
@@ -156,7 +205,14 @@ object ApiClient {
                         return null
                     }
                     val tokens = json.decodeFromString(TokenResponse.serializer(), resp.body!!.string())
-                    store.saveTokens(tokens.access_token, tokens.refresh_token, tokens.expires_in)
+                    store.saveTokens(
+                        access = tokens.access_token,
+                        refresh = tokens.refresh_token,
+                        expiresInSeconds = tokens.expires_in,
+                        username = null,
+                        password = null,
+                        rememberPassword = null,
+                    )
                     tokens.access_token
                 }
             } catch (_: Exception) {
@@ -177,6 +233,9 @@ object ApiClient {
 
     private fun isAuthPath(request: Request): Boolean {
         val path = request.url.encodedPath
-        return path.endsWith("/auth/token") || path.endsWith("/auth/refresh") || path.endsWith("/auth/revoke")
+        return path.endsWith("/api/v1/health") ||
+            path.endsWith("/auth/token") ||
+            path.endsWith("/auth/refresh") ||
+            path.endsWith("/auth/revoke")
     }
 }

@@ -10,56 +10,52 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ashareai.app.data.ApiClient
 import com.ashareai.app.data.model.TradeAdviceMonitor
 import com.ashareai.app.data.model.TradeAdviceMonitorRequest
-import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.LocalMarketViewModel
+import com.ashareai.app.ui.ExitAdviceViewModel
+import com.ashareai.app.ui.ScreenState
 import com.ashareai.app.ui.fmtTime
 import com.ashareai.app.ui.components.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
-import java.util.UUID
 
-/** 自选股买入、卖出与止损的模拟提醒中心。 */
+/** 观察标的的模拟建议与风险提醒中心。 */
 @Composable
 fun ExitAdviceScreen(appViewModel: AppViewModel) {
-    val scope = rememberCoroutineScope()
-    val quotes by appViewModel.quotes.collectAsState()
-    var symbols by remember { mutableStateOf<List<String>>(emptyList()) }
-    var monitors by remember { mutableStateOf<List<TradeAdviceMonitor>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    suspend fun load() {
-        try {
-            symbols = ApiClient.api.assets().watchlist
-            monitors = ApiClient.api.tradeAdviceMonitors()
-            error = null
-        } catch (e: Exception) {
-            error = e.toUserMessage()
-        } finally { loading = false }
+    val exitAdviceViewModel: ExitAdviceViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val exitAdviceState by exitAdviceViewModel.state.collectAsState()
+    val marketViewModel = LocalMarketViewModel.current
+    val quotes by marketViewModel.quotes.collectAsState()
+    val content = when (val state = exitAdviceState) {
+        is ScreenState.Content -> state.value
+        is ScreenState.Error -> state.previous
+        ScreenState.Loading, ScreenState.Empty -> null
     }
-    LaunchedEffect(Unit) { load(); while (true) { delay(15_000); load() } }
+    val symbols = content?.symbols.orEmpty()
+    val monitors = content?.monitors.orEmpty()
+    val loading = exitAdviceState is ScreenState.Loading
+    val error = (exitAdviceState as? ScreenState.Error)?.message
+    // The connected app owns the single foreground market polling loop. This
+    // page loads on entry and refreshes explicitly so it cannot keep running in
+    // the background while the activity is stopped.
+    LaunchedEffect(Unit) { exitAdviceViewModel.load() }
     Column(Modifier.fillMaxSize()) {
-        TopAppBarSimple(title = "交易建议")
-        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { scope.launch { load() } } } }
+        TopAppBarSimple(title = "模拟建议")
+        error?.let { Box(Modifier.padding(16.dp)) { ErrorBanner(it) { exitAdviceViewModel.retry() } } }
         if (loading) {
             LoadingBox()
         } else if (symbols.isEmpty()) {
-            EmptyPlaceholder("暂无自选股\n请先添加自选股")
+            EmptyPlaceholder("暂无观察标的\n请先添加观察标的")
         } else {
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { TradeAdviceIntro() }
                 items(symbols, key = { it }) { symbol ->
                     val monitor = monitors.firstOrNull { it.symbol == symbol }
                     TradeAdviceCard(symbol, quotes[symbol]?.name, monitor) { enabled, buy, sell ->
-                        scope.launch {
-                            try {
-                                val saved = ApiClient.api.saveTradeAdviceMonitor(UUID.randomUUID().toString(), TradeAdviceMonitorRequest(symbol, enabled, buy, sell))
-                                monitors = (monitors.filterNot { it.symbol == symbol } + saved).sortedBy { it.symbol }
-                            } catch (e: Exception) { error = e.toUserMessage() }
-                        }
+                        exitAdviceViewModel.save(
+                            TradeAdviceMonitorRequest(symbol, enabled, buy, sell),
+                        )
                     }
                 }
             }
@@ -76,7 +72,7 @@ private fun TradeAdviceIntro() {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
-            "买入、卖出与止损为模拟建议；交易日 09:30 后生成，命中目标时每 5 分钟重复提醒，不会自动交易。",
+            "入场、退出与止损为模拟建议；交易日 09:30 后生成，命中目标时每 5 分钟重复提醒，仅供研究参考。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -123,8 +119,8 @@ private fun TradeAdviceCard(symbol: String, name: String?, monitor: TradeAdviceM
             // AI 目标价三块
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TargetTile("AI 买入", monitor.ai_buy_price, MaterialTheme.colorScheme.primary)
-                TargetTile("AI 卖出", monitor.ai_sell_price, MaterialTheme.colorScheme.onSurface)
+                TargetTile("AI 入场", monitor.ai_buy_price, MaterialTheme.colorScheme.primary)
+                TargetTile("AI 退出", monitor.ai_sell_price, MaterialTheme.colorScheme.onSurface)
                 TargetTile("止损", monitor.stop_loss_price, MaterialTheme.colorScheme.error)
             }
             // AI 说明
@@ -141,15 +137,15 @@ private fun TradeAdviceCard(symbol: String, name: String?, monitor: TradeAdviceM
         // 自定义价格 + 保存
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(buy, { buy = it }, label = { Text("自定义买入价") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(sell, { sell = it }, label = { Text("自定义卖出价") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(buy, { buy = it }, label = { Text("自定义入场价") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(sell, { sell = it }, label = { Text("自定义退出价") }, singleLine = true, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = { onSave(enabled, buy.toDoubleOrNull(), sell.toDoubleOrNull()) }, modifier = Modifier.fillMaxWidth()) { Text("保存自定义价格") }
     }
 }
 
-/** 目标价小卡片：AI 买入 / AI 卖出 / 止损。 */
+/** 目标价小卡片：AI 入场 / AI 退出 / 止损。 */
 @Composable
 private fun RowScope.TargetTile(label: String, price: Double?, color: Color) {
     Surface(
@@ -175,8 +171,8 @@ private fun alertLabel(monitor: TradeAdviceMonitor?): String {
     val alerts = monitor.last_alert_types
     return when {
         "STOP_LOSS_TRIGGERED" in alerts -> "止损触发"
-        "SELL_TARGET_HIT" in alerts -> "卖出目标命中"
-        "BUY_TARGET_HIT" in alerts -> "买入目标命中"
+        "SELL_TARGET_HIT" in alerts -> "退出目标命中"
+        "BUY_TARGET_HIT" in alerts -> "入场目标命中"
         else -> "监控中"
     }
 }

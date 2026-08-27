@@ -25,17 +25,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.ashareai.app.data.ApiClient
-import com.ashareai.app.data.ChatStreamClient
 import com.ashareai.app.data.ChatStreamEvent
+import com.ashareai.app.data.isLoopbackHost
+import com.ashareai.app.data.isWildcardHost
 import com.ashareai.app.data.model.*
 import com.ashareai.app.data.toUserMessage
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.AIChatViewModel
+import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.components.CompactTopBar
 import com.ashareai.app.ui.components.EmptyPlaceholder
 import com.ashareai.app.ui.components.ErrorBanner
 import com.ashareai.app.ui.fmtTime
 import com.mikepenz.markdown.m3.Markdown
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -65,10 +68,12 @@ internal fun appendQuickQuestion(draft: TextFieldValue, question: String): TextF
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIChatScreen(appViewModel: AppViewModel) {
+    val aiViewModel: AIChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val scope = rememberCoroutineScope()
     val context = appViewModel.screenContext()
-    val assets by appViewModel.assets.collectAsState()
-    val quotes by appViewModel.quotes.collectAsState()
+    val marketViewModel = LocalMarketViewModel.current
+    val assets by marketViewModel.assets.collectAsState()
+    val quotes by marketViewModel.quotes.collectAsState()
 
     var threads by remember { mutableStateOf<List<AIChatThread>>(emptyList()) }
     var currentThread by remember { mutableStateOf<AIChatThread?>(null) }
@@ -114,7 +119,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
     }
 
     suspend fun loadThreads(preferredId: String? = currentThread?.thread_id) {
-        val page = ApiClient.api.aiThreadIndex(
+        val page = aiViewModel.threads(
             limit = 100,
             archived = showArchived.takeIf { it },
             query = search.trim().takeIf { it.isNotEmpty() },
@@ -125,12 +130,12 @@ fun AIChatScreen(appViewModel: AppViewModel) {
     }
 
     suspend fun loadMessages(thread: AIChatThread) {
-        messages = ApiClient.api.aiMessages(thread.thread_id)
-        costSummary = runCatching { ApiClient.api.aiCosts(threadId = thread.thread_id) }.getOrNull()
+        messages = aiViewModel.messages(thread.thread_id)
+        costSummary = runCatching { aiViewModel.costs(threadId = thread.thread_id) }.getOrNull()
     }
 
     suspend fun createThread(): AIChatThread {
-        val created = ApiClient.api.createThread(AIChatThreadCreate("新对话"))
+        val created = aiViewModel.createThread("新对话")
         currentThread = created
         messages = emptyList()
         attachments = emptyList()
@@ -139,13 +144,13 @@ fun AIChatScreen(appViewModel: AppViewModel) {
     }
 
     fun patchThread(thread: AIChatThread, patch: AIChatThreadPatch) = scope.launch {
-        runCatching { ApiClient.api.patchThread(thread.thread_id, patch) }
+        runCatching { aiViewModel.patchThread(thread.thread_id, patch) }
             .onSuccess { loadThreads(it.thread_id) }
             .onFailure { error = it.toUserMessage() }
     }
 
     fun deleteThread(thread: AIChatThread) = scope.launch {
-        runCatching { ApiClient.api.deleteThread(thread.thread_id) }
+        runCatching { aiViewModel.deleteThread(thread.thread_id) }
             .onSuccess {
                 if (currentThread?.thread_id == thread.thread_id) {
                     currentThread = null
@@ -185,7 +190,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
                     bytes.toRequestBody(mime.toMediaTypeOrNull()),
                 )
             }
-            val uploaded = ApiClient.api.uploadAttachments(
+            val uploaded = aiViewModel.uploadAttachments(
                 parts,
                 thread.thread_id.toRequestBody("text/plain".toMediaTypeOrNull()),
             )
@@ -228,8 +233,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
                 stages = emptyMap()
                 streamingMode = null
                 dataStatus = null
-                ChatStreamClient.stream(
-                    appViewModel.settings,
+                aiViewModel.stream(
                     thread.thread_id,
                     AIChatSendRequest(
                         content = content,
@@ -274,7 +278,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
 
     LaunchedEffect(Unit) {
         runCatching { loadThreads() }.onFailure { error = it.toUserMessage() }
-        runCatching { ApiClient.api.aiModels() }.onSuccess {
+        runCatching { aiViewModel.models() }.onSuccess {
             models = it
             selectedModel = it.models.firstOrNull()
             reasoningEffort = it.reasoning_efforts.firstOrNull { effort -> effort == "medium" }
@@ -310,7 +314,7 @@ fun AIChatScreen(appViewModel: AppViewModel) {
             onDelete = ::deleteThread,
             onBulkDelete = {
                 scope.launch {
-                    runCatching { ApiClient.api.bulkDeleteThreads(BulkDeleteThreads(selectedThreads.toList())) }
+                    runCatching { aiViewModel.bulkDeleteThreads(selectedThreads.toList()) }
                         .onSuccess { selectedThreads = emptySet(); loadThreads() }
                         .onFailure { error = it.toUserMessage() }
                 }
@@ -614,7 +618,15 @@ private fun AttachmentImage(id: String, appViewModel: AppViewModel) {
     }
 }
 
-private fun safeLink(value: String?): String? = value?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+private fun safeLink(value: String?): String? {
+    val parsed = value?.trim()?.toHttpUrlOrNull() ?: return null
+    if (parsed.scheme !in setOf("http", "https") ||
+        parsed.username.isNotEmpty() || parsed.password.isNotEmpty() ||
+        parsed.host.isLoopbackHost() || parsed.host.isWildcardHost() ||
+        parsed.port in setOf(8787, 8081, 8082)
+    ) return null
+    return parsed.toString()
+}
 
 internal fun sanitizeMarkdown(content: String): String = content
     .replace(Regex("<[^>]+>"), "")

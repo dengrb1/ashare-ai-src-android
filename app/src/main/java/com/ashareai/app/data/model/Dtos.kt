@@ -38,6 +38,24 @@ data class HealthResponse(
     val status: String = "",
     val version: String? = null,
     val database: String? = null,
+    val git_sha: String? = null,
+    val execution_mode: String? = null,
+    val qmt_enabled: Boolean? = null,
+    val auto_trading_enabled: Boolean? = null,
+    val quote_bridge: InfrastructureHealth? = null,
+    val news_bridge: InfrastructureHealth? = null,
+    val gateway: InfrastructureHealth? = null,
+)
+
+/** Deliberately excludes bridge URLs and internal error text from the UI model. */
+@Serializable
+data class InfrastructureHealth(
+    val status: String? = null,
+    val healthy: Boolean? = null,
+    val configured: Boolean? = null,
+    val degraded: Boolean? = null,
+    val version: String? = null,
+    val latency_ms: Long? = null,
 )
 
 // ---------- 资产 ----------

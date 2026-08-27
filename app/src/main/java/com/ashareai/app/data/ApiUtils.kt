@@ -37,7 +37,7 @@ fun Throwable.toUserMessage(): String = when (this) {
             } else {
                 "登录已过期，请重新登录"
             }
-            403 -> detail ?: "无权限执行此操作"
+            403 -> detail ?: "无权限完成此请求"
             404 -> detail ?: "数据不存在"
             409 -> detail ?: "操作冲突，请刷新后重试"
             422 -> detail ?: "请求参数不合法"
