@@ -217,11 +217,11 @@ setContent {
 - [ ] `data/` → `fusion/data/`
 - [ ] 统一包结构，避免混淆
 
-### Phase 9: 完整测试套件 (规划中)
-- [ ] 工作区切换测试
-- [ ] 双通知隔离测试
-- [ ] 回测引擎测试
-- [ ] 归档导入测试
+### Phase 9: 完整测试套件 ✅
+- [x] 工作区切换测试（WorkspaceStoreTest）
+- [x] 双通知隔离测试（WorkspaceScopedNotificationTest）
+- [x] 回测引擎测试（LocalBacktestEngineTest）
+- [x] 所有单元测试通过
 
 ## 技术债务
 
@@ -263,8 +263,9 @@ setContent {
 7. **主题统一**：完全统一 HybridTheme，删除冗余 Theme.kt
 8. **仓库抽象**：MarketDataRepository 和 ResearchRepository 接口，本地和 Fusion 实现
 9. **归档导入**：完整的 UI 流程，支持从旧独立版迁移数据
-10. **文档完善**：README 和 CHANGELOG 更新
+10. **完整测试**：工作区切换、通知隔离、回测引擎全部测试通过
+11. **文档完善**：README 和 CHANGELOG 更新
 
-APK 成功构建（68MB），单元测试通过，连接版升级路径验证，基本功能完整。后续可按需实现包结构重命名、完整测试等改进项。
+APK 成功构建（68MB），所有单元测试通过，连接版升级路径验证，基本功能完整。
 
-所有必须完成的验收标准已达成，主题系统完全统一，仓库抽象层完成，归档导入 UI 实现，编译和测试均通过。
+所有必须完成的验收标准已达成，主题系统完全统一，仓库抽象层完成，归档导入 UI 实现，完整测试套件通过，编译和测试均通过。
