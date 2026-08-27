@@ -35,6 +35,20 @@
 - 通知来源明确标识
 - 深链路由包含工作区前缀（`local/` 或 `fusion/`）
 
+#### 数据仓库抽象层
+- `MarketDataRepository` 接口，统一行情数据访问
+- `ResearchRepository` 接口，统一研究流程管理
+- `LocalMarketDataRepository` 和 `FusionMarketDataRepository` 实现
+- `LocalResearchRepository` 和 `FusionResearchRepository` 实现
+- `WorkspaceScopedNotification` 通知模型，携带工作区标识
+
+#### 归档导入 UI
+- 文件选择器集成（支持 .ashare-local 文件）
+- 加密口令输入
+- 导入进度显示
+- 成功/失败反馈
+- 导入摘要（持仓、自选、报告、对话统计）
+
 ### 架构改进
 
 #### 统一应用入口
@@ -90,6 +104,11 @@
 - `com.ashareai.app.workspace.FusionHealthState` - Fusion 健康契约验证
 - `com.ashareai.app.standalone.backtest.LocalBacktestEngine` - 本地回测引擎
 - `com.ashareai.app.standalone.search.LocalFinancialSearchRepository` - 本地金融搜索
+- `com.ashareai.app.repository.MarketDataRepository` - 统一行情数据接口
+- `com.ashareai.app.repository.ResearchRepository` - 统一研究仓库接口
+- `com.ashareai.app.repository.WorkspaceScopedNotification` - 工作区通知模型
+- `com.ashareai.app.standalone.ui.archive.ArchiveImportFlow` - 归档导入 UI
+- `com.ashareai.app.standalone.ui.archive.importArchive` - 归档导入函数
 
 #### 包结构调整
 - `app/src/main/kotlin/com/ashareai/app/standalone/` → `app/src/main/java/com/ashareai/app/local/` (规划中)
