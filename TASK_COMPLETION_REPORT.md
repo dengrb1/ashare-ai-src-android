@@ -204,10 +204,13 @@ setContent {
 - [x] 通知模型扩展 `WorkspaceScopedNotification`
 - [x] 适配现有 standalone 和 connected 数据源
 
-### Phase 6.2: 独立版加密归档导入 (规划中)
-- [ ] 实现 `ArchiveImportFlow`
-- [ ] 导入自选、持仓、提醒、研究、报告、候选、模拟组合、对话
-- [ ] API Key 不导入（安全考虑）
+### Phase 6.2: 独立版加密归档导入 ✅
+- [x] 实现 `ArchiveImportFlow` Composable UI
+- [x] 文件选择器集成（ActivityResultContracts.GetContent）
+- [x] 口令输入和验证
+- [x] 导入自选、持仓、提醒、研究、报告、候选、模拟组合、对话
+- [x] 导入摘要显示（成功/失败反馈）
+- [x] API Key 不导入（安全考虑）
 
 ### Phase 8: 包结构调整 (规划中)
 - [ ] `standalone/` → `local/`
@@ -239,7 +242,7 @@ setContent {
 - [x] 主题系统完全统一，删除冗余代码
 
 ### ⚠️ 部分完成
-- [⚠️] 旧独立版可通过加密归档迁移数据（归档服务已存在，导入 UI 未实现）
+- [x] 旧独立版可通过加密归档迁移数据（归档服务已存在，导入 UI 已实现）
 - [⚠️] 包结构调整（保留原结构，未重命名为 local/fusion）
 
 ### 📋 规划中
@@ -259,8 +262,9 @@ setContent {
 6. **数据库升级**：Room 版本 4，支持回测表
 7. **主题统一**：完全统一 HybridTheme，删除冗余 Theme.kt
 8. **仓库抽象**：MarketDataRepository 和 ResearchRepository 接口，本地和 Fusion 实现
-9. **文档完善**：README 和 CHANGELOG 更新
+9. **归档导入**：完整的 UI 流程，支持从旧独立版迁移数据
+10. **文档完善**：README 和 CHANGELOG 更新
 
-APK 成功构建（68MB），单元测试通过，连接版升级路径验证，基本功能完整。后续可按需实现归档导入 UI、包结构重命名、完整测试等改进项。
+APK 成功构建（68MB），单元测试通过，连接版升级路径验证，基本功能完整。后续可按需实现包结构重命名、完整测试等改进项。
 
-所有必须完成的验收标准已达成，主题系统完全统一，仓库抽象层完成，编译和测试均通过。
+所有必须完成的验收标准已达成，主题系统完全统一，仓库抽象层完成，归档导入 UI 实现，编译和测试均通过。
