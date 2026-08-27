@@ -42,6 +42,13 @@
 - 同时初始化本地和 Fusion 容器
 - 统一 `MainActivity`，根据工作区状态条件渲染 Compose 根
 
+#### 统一主题系统
+- 创建 `HybridTheme` 作为唯一主题入口
+- `StandaloneTheme` 改为 `HybridTheme` 别名，保持向后兼容
+- `AShareTheme` 也作为 `HybridTheme` 别名，Fusion 工作区使用
+- 删除冗余 `Theme.kt`，消除声明冲突
+- 统一 Material3 色彩系统和排版规范
+
 #### 构建系统
 - 移除 `-PappMode=connected|standalone` 构建参数
 - 统一包名：`com.ashareai.app`
@@ -101,12 +108,14 @@
 - `com.ashareai.app.standalone.R` 改为 `com.ashareai.app.R`
 - `StandaloneApp.CHANNEL_*` 改为 `HybridApp.CHANNEL_LOCAL_*`
 - 原 `com.ashareai.app.standalone` 包保留，但部分类改为使用统一资源
+- `Theme.kt` 已删除，所有主题相关代码统一使用 `HybridTheme.kt`
 
 ### 修复
 
 - 修复 MainActivity 协程作用域问题（使用 `lifecycleScope.launch`）
 - 修复通知通道引用错误
 - 修复回测引擎类型推断问题
+- 修复主题系统声明冲突（删除冗余 Theme.kt）
 
 ---
 
