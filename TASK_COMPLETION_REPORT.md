@@ -197,10 +197,12 @@ setContent {
 - [x] K 线图、行情卡片、研究报告组件复用
 - [x] 删除冗余 `Theme.kt` 文件，避免声明冲突
 
-### Phase 4: 数据仓库抽象与实现 (规划中)
-- [ ] 创建统一接口 `MarketDataRepository`, `ResearchRepository`
-- [ ] 实现 `LocalMarketDataRepository` 和 `FusionMarketDataRepository`
-- [ ] 通知模型扩展 `WorkspaceScopedNotification`
+### Phase 4: 数据仓库抽象与实现 ✅
+- [x] 创建统一接口 `MarketDataRepository`, `ResearchRepository`
+- [x] 实现 `LocalMarketDataRepository` 和 `FusionMarketDataRepository`
+- [x] 实现 `LocalResearchRepository` 和 `FusionResearchRepository`
+- [x] 通知模型扩展 `WorkspaceScopedNotification`
+- [x] 适配现有 standalone 和 connected 数据源
 
 ### Phase 6.2: 独立版加密归档导入 (规划中)
 - [ ] 实现 `ArchiveImportFlow`
@@ -256,8 +258,9 @@ setContent {
 5. **构建系统**：移除 appMode 分支，统一包名和依赖
 6. **数据库升级**：Room 版本 4，支持回测表
 7. **主题统一**：完全统一 HybridTheme，删除冗余 Theme.kt
-8. **文档完善**：README 和 CHANGELOG 更新
+8. **仓库抽象**：MarketDataRepository 和 ResearchRepository 接口，本地和 Fusion 实现
+9. **文档完善**：README 和 CHANGELOG 更新
 
-APK 成功构建（68MB），单元测试通过，连接版升级路径验证，基本功能完整。后续可按需实现数据仓库抽象、归档导入 UI、完整测试等改进项。
+APK 成功构建（68MB），单元测试通过，连接版升级路径验证，基本功能完整。后续可按需实现归档导入 UI、包结构重命名、完整测试等改进项。
 
-所有必须完成的验收标准已达成，主题系统完全统一，编译和测试均通过。
+所有必须完成的验收标准已达成，主题系统完全统一，仓库抽象层完成，编译和测试均通过。
