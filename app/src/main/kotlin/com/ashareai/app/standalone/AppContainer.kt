@@ -57,6 +57,14 @@ class AppContainer(
     val aiProviders = AiProviderRepository(local, ApiKeyCipher())
     val aiClient = OpenAiCompatibleClient(aiProviders, httpClient)
     val archive = LocalArchiveService(local)
+    val backtest = com.ashareai.app.standalone.backtest.BacktestService(
+        engine = com.ashareai.app.standalone.backtest.LocalBacktestEngine(market, local),
+        local = local,
+    )
+    val financialSearch = com.ashareai.app.standalone.search.LocalFinancialSearchRepository(
+        market = market,
+        httpClient = httpClient,
+    )
     val research = ResearchCoordinator(
         context = appContext,
         local = local,

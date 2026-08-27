@@ -47,6 +47,9 @@ interface LocalDao {
     @Query("SELECT * FROM candles WHERE symbol = :symbol ORDER BY tradingDate ASC")
     suspend fun candlesFor(symbol: String): List<CandleEntity>
 
+    @Query("SELECT * FROM candles WHERE symbol = :symbol AND tradingDate = :date LIMIT 1")
+    suspend fun getCandleByDate(symbol: String, date: String): CandleEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCandles(candles: List<CandleEntity>)
 
@@ -184,4 +187,38 @@ interface LocalDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertChatMessage(message: ChatMessageEntity)
+
+    // 回测相关操作
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBacktest(backtest: LocalBacktestEntity)
+
+    @Query("UPDATE local_backtests SET status = :status, metricsJson = :metricsJson, errorMessage = :errorMessage, completedAt = :completedAt WHERE id = :id")
+    suspend fun updateBacktestResult(id: String, status: String, metricsJson: String?, errorMessage: String?, completedAt: Long)
+
+    @Query("SELECT status FROM local_backtests WHERE id = :id")
+    suspend fun getBacktestStatus(id: String): String?
+
+    @Query("SELECT metricsJson FROM local_backtests WHERE id = :id")
+    suspend fun getBacktestMetricsJson(id: String): String?
+
+    @Query("SELECT errorMessage FROM local_backtests WHERE id = :id")
+    suspend fun getBacktestErrorMessage(id: String): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBacktestTrade(trade: LocalBacktestTradeEntity)
+
+    @Query("SELECT * FROM local_backtest_trades WHERE backtestId = :backtestId ORDER BY date ASC")
+    suspend fun getBacktestTrades(backtestId: String): List<LocalBacktestTradeEntity>
+
+    @Query("SELECT * FROM local_backtests ORDER BY createdAt DESC LIMIT :limit")
+    fun listBacktests(limit: Int): Flow<List<LocalBacktestEntity>>
+
+    @Query("DELETE FROM local_backtests WHERE id = :id")
+    suspend fun deleteBacktest(id: String)
+
+    @Query("DELETE FROM local_backtest_trades WHERE backtestId = :backtestId")
+    suspend fun deleteBacktestTrades(backtestId: String)
+
+    @Query("SELECT * FROM research_candidates WHERE runId = :reportId ORDER BY score DESC")
+    suspend fun getCandidatesByReportId(reportId: String): List<ResearchCandidateEntity>
 }

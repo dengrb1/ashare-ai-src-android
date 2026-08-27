@@ -1,0 +1,166 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin FAILED
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:29:25 Argument type mismatch: actual type is 'String', but 'LocalDate' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:30:23 Argument type mismatch: actual type is 'String', but 'LocalDate' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:34:13 No parameter with name 'feeModel' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:34:24 Unresolved reference 'FeeModel'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:59:43 Unresolved reference 'empty'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:61:17 No value passed for parameter 'request'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:61:17 No value passed for parameter 'createdAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:61:17 No value passed for parameter 'completedAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:70:34 Argument type mismatch: actual type is 'BacktestMetrics?', but 'BacktestMetrics' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:104:29 Unresolved reference 'empty'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:113:13 No value passed for parameter 'request'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:113:13 No value passed for parameter 'createdAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:113:13 No value passed for parameter 'completedAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:139:41 Unresolved reference 'tradeCount'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:140:40 Unresolved reference 'finalCash'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:141:48 Unresolved reference 'finalHoldingValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:163:13 No parameter with name 'tradeCount' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:164:13 No parameter with name 'finalCash' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:165:13 No parameter with name 'finalHoldingValue' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:165:13 No value passed for parameter 'profitFactor'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:165:13 No value passed for parameter 'totalTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:165:13 No value passed for parameter 'winningTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/BacktestService.kt:165:13 No value passed for parameter 'losingTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:31:41 Argument type mismatch: actual type is 'LocalDate', but 'CharSequence!' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:32:39 Argument type mismatch: actual type is 'LocalDate', but 'CharSequence!' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:46:43 Unresolved reference 'empty'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:48:17 No value passed for parameter 'request'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:48:17 No value passed for parameter 'createdAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:48:17 No value passed for parameter 'completedAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:111:48 Unresolved reference 'feeModel'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:124:32 Argument type mismatch: actual type is 'String!', but 'LocalDate' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:142:56 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:142:67 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:144:57 Unresolved reference 'previousClose'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:144:81 Unresolved reference 'previousClose'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:145:31 Cannot infer type for type parameter 'B'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:19 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:19 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:28 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:33 Unresolved reference 'second'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:40 Operator call 'component1()' is ambiguous for destructuring of type 'uninferred ERROR CLASS: Cannot infer argument for type parameter T'. Applicable candidates:
+fun <T> Array<out T>.component1(): T
+fun ByteArray.component1(): Byte
+fun ShortArray.component1(): Short
+fun IntArray.component1(): Int
+fun LongArray.component1(): Long
+fun FloatArray.component1(): Float
+fun DoubleArray.component1(): Double
+fun BooleanArray.component1(): Boolean
+fun CharArray.component1(): Char
+fun <T> List<T>.component1(): T
+fun <K, V> Map.Entry<K, V>.component1(): K
+fun UIntArray.component1(): UInt
+fun ULongArray.component1(): ULong
+fun UByteArray.component1(): UByte
+fun UShortArray.component1(): UShort
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:40 Operator call 'component2()' is ambiguous for destructuring of type 'uninferred ERROR CLASS: Cannot infer argument for type parameter T'. Applicable candidates:
+fun <T> Array<out T>.component2(): T
+fun ByteArray.component2(): Byte
+fun ShortArray.component2(): Short
+fun IntArray.component2(): Int
+fun LongArray.component2(): Long
+fun FloatArray.component2(): Float
+fun DoubleArray.component2(): Double
+fun BooleanArray.component2(): Boolean
+fun CharArray.component2(): Char
+fun <T> List<T>.component2(): T
+fun <K, V> Map.Entry<K, V>.component2(): V
+fun UIntArray.component2(): UInt
+fun ULongArray.component2(): ULong
+fun UByteArray.component2(): UByte
+fun UShortArray.component2(): UShort
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:55 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:149:51 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:156:55 Unresolved reference 'feeModel'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:159:39 'operator' modifier is required on 'fun <T> Comparable<T>.compareTo(other: T): Int'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:161:48 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:162:52 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:163:50 Unresolved reference 'name'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:173:56 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:174:54 Unresolved reference 'name'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:176:44 Argument type mismatch: actual type is 'String!', but 'LocalDate' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:199:28 Argument type mismatch: actual type is 'String!', but 'LocalDate' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:201:21 No parameter with name 'holdingValue' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:202:21 No parameter with name 'totalValue' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No parameter with name 'returnRate' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No value passed for parameter 'portfolioValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No value passed for parameter 'positionValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No value passed for parameter 'dailyReturn'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No value passed for parameter 'cumulativeReturn'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:203:21 No value passed for parameter 'benchmarkReturn'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:211:53 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:223:13 No parameter with name 'tradeCount' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:224:13 No parameter with name 'finalCash' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:225:13 No parameter with name 'finalHoldingValue' found.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:225:13 No value passed for parameter 'profitFactor'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:225:13 No value passed for parameter 'totalTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:225:13 No value passed for parameter 'winningTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:225:13 No value passed for parameter 'losingTrades'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:234:13 No value passed for parameter 'request'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:234:13 No value passed for parameter 'createdAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:234:13 No value passed for parameter 'completedAt'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:242:41 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:243:43 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:251:36 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:252:16 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:252:31 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:252:47 Unresolved reference 'totalValue'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:255:47 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:255:47 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:255:51 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/data/LocalRepository.kt:658:24 Argument type mismatch: actual type is 'LocalDate', but 'String' was expected.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/data/LocalRepository.kt:675:24 Argument type mismatch: actual type is 'String', but 'LocalDate' was expected.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 11s
+30 actionable tasks: 2 executed, 28 up-to-date

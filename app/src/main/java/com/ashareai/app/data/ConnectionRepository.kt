@@ -1,6 +1,8 @@
 package com.ashareai.app.data
 
 import com.ashareai.app.data.model.HealthResponse
+import com.ashareai.app.workspace.FusionHealthState
+import com.ashareai.app.workspace.toFusionHealthState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -32,6 +34,26 @@ class ConnectionRepository(
             )
         }
         return probe(normalized)
+    }
+
+    /**
+     * 探测配置的服务器并返回 Fusion 健康状态。
+     * 用于工作区切换时判断 Fusion 服务是否可用。
+     */
+    suspend fun probeFusionHealth(): FusionHealthState? {
+        val address = settings.currentBaseUrl().trim()
+        if (address.isBlank()) return null
+        val normalized = normalizeServerUrl(address).getOrNull() ?: return null
+        return try {
+            val response = withTimeout(healthTimeoutMillis) { healthApi(normalized).health() }
+            response.toFusionHealthState()
+        } catch (_: TimeoutCancellationException) {
+            null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun probe(addressInput: String): ConnectionProbe {

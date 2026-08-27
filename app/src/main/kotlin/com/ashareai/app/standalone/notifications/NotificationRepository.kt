@@ -9,9 +9,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.ashareai.app.standalone.MainActivity
-import com.ashareai.app.standalone.R
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.MainActivity
+import com.ashareai.app.R
+import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.data.LocalRepository
 import com.ashareai.app.standalone.domain.LocalNotification
 import com.ashareai.app.standalone.domain.NotificationPriority
@@ -61,7 +61,7 @@ class NotificationRepository(
     fun monitoringNotification(title: String, body: String): Notification {
         val route = safeRoute("home")
         val builder = baseBuilder(
-            channel = StandaloneApp.CHANNEL_NORMAL,
+            channel = HybridApp.CHANNEL_LOCAL_NORMAL,
             title = title,
             body = body,
             route = route,
@@ -83,7 +83,7 @@ class NotificationRepository(
 
     fun researchProgressNotification(title: String, body: String, progress: Int? = null): Notification {
         val builder = baseBuilder(
-            channel = StandaloneApp.CHANNEL_PROGRESS,
+            channel = HybridApp.CHANNEL_LOCAL_PROGRESS,
             title = title,
             body = body,
             route = "research",
@@ -108,9 +108,9 @@ class NotificationRepository(
 
     private fun buildNotification(item: LocalNotification): Notification {
         val channel = when (item.priority) {
-            NotificationPriority.NORMAL -> StandaloneApp.CHANNEL_NORMAL
-            NotificationPriority.WARNING -> StandaloneApp.CHANNEL_ALERT
-            NotificationPriority.PROGRESS -> StandaloneApp.CHANNEL_PROGRESS
+            NotificationPriority.NORMAL -> HybridApp.CHANNEL_LOCAL_NORMAL
+            NotificationPriority.WARNING -> HybridApp.CHANNEL_LOCAL_ALERT
+            NotificationPriority.PROGRESS -> HybridApp.CHANNEL_LOCAL_PROGRESS
         }
         val builder = baseBuilder(channel, item.title, item.body, item.deepLink)
             .setAutoCancel(true)
