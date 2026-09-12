@@ -171,7 +171,7 @@ class LocalBacktestEngine(
 ```kotlin
 setContent {
     val workspace by app.workspaceStore.currentWorkspace.collectAsState(initial = Workspace.LOCAL)
-    
+
     when (workspace) {
         Workspace.LOCAL -> LocalWorkspaceRoot(app.localContainer)
         Workspace.FUSION -> FusionWorkspaceRoot(app.fusionContainer, app.workspaceStore)
