@@ -32,6 +32,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settings get() = app.settings
     val container get() = app.container
 
+    // 省电模式管理器
+    private val powerSaverManager = PowerSaverManager(appContext)
+    val isPowerSaveMode: StateFlow<Boolean> get() = powerSaverManager.isPowerSaveMode
+    val batteryLevel: StateFlow<Int> get() = powerSaverManager.batteryLevel
+
     // ---- 登录态 ----
     sealed class AuthState {
         data object Loading : AuthState()
@@ -69,6 +74,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _authState.value = AuthState.LoggedOut
             }
         }
+        powerSaverManager.start()
         restoreSession()
     }
 
@@ -165,5 +171,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun initializeOptionalPush() = enableOptionalPush()
+
+    override fun onCleared() {
+        powerSaverManager.stop()
+        super.onCleared()
+    }
 
 }

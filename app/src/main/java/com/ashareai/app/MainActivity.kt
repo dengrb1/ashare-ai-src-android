@@ -12,6 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,8 +57,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             val workspace by app.workspaceStore.currentWorkspace.collectAsState(initial = Workspace.LOCAL)
 
-            when (workspace) {
-                Workspace.LOCAL -> {
+            AnimatedContent(
+                targetState = workspace,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(300)) + scaleIn(
+                        initialScale = 0.95f,
+                        animationSpec = tween(300)
+                    )).togetherWith(
+                        fadeOut(animationSpec = tween(300)) + scaleOut(
+                            targetScale = 0.95f,
+                            animationSpec = tween(300)
+                        )
+                    )
+                },
+                label = "workspace_transition"
+            ) { targetWorkspace ->
+                when (targetWorkspace) {
+                    Workspace.LOCAL -> {
                     // 本地工作区：复用原 standalone MainActivity 逻辑
                     val viewModel: com.ashareai.app.standalone.ui.StandaloneViewModel = viewModel()
                     val settings by viewModel.settings.collectAsState()
@@ -159,6 +181,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }

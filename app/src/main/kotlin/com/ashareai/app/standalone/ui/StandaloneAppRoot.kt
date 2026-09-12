@@ -192,9 +192,11 @@ fun StandaloneAppRoot(
             GlassTopBar(route = route)
         },
         bottomBar = {
+            val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
             LiquidGlassBottomBar(
                 route = route,
                 unread = unread,
+                isPowerSaveMode = isPowerSaveMode,
                 onNavigate = { destination ->
                     route = destination
                     if (destination == "market") viewModel.loadCatalog()
@@ -274,16 +276,9 @@ private val bottomDestinations = listOf(
 private fun LiquidGlassBottomBar(
     route: String,
     unread: Int,
+    isPowerSaveMode: Boolean,
     onNavigate: (String) -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
-    val glassShape = RoundedCornerShape(28.dp)
-    val borderBrush = Brush.verticalGradient(
-        listOf(
-            Color.White.copy(alpha = if (dark) 0.24f else 0.78f),
-            MaterialTheme.colorScheme.outline.copy(alpha = if (dark) 0.42f else 0.28f),
-        ),
-    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,30 +286,18 @@ private fun LiquidGlassBottomBar(
             .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Surface(
+        com.ashareai.app.ui.theme.LiquidGlassSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 560.dp)
-                .shadow(18.dp, glassShape),
-            shape = glassShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.84f else 0.78f),
-            border = BorderStroke(1.dp, borderBrush),
-            tonalElevation = 0.dp,
+                .widthIn(max = 560.dp),
+            style = com.ashareai.app.ui.theme.LiquidGlassDefaults.Medium,
+            shape = RoundedCornerShape(28.dp),
+            powerSaveMode = isPowerSaveMode,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.74f),
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.26f else 0.34f),
-                                MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.82f else 0.68f),
-                            ),
-                        ),
-                        glassShape,
-                    )
                     .padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

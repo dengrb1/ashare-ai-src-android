@@ -1,11 +1,14 @@
 package com.ashareai.app.ui.navigation
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.background
+import com.ashareai.app.ui.theme.LiquidGlassSurface
+import com.ashareai.app.ui.theme.LiquidGlassDefaults
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.AccountCircle
@@ -15,9 +18,7 @@ import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -102,6 +103,9 @@ private fun MainScaffold(
     val currentRoute = backStack?.destination?.route
     val requestedRoute by pendingRoute.collectAsState()
 
+    // 省电模式状态
+    val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
+
     LaunchedEffect(requestedRoute) {
         requestedRoute?.let { untrusted ->
             NotificationNavigation.sanitize(untrusted)?.let { route ->
@@ -116,35 +120,37 @@ private fun MainScaffold(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                Surface(
+                LiquidGlassSurface(
                     modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(24.dp)),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = LiquidGlassDefaults.Medium,
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-                    tonalElevation = 4.dp,
-                    shadowElevation = 8.dp,
+                    powerSaveMode = isPowerSaveMode,
                 ) {
                     NavigationBar(
-                        modifier = Modifier
-                            .height(56.dp)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
-                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
-                                    ),
-                                ),
-                            ),
+                        modifier = Modifier.height(56.dp),
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
                     ) {
                         bottomTabs.forEach { tab ->
+                            val selected = currentRoute == tab.route
+                            val iconColor by animateColorAsState(
+                                targetValue = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                animationSpec = tween(300),
+                                label = "iconColor_${tab.route}"
+                            )
+                            val iconSize by animateDpAsState(
+                                targetValue = if (selected) 26.dp else 24.dp,
+                                animationSpec = tween(300),
+                                label = "iconSize_${tab.route}"
+                            )
+
                             NavigationBarItem(
-                                selected = currentRoute == tab.route,
+                                selected = selected,
                                 onClick = {
                                     navController.navigate(tab.route) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -152,7 +158,14 @@ private fun MainScaffold(
                                         restoreState = true
                                     }
                                 },
-                                icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                icon = {
+                                    Icon(
+                                        tab.icon,
+                                        contentDescription = tab.label,
+                                        tint = iconColor,
+                                        modifier = Modifier.padding(iconSize - 24.dp)
+                                    )
+                                },
                                 label = { Text(tab.label) },
                                 alwaysShowLabel = false,
                             )

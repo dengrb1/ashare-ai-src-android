@@ -128,10 +128,12 @@ val AppTypography = Typography(
  * 统一混合主题：本地和 Fusion 工作区共享。
  *
  * @param darkModePref 深色模式偏好："light", "dark", "system"
+ * @param glassEnabled 是否启用玻璃态材质效果（默认启用）
  */
 @Composable
 fun HybridTheme(
     darkModePref: String = "system",
+    glassEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val dark = when (darkModePref) {
@@ -139,12 +141,16 @@ fun HybridTheme(
         "light" -> false
         else -> isSystemInDarkTheme()
     }
-    MaterialTheme(
-        colorScheme = if (dark) DarkColors else LightColors,
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalGlassEnabled provides glassEnabled,
+    ) {
+        MaterialTheme(
+            colorScheme = if (dark) DarkColors else LightColors,
         shapes = AppShapes,
         typography = AppTypography,
         content = content,
-    )
+        )
+    }
 }
 
 /**
@@ -154,7 +160,7 @@ fun HybridTheme(
 fun AShareTheme(
     darkModePref: String = "system",
     content: @Composable () -> Unit,
-) = HybridTheme(darkModePref, content)
+) = HybridTheme(darkModePref = darkModePref, glassEnabled = true, content = content)
 
 /** 涨跌配色：>0 红，<0 绿，0/缺失 灰。 */
 fun changeColor(value: Double?): Color = when {

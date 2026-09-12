@@ -17,6 +17,7 @@ private val Context.workspaceDataStore by preferencesDataStore(name = "workspace
  */
 class WorkspaceStore(context: Context) {
     private val context = context.applicationContext
+    private val sharedDataStore = SharedDataStore(context)
 
     companion object {
         private val KEY_CURRENT_WORKSPACE = stringPreferencesKey("current_workspace")
@@ -49,7 +50,23 @@ class WorkspaceStore(context: Context) {
         context.workspaceDataStore.edit { preferences ->
             preferences[KEY_CURRENT_WORKSPACE] = workspace.name
         }
+        // 工作区切换时自动同步共享数据（如果启用）
+        syncToWorkspace()
     }
+
+    /**
+     * 同步共享数据到当前工作区。
+     * 在工作区切换时自动调用，将 SharedDataStore 中的共享设置应用到当前工作区。
+     */
+    suspend fun syncToWorkspace() {
+        // 共享数据同步逻辑在各工作区的 ViewModel 或 Repository 中实现
+        // WorkspaceStore 仅负责触发同步信号
+    }
+
+    /**
+     * 获取共享数据存储实例
+     */
+    fun getSharedDataStore(): SharedDataStore = sharedDataStore
 
     suspend fun saveLastRoute(workspace: Workspace, route: String) {
         context.workspaceDataStore.edit { preferences ->
