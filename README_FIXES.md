@@ -133,13 +133,13 @@ object ProviderTemplates {
         baseUrl = "https://api.openai.com",
         model = "gpt-4.1-mini",
     )
-    
+
     val ANTHROPIC = AiProviderDraft(
         name = "Anthropic",
         baseUrl = "https://api.anthropic.com",
         model = "claude-3-haiku-20240307",
     )
-    
+
     val DEEPSEEK = AiProviderDraft(...)
     val MOONSHOT = AiProviderDraft(...)
     val ZHIPU = AiProviderDraft(...)
@@ -208,11 +208,11 @@ class OpenAiCompatibleClient(
             close()
             return@callbackFlow
         }
-        
+
         // 2. 未命中，调用API
         val responseBuilder = StringBuilder()
         // ... 流式请求逻辑
-        
+
         // 3. 保存到缓存
         val fullResponse = responseBuilder.toString()
         if (fullResponse.isNotBlank()) {
@@ -385,7 +385,7 @@ val aiClient = OpenAiCompatibleClient(
 
 ```kotlin
 OutlinedButton(
-    onClick = { 
+    onClick = {
         route = "ai_agents"  // 实现导航
     },
     modifier = Modifier.fillMaxWidth(),

@@ -147,7 +147,7 @@ fun researchProgressNotification(title: String, body: String, progress: Int?): N
 ```kotlin
 private fun createNotificationChannels() {
     val manager = getSystemService(NotificationManager::class.java)
-    
+
     // NORMAL 渠道
     manager.createNotificationChannel(
         NotificationChannel(
@@ -159,7 +159,7 @@ private fun createNotificationChannels() {
             setShowBadge(false)  // 不显示角标
         },
     )
-    
+
     // ALERT 渠道
     manager.createNotificationChannel(
         NotificationChannel(
@@ -173,7 +173,7 @@ private fun createNotificationChannels() {
             enableLights(true)  // ✅ 呼吸灯
         },
     )
-    
+
     // PROGRESS 渠道
     manager.createNotificationChannel(
         NotificationChannel(
@@ -206,7 +206,7 @@ private fun buildV3Extras(context: Context, spec: IslandNotificationSpec) =
         enableFloat = spec.enableFloat
         islandFirstFloat = spec.enableFloat  // 只有重要通知才首次悬浮
         business = "ashare_standalone_alert"  // 业务标识改为 alert
-        
+
         island {
             // islandProperty = 1 表示这是超级岛通知
             // HyperOS 4 会识别此标识并在状态栏显示超级岛
@@ -266,12 +266,12 @@ private fun buildV3Extras(context: Context, spec: IslandNotificationSpec) =
 
 ```xml
 <!-- 小米超级岛 App ID -->
-<meta-data 
-    android:name="com.xiaomi.xms.APP_ID" 
+<meta-data
+    android:name="com.xiaomi.xms.APP_ID"
     android:value="${xiaomiSuperIslandAppId}" />
 
-<meta-data 
-    android:name="com.xiaomi.xms.BUILD_TYPE_DEBUG" 
+<meta-data
+    android:name="com.xiaomi.xms.BUILD_TYPE_DEBUG"
     android:value="${xiaomiSuperIslandBuildTypeDebug}" />
 
 <!-- 通知权限 -->

@@ -11,6 +11,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import com.ashareai.app.standalone.domain.ResearchScope
+import com.ashareai.app.standalone.data.ai.AiAgentConfig
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private val Context.standaloneDataStore by preferencesDataStore(name = "standalone_settings")
 
@@ -49,6 +53,8 @@ fun defaultAutomaticReports(): List<AutomaticResearchReportConfig> = listOf(
 class SettingsStore(
     private val context: Context,
 ) {
+    private val json = Json { ignoreUnknownKeys = true }
+
     val settings: Flow<LocalSettings> = context.standaloneDataStore.data.map { preferences ->
         val automaticReports = listOf(
             automaticReport(
@@ -76,6 +82,26 @@ class SettingsStore(
             lastDailyScheduleAt = preferences[LAST_DAILY_SCHEDULE_AT] ?: 0,
             automaticReports = automaticReports,
         )
+    }
+
+    val aiAgents: Flow<List<AiAgentConfig>> = context.standaloneDataStore.data.map { preferences ->
+        decodeAgents(preferences[AI_AGENTS_JSON])
+    }
+
+    suspend fun saveAiAgent(agent: AiAgentConfig) {
+        context.standaloneDataStore.edit { preferences ->
+            val agents = decodeAgents(preferences[AI_AGENTS_JSON])
+                .filterNot { it.id == agent.id } + agent
+            preferences[AI_AGENTS_JSON] = json.encodeToString(agents)
+        }
+    }
+
+    suspend fun removeAiAgent(id: String) {
+        context.standaloneDataStore.edit { preferences ->
+            val agents = decodeAgents(preferences[AI_AGENTS_JSON]).filterNot { it.id == id }
+            if (agents.isEmpty()) preferences.remove(AI_AGENTS_JSON)
+            else preferences[AI_AGENTS_JSON] = json.encodeToString(agents)
+        }
     }
 
     suspend fun setFirstRunComplete() = setBoolean(FIRST_RUN, false)
@@ -166,6 +192,9 @@ class SettingsStore(
         )
     }
 
+    private fun decodeAgents(value: String?): List<AiAgentConfig> =
+        value?.let { runCatching { json.decodeFromString<List<AiAgentConfig>>(it) }.getOrNull() }.orEmpty()
+
     private fun validateAutomaticReport(report: AutomaticResearchReportConfig) {
         require(report.slot in setOf("A", "B")) { "未知自动报告槽位" }
         require(report.scope in setOf(ResearchScope.MARKET, ResearchScope.WATCHLIST, ResearchScope.CUSTOM)) { "自动报告范围无效" }
@@ -191,6 +220,7 @@ class SettingsStore(
         val MARKET_SCAN_LIMIT = intPreferencesKey("market_scan_limit")
         val PORTFOLIO_DATA_ALLOWED_FOR_AI = booleanPreferencesKey("portfolio_data_allowed_for_ai")
         val LAST_DAILY_SCHEDULE_AT = longPreferencesKey("last_daily_schedule_at")
+        val AI_AGENTS_JSON = stringPreferencesKey("ai_agents_json")
 
         fun reportEnabledKey(slot: String) = booleanPreferencesKey("automatic_report_${slot.lowercase()}_enabled")
         fun reportScopeKey(slot: String) = stringPreferencesKey("automatic_report_${slot.lowercase()}_scope")

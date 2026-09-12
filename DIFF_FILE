@@ -4,10 +4,10 @@ index 5954b68..0b88295 100644
 +++ b/MODIFIED_FILE
 @@ -42,7 +42,7 @@ data class ConnectionProbe(
  }
- 
+
  class ConnectionRejectedException(val probe: ConnectionProbe) : IllegalStateException(
 -    probe.message ?: "服务器不支持研究只读模式。",
 +    probe.message ?: "服务器不支持 Fusion 研究只读模式。",
  )
- 
+
  object HealthConnectionClassifier {

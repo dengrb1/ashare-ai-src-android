@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ashareai.app.standalone.StandaloneApp
 import com.ashareai.app.standalone.data.ai.AiPayloadBuilder
+import com.ashareai.app.standalone.data.ai.AiAgentConfig
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
@@ -69,6 +70,11 @@ class StandaloneViewModel(
     val candidates = local.candidates.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val portfolios = local.simulationPortfolios.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val aiProviders = app.container.aiProviders.providers.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+    val aiAgents = app.container.settings.aiAgents.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
@@ -420,6 +426,21 @@ class StandaloneViewModel(
 
     fun removeAiProvider(id: String) {
         viewModelScope.launch { app.container.aiProviders.remove(id) }
+    }
+
+    fun saveAiAgent(agent: AiAgentConfig) {
+        viewModelScope.launch {
+            runCatching { app.container.settings.saveAiAgent(agent) }
+                .onSuccess { _message.value = "AI Agent 已保存" }
+                .onFailure { _message.value = it.message ?: "保存 AI Agent 失败" }
+        }
+    }
+
+    fun removeAiAgent(id: String) {
+        viewModelScope.launch {
+            app.container.settings.removeAiAgent(id)
+            _message.value = "AI Agent 已删除"
+        }
     }
 
     fun testAiProvider(providerId: String) {

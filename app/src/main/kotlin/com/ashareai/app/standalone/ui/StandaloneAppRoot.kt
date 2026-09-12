@@ -229,9 +229,9 @@ fun StandaloneAppRoot(
             "chat" -> ChatScreen(viewModel, Modifier.padding(padding))
             "ai_agents" -> AiAgentConfigScreen(
                 providers = viewModel.aiProviders.collectAsState().value,
-                agents = emptyList(), // TODO: 从ViewModel获取
-                onSaveAgent = { /* TODO: 实现保存逻辑 */ },
-                onDeleteAgent = { /* TODO: 实现删除逻辑 */ },
+                agents = viewModel.aiAgents.collectAsState().value,
+                onSaveAgent = viewModel::saveAiAgent,
+                onDeleteAgent = viewModel::removeAiAgent,
                 onNavigateToProviders = { route = "settings" },
                 modifier = Modifier.padding(padding),
             )
@@ -242,6 +242,7 @@ fun StandaloneAppRoot(
                 onRequestNotifications = onRequestNotifications,
                 onOpenBatterySettings = onOpenBatterySettings,
                 onOpenAppSettings = onOpenAppSettings,
+                onNavigateToAiAgents = { route = "ai_agents" },
             )
             else -> HomeScreen(
                 viewModel = viewModel,
@@ -1640,6 +1641,7 @@ private fun SettingsScreen(
     onRequestNotifications: () -> Unit,
     onOpenBatterySettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onNavigateToAiAgents: () -> Unit,
 ) {
     val context = viewModel.appContext
     val scope = rememberCoroutineScope()
@@ -1744,7 +1746,7 @@ private fun SettingsScreen(
 
         // AI Agent 配置入口
         OutlinedButton(
-            onClick = { /* TODO: 导航到 ai_agents 路由 */ },
+            onClick = onNavigateToAiAgents,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Outlined.SmartToy, contentDescription = null)
