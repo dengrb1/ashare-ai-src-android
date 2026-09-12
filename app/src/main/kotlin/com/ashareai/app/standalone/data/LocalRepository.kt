@@ -122,6 +122,10 @@ class LocalRepository(
 
     suspend fun cachedCandles(symbol: String): List<DailyCandle> = dao.candlesFor(symbol).map { it.toDomain() }
 
+    suspend fun getCandleByDate(symbol: String, date: String): DailyCandle? {
+        return dao.getCandleByDate(symbol, date)?.toDomain()
+    }
+
     suspend fun replaceCandles(symbol: String, candles: List<DailyCandle>) {
         dao.clearCandles(symbol)
         dao.upsertCandles(
@@ -599,4 +603,106 @@ class LocalRepository(
         selectedSymbol = selectedSymbol,
         includedPortfolio = includedPortfolio,
     )
+
+    // 回测相关方法
+    suspend fun saveBacktest(
+        id: String,
+        startDate: String,
+        endDate: String,
+        initialCash: Double,
+        benchmark: String,
+        reportId: String?,
+        feeRate: Double,
+        status: com.ashareai.app.standalone.backtest.BacktestStatus,
+        metricsJson: String?,
+        errorMessage: String?,
+    ) = dao.insertBacktest(
+        com.ashareai.app.standalone.data.local.LocalBacktestEntity(
+            id = id,
+            startDate = startDate,
+            endDate = endDate,
+            initialCash = initialCash,
+            benchmark = benchmark,
+            reportId = reportId,
+            feeRate = feeRate,
+            status = status.name,
+            metricsJson = metricsJson,
+            errorMessage = errorMessage,
+            createdAt = System.currentTimeMillis(),
+            completedAt = null,
+        )
+    )
+
+    suspend fun updateBacktestResult(
+        id: String,
+        status: com.ashareai.app.standalone.backtest.BacktestStatus,
+        metricsJson: String?,
+        errorMessage: String?,
+    ) = dao.updateBacktestResult(id, status.name, metricsJson, errorMessage, System.currentTimeMillis())
+
+    suspend fun getBacktestStatus(id: String): com.ashareai.app.standalone.backtest.BacktestStatus? =
+        dao.getBacktestStatus(id)?.let { com.ashareai.app.standalone.backtest.BacktestStatus.valueOf(it) }
+
+    suspend fun getBacktestMetricsJson(id: String): String? = dao.getBacktestMetricsJson(id)
+
+    suspend fun getBacktestErrorMessage(id: String): String? = dao.getBacktestErrorMessage(id)
+
+    suspend fun saveBacktestTrade(trade: com.ashareai.app.standalone.backtest.BacktestTrade) =
+        dao.insertBacktestTrade(
+            com.ashareai.app.standalone.data.local.LocalBacktestTradeEntity(
+                id = trade.id,
+                backtestId = trade.backtestId,
+                symbol = trade.symbol,
+                name = trade.name,
+                action = trade.action.name,
+                date = trade.date,
+                price = trade.price,
+                quantity = trade.quantity,
+                amount = trade.amount,
+                fee = trade.fee,
+                reason = trade.reason,
+            )
+        )
+
+    suspend fun getBacktestTrades(backtestId: String): List<com.ashareai.app.standalone.backtest.BacktestTrade> =
+        dao.getBacktestTrades(backtestId).map {
+            com.ashareai.app.standalone.backtest.BacktestTrade(
+                id = it.id,
+                backtestId = it.backtestId,
+                symbol = it.symbol,
+                name = it.name,
+                action = com.ashareai.app.standalone.backtest.TradeAction.valueOf(it.action),
+                date = it.date,
+                price = it.price,
+                quantity = it.quantity,
+                amount = it.amount,
+                fee = it.fee,
+                reason = it.reason,
+            )
+        }
+
+    fun listBacktests(limit: Int): Flow<List<com.ashareai.app.standalone.backtest.BacktestSummary>> =
+        dao.listBacktests(limit).map { entities ->
+            entities.map { entity ->
+                val totalReturn = entity.metricsJson?.let {
+                    it.substringAfter("\"totalReturn\": ").substringBefore(",").toDoubleOrNull()
+                }
+                com.ashareai.app.standalone.backtest.BacktestSummary(
+                    id = entity.id,
+                    startDate = entity.startDate,
+                    endDate = entity.endDate,
+                    status = com.ashareai.app.standalone.backtest.BacktestStatus.valueOf(entity.status),
+                    totalReturn = totalReturn,
+                    createdAt = entity.createdAt,
+                )
+            }
+        }
+
+    suspend fun deleteBacktest(id: String) {
+        dao.deleteBacktest(id)
+        dao.deleteBacktestTrades(id)
+    }
+
+    suspend fun getCandidatesByReportId(reportId: String): List<com.ashareai.app.standalone.domain.ResearchCandidate> =
+        dao.getCandidatesByReportId(reportId).map { it.toDomain() }
 }

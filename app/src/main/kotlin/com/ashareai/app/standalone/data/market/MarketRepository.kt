@@ -47,6 +47,10 @@ class MarketRepository(
     fun isStale(quote: MarketQuote, maximumAgeMillis: Long = QUOTE_STALE_AFTER_MILLIS): Boolean =
         QuoteCachePolicy.isStale(quote, clock(), maximumAgeMillis)
 
+    suspend fun getCachedCandle(symbol: String, date: String): DailyCandle? {
+        return local.getCandleByDate(symbol, date)
+    }
+
     private companion object {
         const val QUOTE_STALE_AFTER_MILLIS = 90_000L
         const val CANDLE_CACHE_TTL_MILLIS = 6 * 60 * 60 * 1000L

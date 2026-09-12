@@ -1,0 +1,101 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin FAILED
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:142:56 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:142:67 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:144:57 Unresolved reference 'previousClose'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:144:81 Unresolved reference 'previousClose'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:145:31 Cannot infer type for type parameter 'B'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:19 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:19 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:28 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:146:33 Unresolved reference 'second'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:40 Operator call 'component1()' is ambiguous for destructuring of type 'uninferred ERROR CLASS: Cannot infer argument for type parameter T'. Applicable candidates:
+fun <T> Array<out T>.component1(): T
+fun ByteArray.component1(): Byte
+fun ShortArray.component1(): Short
+fun IntArray.component1(): Int
+fun LongArray.component1(): Long
+fun FloatArray.component1(): Float
+fun DoubleArray.component1(): Double
+fun BooleanArray.component1(): Boolean
+fun CharArray.component1(): Char
+fun <T> List<T>.component1(): T
+fun <K, V> Map.Entry<K, V>.component1(): K
+fun UIntArray.component1(): UInt
+fun ULongArray.component1(): ULong
+fun UByteArray.component1(): UByte
+fun UShortArray.component1(): UShort
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:40 Operator call 'component2()' is ambiguous for destructuring of type 'uninferred ERROR CLASS: Cannot infer argument for type parameter T'. Applicable candidates:
+fun <T> Array<out T>.component2(): T
+fun ByteArray.component2(): Byte
+fun ShortArray.component2(): Short
+fun IntArray.component2(): Int
+fun LongArray.component2(): Long
+fun FloatArray.component2(): Float
+fun DoubleArray.component2(): Double
+fun BooleanArray.component2(): Boolean
+fun CharArray.component2(): Char
+fun <T> List<T>.component2(): T
+fun <K, V> Map.Entry<K, V>.component2(): V
+fun UIntArray.component2(): UInt
+fun ULongArray.component2(): ULong
+fun UByteArray.component2(): UByte
+fun UShortArray.component2(): UShort
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:148:55 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:149:51 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:161:48 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:162:52 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:163:50 Unresolved reference 'name'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:173:56 Unresolved reference 'symbol'.
+e: file:///F:/code/ashare-ai-src-android/.claude/worktrees/vigorous-yalow-2f99aa/app/src/main/kotlin/com/ashareai/app/standalone/backtest/LocalBacktestEngine.kt:174:54 Unresolved reference 'name'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 6s
+30 actionable tasks: 2 executed, 28 up-to-date

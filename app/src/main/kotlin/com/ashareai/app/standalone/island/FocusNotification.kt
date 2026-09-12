@@ -11,9 +11,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
-import com.ashareai.app.standalone.MainActivity
-import com.ashareai.app.standalone.R
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.MainActivity
+import com.ashareai.app.R
+import com.ashareai.app.HybridApp
 import com.xzakota.hyper.notification.focus.FocusNotification as HyperFocusNotification
 
 data class FocusCapabilities(
@@ -109,7 +109,7 @@ object FocusNotification {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val builder = NotificationCompat.Builder(context, StandaloneApp.CHANNEL_ALERT)
+        val builder = NotificationCompat.Builder(context, HybridApp.CHANNEL_LOCAL_ALERT)
             .setSmallIcon(R.drawable.ic_stat_trend)
             .setContentTitle("霁衡智研")
             .setContentText("测试通知：行情监控正常")

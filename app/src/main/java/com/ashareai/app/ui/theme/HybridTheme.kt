@@ -14,7 +14,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// 靛蓝强调色对：浅色主题用 Indigo，深色主题用 IndigoDark（tertiary）。
+/**
+ * 统一混合主题：本地和 Fusion 工作区共享的 Material3 主题。
+ *
+ * 配色方案：
+ * - 主色（Primary）：青绿色系，表示稳健与增长
+ * - 次要色（Secondary）：灰蓝色系，表示信息与辅助
+ * - 强调色（Tertiary）：靛蓝色，表示交互与焦点
+ * - 涨跌配色：红涨绿跌（A股约定）
+ */
+
+// 强调色对：浅色主题用 Indigo，深色主题用 IndigoDark（tertiary）
 val Indigo = Color(0xFF3D5AFE)
 val IndigoDark = Color(0xFF8C9EFF)
 
@@ -48,7 +58,6 @@ private val LightColors = lightColorScheme(
     onError = Color.White,
     errorContainer = Color(0xFFFFDAD6),
     onErrorContainer = Color(0xFF410002),
-    // 容器层级：NavigationBar / 对话框 / 底部弹层默认取这些色
     surfaceContainerLowest = Color.White,
     surfaceContainerLow = Color(0xFFF3F5FA),
     surfaceContainer = Color(0xFFEDF0F6),
@@ -59,7 +68,6 @@ private val LightColors = lightColorScheme(
     inversePrimary = Color(0xFF4DD6C0),
 )
 
-// 深蓝夜色主题：蓝灰底色承载高密度信息，亮青为主操作点缀，靛蓝为强调色。
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF4DD6C0),
     onPrimary = Color(0xFF00332C),
@@ -85,7 +93,6 @@ private val DarkColors = darkColorScheme(
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF5E2025),
     onErrorContainer = Color(0xFFFFDAD6),
-    // 容器层级：NavigationBar / 对话框 / 底部弹层取这些色，避免回落到 M3 默认紫灰
     surfaceContainerLowest = Color(0xFF0E1524),
     surfaceContainerLow = Color(0xFF141C2C),
     surfaceContainer = Color(0xFF182130),
@@ -117,8 +124,13 @@ val AppTypography = Typography(
     labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 15.sp),
 )
 
+/**
+ * 统一混合主题：本地和 Fusion 工作区共享。
+ *
+ * @param darkModePref 深色模式偏好："light", "dark", "system"
+ */
 @Composable
-fun AShareTheme(
+fun HybridTheme(
     darkModePref: String = "system",
     content: @Composable () -> Unit,
 ) {
@@ -134,6 +146,15 @@ fun AShareTheme(
         content = content,
     )
 }
+
+/**
+ * Fusion 工作区主题（AShareTheme 别名）。
+ */
+@Composable
+fun AShareTheme(
+    darkModePref: String = "system",
+    content: @Composable () -> Unit,
+) = HybridTheme(darkModePref, content)
 
 /** 涨跌配色：>0 红，<0 绿，0/缺失 灰。 */
 fun changeColor(value: Double?): Color = when {

@@ -22,8 +22,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AiProviderEntity::class,
         ChatSessionEntity::class,
         ChatMessageEntity::class,
+        LocalBacktestEntity::class,
+        LocalBacktestTradeEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class LocalDatabase : RoomDatabase() {
@@ -49,6 +51,42 @@ abstract class LocalDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS local_backtests (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        startDate TEXT NOT NULL,
+                        endDate TEXT NOT NULL,
+                        initialCash REAL NOT NULL,
+                        benchmark TEXT NOT NULL,
+                        reportId TEXT,
+                        feeRate REAL NOT NULL,
+                        status TEXT NOT NULL,
+                        metricsJson TEXT,
+                        errorMessage TEXT,
+                        createdAt INTEGER NOT NULL,
+                        completedAt INTEGER
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS local_backtest_trades (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        backtestId TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        price REAL NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        fee REAL NOT NULL,
+                        reason TEXT NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun create(context: Context): LocalDatabase = Room.databaseBuilder(
             context.applicationContext,
             LocalDatabase::class.java,
@@ -56,6 +94,7 @@ abstract class LocalDatabase : RoomDatabase() {
         ).addMigrations(
             MIGRATION_1_2,
             MIGRATION_2_3,
+            MIGRATION_3_4,
         ).enableMultiInstanceInvalidation()
             .build()
 
