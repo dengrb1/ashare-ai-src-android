@@ -234,9 +234,20 @@ fun StandaloneAppRoot(
                 agents = viewModel.aiAgents.collectAsState().value,
                 onSaveAgent = viewModel::saveAiAgent,
                 onDeleteAgent = viewModel::removeAiAgent,
-                onNavigateToProviders = { route = "settings" },
+                onNavigateToProviders = { route = "ai_providers" },
                 modifier = Modifier.padding(padding),
             )
+            "ai_providers" -> {
+                val scope = rememberCoroutineScope()
+                AiProviderConfigScreen(
+                    providers = viewModel.aiProviders.collectAsState().value,
+                    onSave = { draft -> viewModel.saveAiProvider(draft) },
+                    onDelete = { id -> scope.launch { viewModel.deleteAiProvider(id) } },
+                    onTest = { id -> viewModel.testAiProvider(id) },
+                    onNavigateBack = { route = "settings" },
+                    modifier = Modifier.padding(padding),
+                )
+            }
             "settings" -> SettingsScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
@@ -245,6 +256,7 @@ fun StandaloneAppRoot(
                 onOpenBatterySettings = onOpenBatterySettings,
                 onOpenAppSettings = onOpenAppSettings,
                 onNavigateToAiAgents = { route = "ai_agents" },
+                navigate = { route = it },
             )
             else -> HomeScreen(
                 viewModel = viewModel,
@@ -1625,6 +1637,7 @@ private fun SettingsScreen(
     onOpenBatterySettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onNavigateToAiAgents: () -> Unit,
+    navigate: (String) -> Unit = {},
 ) {
     val context = viewModel.appContext
     val scope = rememberCoroutineScope()
@@ -1632,17 +1645,10 @@ private fun SettingsScreen(
     val providers by viewModel.aiProviders.collectAsState()
     val aiTestResult by viewModel.aiTestResult.collectAsState()
     var intervalText by rememberSaveable { mutableStateOf(settings.monitoringIntervalSeconds.toString()) }
-    var providerName by rememberSaveable { mutableStateOf("") }
-    var providerUrl by rememberSaveable { mutableStateOf("https://api.openai.com") }
-    var providerKey by rememberSaveable { mutableStateOf("") }
-    var providerModel by rememberSaveable { mutableStateOf("gpt-4.1-mini") }
-    var organization by rememberSaveable { mutableStateOf("") }
-    var project by rememberSaveable { mutableStateOf("") }
     var exportPassphrase by rememberSaveable { mutableStateOf("") }
     var importPassphrase by rememberSaveable { mutableStateOf("") }
     var archiveStatus by rememberSaveable { mutableStateOf<String?>(null) }
     var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
-    var showProviderTemplates by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
     }
@@ -1727,6 +1733,16 @@ private fun SettingsScreen(
 
         SectionTitle("AI Provider（本机 Keystore 加密）")
 
+        // AI Provider 管理入口 - 新的独立页面
+        OutlinedButton(
+            onClick = { navigate("ai_providers") },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Outlined.CloudQueue, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("AI Provider 供应商配置")
+        }
+
         // AI Agent 配置入口
         OutlinedButton(
             onClick = onNavigateToAiAgents,
@@ -1738,74 +1754,9 @@ private fun SettingsScreen(
         }
 
         InfoCard(
-            title = "AI Agent 系统",
-            text = "支持为不同任务（研究分析、对话助手、报告摘要、卖出顾问）分配专门的模型和供应商，支持自动缓存和失败重试。",
+            title = "AI 配置说明",
+            text = "先配置 AI Provider 添加供应商，然后在 AI Agent 中为不同任务分配专门的模型。支持多供应商、健康检查、故障转移和自动缓存。",
         )
-
-        // Provider模板按钮
-        if (!showProviderTemplates) {
-            OutlinedButton(
-                onClick = { showProviderTemplates = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("显示常用 Provider 模板") }
-        }
-
-        // 显示模板
-        if (showProviderTemplates) {
-            InfoCard(
-                title = "常用 Provider 模板",
-                text = "以下是常用的AI供应商配置模板，复制相关信息填写到下方表单。",
-            )
-            com.ashareai.app.standalone.data.ai.ProviderTemplates.all().forEach { template ->
-                ContentCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(template.name, fontWeight = FontWeight.SemiBold)
-                        Text("Base URL: ${template.baseUrl}", style = MaterialTheme.typography.bodySmall)
-                        Text("默认模型: ${template.model}", style = MaterialTheme.typography.bodySmall)
-                        TextButton(
-                            onClick = {
-                                providerName = template.name
-                                providerUrl = template.baseUrl
-                                providerModel = template.model
-                                showProviderTemplates = false
-                            },
-                        ) { Text("使用此模板") }
-                    }
-                }
-            }
-            TextButton(onClick = { showProviderTemplates = false }) { Text("收起模板") }
-        }
-
-        OutlinedTextField(providerName, { providerName = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(providerUrl, { providerUrl = it }, label = { Text("Base URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(providerKey, { providerKey = it }, label = { Text("API Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(providerModel, { providerModel = it }, label = { Text("模型") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(organization, { organization = it }, label = { Text("OpenAI Organization（可选）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(project, { project = it }, label = { Text("OpenAI Project（可选）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(
-            onClick = {
-                viewModel.saveAiProvider(
-                    AiProviderDraft(
-                        name = providerName,
-                        baseUrl = providerUrl,
-                        apiKey = providerKey,
-                        model = providerModel,
-                        organization = organization,
-                        project = project,
-                    ),
-                )
-                providerName = ""; providerKey = ""; organization = ""; project = ""
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存 AI Provider") }
-        providers.forEach {
-            ListItemSurface {
-                Column(Modifier.weight(1f)) {
-                    Text(it.name + " · " + it.model, fontWeight = FontWeight.SemiBold)
-                    Text(it.baseUrl, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                TextButton(onClick = { viewModel.testAiProvider(it.id) }) { Text("测试") }
-                TextButton(onClick = { viewModel.removeAiProvider(it.id) }) { Text("删除") }
             }
         }
         aiTestResult?.let { Text("连接测试：" + it) }
@@ -2072,6 +2023,7 @@ private val routes = setOf(
     "notifications",
     "chat",
     "ai_agents",
+    "ai_providers",
     "settings",
 )
 

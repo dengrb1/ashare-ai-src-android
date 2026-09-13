@@ -452,24 +452,37 @@ class StandaloneViewModel(
         }
     }
 
-    fun testAiProvider(providerId: String) {
-        viewModelScope.launch {
-            val output = StringBuilder()
-            var error: String? = null
-            app.container.aiClient.stream(
-                AiRequest(
-                    providerId = providerId,
-                    systemInstruction = "Reply with a short connection confirmation.",
-                    prompt = "connection test",
-                ),
-            ).collect { event ->
-                when (event) {
-                    is AiStreamEvent.Delta -> output.append(event.text)
-                    is AiStreamEvent.Failed -> error = event.message
-                    else -> Unit
-                }
+    // 用于新的 Provider 配置界面的挂起函数版本
+    suspend fun saveAiProvider(draft: AiProviderDraft): Result<Unit> = runCatching {
+        app.container.aiProviders.save(draft)
+    }
+
+    suspend fun deleteAiProvider(id: String) {
+        app.container.aiProviders.remove(id)
+    }
+
+    suspend fun testAiProvider(providerId: String): String {
+        val output = StringBuilder()
+        var error: String? = null
+        app.container.aiClient.stream(
+            AiRequest(
+                providerId = providerId,
+                systemInstruction = "Reply with a short connection confirmation.",
+                prompt = "connection test",
+            ),
+        ).collect { event ->
+            when (event) {
+                is AiStreamEvent.Delta -> output.append(event.text)
+                is AiStreamEvent.Failed -> error = event.message
+                else -> Unit
             }
-            _aiTestResult.value = output.toString().takeIf(String::isNotBlank) ?: error ?: "连接未返回文本"
+        }
+        return if (error != null) {
+            "✗ 测试失败: $error"
+        } else if (output.isNotBlank()) {
+            "✓ 连接成功: ${output.toString().take(100)}"
+        } else {
+            "✗ 连接未返回文本"
         }
     }
 
