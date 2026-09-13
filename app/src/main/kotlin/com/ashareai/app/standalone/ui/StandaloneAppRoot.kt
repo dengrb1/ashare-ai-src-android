@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CandlestickChart
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
@@ -241,9 +242,9 @@ fun StandaloneAppRoot(
                 val scope = rememberCoroutineScope()
                 AiProviderConfigScreen(
                     providers = viewModel.aiProviders.collectAsState().value,
-                    onSave = { draft -> viewModel.saveAiProvider(draft) },
-                    onDelete = { id -> scope.launch { viewModel.deleteAiProvider(id) } },
-                    onTest = { id -> viewModel.testAiProvider(id) },
+                    onSave = { draft -> viewModel.saveAiProviderSuspend(draft) },
+                    onDelete = { id -> viewModel.deleteAiProvider(id) },
+                    onTest = { id -> viewModel.testAiProviderSuspend(id) },
                     onNavigateBack = { route = "settings" },
                     modifier = Modifier.padding(padding),
                 )
@@ -1757,8 +1758,7 @@ private fun SettingsScreen(
             title = "AI 配置说明",
             text = "先配置 AI Provider 添加供应商，然后在 AI Agent 中为不同任务分配专门的模型。支持多供应商、健康检查、故障转移和自动缓存。",
         )
-            }
-        }
+
         aiTestResult?.let { Text("连接测试：" + it) }
         SwitchRow(
             "允许 AI 使用持仓成本与数量（仍需每次单独授权）",

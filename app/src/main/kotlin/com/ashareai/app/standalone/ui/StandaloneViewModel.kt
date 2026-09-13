@@ -453,7 +453,7 @@ class StandaloneViewModel(
     }
 
     // 用于新的 Provider 配置界面的挂起函数版本
-    suspend fun saveAiProvider(draft: AiProviderDraft): Result<Unit> = runCatching {
+    suspend fun saveAiProviderSuspend(draft: AiProviderDraft): Result<Unit> = runCatching {
         app.container.aiProviders.save(draft)
     }
 
@@ -461,7 +461,7 @@ class StandaloneViewModel(
         app.container.aiProviders.remove(id)
     }
 
-    suspend fun testAiProvider(providerId: String): String {
+    suspend fun testAiProviderSuspend(providerId: String): String {
         val output = StringBuilder()
         var error: String? = null
         app.container.aiClient.stream(

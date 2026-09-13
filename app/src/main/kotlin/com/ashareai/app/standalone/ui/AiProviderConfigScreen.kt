@@ -170,7 +170,7 @@ fun AiProviderConfigScreen(
                             }
                         }
                     }
-                </Column>
+                }
             }
         }
 
@@ -244,7 +244,6 @@ fun AiProviderConfigScreen(
                 )
             }
         }
-
         // 返回按钮
         OutlinedButton(
             onClick = onNavigateBack,
@@ -302,7 +301,7 @@ fun AiProviderConfigScreen(
 }
 
 @Composable
-private fun ProviderCard(
+fun ProviderCard(
     provider: AiProvider,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -356,7 +355,7 @@ private fun ProviderCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                </Column>
+                }
                 Row {
                     IconButton(onClick = onTest) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "测试")
@@ -378,7 +377,7 @@ private fun ProviderCard(
 }
 
 @Composable
-private fun ProviderEditorDialog(
+fun ProviderEditorDialog(
     provider: AiProvider?,
     onDismiss: () -> Unit,
     onSave: (AiProviderDraft) -> Unit,

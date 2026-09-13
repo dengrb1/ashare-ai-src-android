@@ -1,0 +1,216 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:processReleaseMainManifest UP-TO-DATE
+> Task :app:processReleaseManifest UP-TO-DATE
+> Task :app:processReleaseManifestForPackage UP-TO-DATE
+> Task :app:processReleaseResources UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets UP-TO-DATE
+> Task :app:compressReleaseAssets UP-TO-DATE
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:kspReleaseKotlin
+
+> Task :app:compileReleaseKotlin FAILED
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:173:17 Syntax error: Expecting an element.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:173:18 Syntax error: Unexpected tokens (use ';' to separate expressions on the same line).
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:211:17 Unresolved reference 'ProviderCard'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:259:9 Unresolved reference 'ProviderEditorDialog'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:262:24 Cannot infer type for value parameter 'draft'. Specify it explicitly.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:305:1 Modifier 'private' is not applicable to 'local function'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:359:17 Syntax error: Expecting an element.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:359:18 Syntax error: Unexpected tokens (use ';' to separate expressions on the same line).
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:381:1 Modifier 'private' is not applicable to 'local function'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/AiProviderConfigScreen.kt:504:2 Syntax error: Expecting '}'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1741:33 Unresolved reference 'CloudQueue'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:21 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:23 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:27 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:27 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:27 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:29 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1762:44 Unresolved reference 'it'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1763:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1763:18 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1764:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1764:14 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1764:39 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1764:40 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1765:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1765:21 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1765:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1765:47 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:24 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:33 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:35 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1766:63 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1767:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:21 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:23 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:29 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1769:30 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:14 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:15 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:51 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1770:52 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:26 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:27 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:43 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:45 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:45 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:47 Unresolved reference 'exportPassphrase'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:66 Unresolved reference 'it'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:70 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:72 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:78 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:80 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:80 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:80 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:82 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:98 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:100 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:109 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:111 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:119 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:120 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:132 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:133 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:134 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:136 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:147 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:149 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1771:153 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1772:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1772:15 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:21 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:23 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:23 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:29 Unresolved reference 'exportPassphrase'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:60 Unresolved reference 'createArchive'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1773:118 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:24 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:32 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:33 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:45 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:46 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1774:47 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1775:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1775:11 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1775:11 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1775:11 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1775:13 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:26 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:27 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:43 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:45 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:45 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:47 Unresolved reference 'importPassphrase'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:66 Unresolved reference 'it'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:70 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:72 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:78 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:80 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:80 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:80 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:82 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:98 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:100 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:109 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:111 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:119 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:120 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:132 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:133 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:134 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:136 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:147 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:149 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1776:153 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1777:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1777:23 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:21 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:23 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:23 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:29 Unresolved reference 'importPassphrase'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:60 Unresolved reference 'openArchive'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1778:124 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:13 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:24 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:32 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:33 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:45 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:46 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1779:47 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1780:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1780:11 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1780:11 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1780:11 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1780:13 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:9 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:22 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:24 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:28 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:28 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:28 Function declaration must have a name.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:35 Unresolved reference 'it'.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1781:61 @Composable invocations can only happen from the context of a @Composable function
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1782:5 Syntax error: Expecting a top level declaration.
+e: file:///F:/code/ashare-ai-src-android/app/src/main/kotlin/com/ashareai/app/standalone/ui/StandaloneAppRoot.kt:1783:1 Syntax error: Expecting a top level declaration.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 12s
+35 actionable tasks: 2 executed, 33 up-to-date
