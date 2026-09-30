@@ -7,6 +7,8 @@ import com.ashareai.app.AShareApp
 import com.ashareai.app.data.KlineRepository
 import com.ashareai.app.data.KlineSource
 import com.ashareai.app.data.NotificationCenter
+import com.ashareai.app.data.NotificationStreamClient
+import com.ashareai.app.data.NotificationStreamEvent
 import com.ashareai.app.data.model.AssetState
 import com.ashareai.app.data.model.AssetStateRequest
 import com.ashareai.app.data.model.ExitMonitorRequest
@@ -66,6 +68,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private var pollJob: Job? = null
+    private var notificationStreamJob: Job? = null
     private var signedIn = false
     private var foreground = false
 
@@ -81,12 +84,15 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     fun bindSession(isSignedIn: Boolean, isForeground: Boolean) {
         signedIn = isSignedIn
         foreground = isForeground
+        if (!foreground) notificationStreamJob?.cancel()
         if (!signedIn) {
             pollJob?.cancel()
+            notificationStreamJob?.cancel()
             _state.value = ScreenState.Loading
             return
         }
         if (content() == null) loadWorkspace() else restartPolling()
+        if (foreground) startNotificationStream()
     }
 
     fun loadWorkspace() = viewModelScope.launch {
@@ -104,6 +110,19 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun retry() = loadWorkspace()
+
+    private fun startNotificationStream() {
+        if (notificationStreamJob?.isActive == true) return
+        notificationStreamJob = viewModelScope.launch {
+            NotificationStreamClient.stream(settings).collect { event ->
+                when (event) {
+                    is NotificationStreamEvent.NotificationEvent,
+                    is NotificationStreamEvent.Status -> notificationCenter.refresh()
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     fun refreshAll() = viewModelScope.launch { refreshAllInternal() }
 

@@ -45,6 +45,9 @@ data class HealthResponse(
     val quote_bridge: InfrastructureHealth? = null,
     val news_bridge: InfrastructureHealth? = null,
     val gateway: InfrastructureHealth? = null,
+    val redis: JsonObject? = null,
+    val workers: JsonObject? = null,
+    val resources: JsonObject? = null,
 )
 
 /** Deliberately excludes bridge URLs and internal error text from the UI model. */
@@ -137,6 +140,74 @@ data class Quote(
     val volume: Double? = null,
     val amount: Double? = null,
     val status: MarketDataStatus? = null,
+)
+
+@Serializable
+data class LiveQuoteStatus(
+    val source: String = "unknown",
+    val collected_at: String = "",
+    val cached_at: String = "",
+    val delayed: Boolean = false,
+    val stale: Boolean = false,
+    val age_seconds: Double = 0.0,
+    val message: String? = null,
+)
+
+@Serializable
+data class LivePositionMonitor(
+    val symbol: String,
+    val name: String = "",
+    val quantity: Int = 0,
+    val cost: Double = 0.0,
+    val price: Double? = null,
+    val change: Double? = null,
+    val change_percent: Double? = null,
+    val market_value: Double? = null,
+    val unrealized_pnl: Double? = null,
+    val unrealized_pnl_pct: Double? = null,
+    val stop_loss_price: Double? = null,
+    val stop_loss_mode: String? = null,
+    val trailing_stop_price: Double? = null,
+    val stop_distance_pct: Double? = null,
+    val risk_state: String = "NORMAL",
+    val risk_level: String = "NORMAL",
+    val strategy_version: String = "",
+    val quote_status: LiveQuoteStatus = LiveQuoteStatus(),
+    val available_at: String = "",
+    val decision_at: String = "",
+    val evidence: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+)
+
+@Serializable
+data class LiveMonitorSignal(
+    val symbol: String,
+    val signal_type: String,
+    val severity: String = "INFO",
+    val evidence: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+    val available_at: String = "",
+    val decision_at: String = "",
+)
+
+@Serializable
+data class LiveMonitorSession(
+    val state: String = "UNKNOWN",
+    val is_trading_day: Boolean? = null,
+    val reason: String = "",
+)
+
+@Serializable
+data class LiveMonitorResponse(
+    val monitor_version: String = "",
+    val generated_at: String = "",
+    val decision_at: String = "",
+    val session: LiveMonitorSession = LiveMonitorSession(),
+    val next_poll_seconds: Int = 5,
+    val positions: List<LivePositionMonitor> = emptyList(),
+    val watchlist_quotes: List<Quote> = emptyList(),
+    val signals: List<LiveMonitorSignal> = emptyList(),
+    val market_error: String? = null,
+    val stale: Boolean = false,
+    val research_snapshot_isolated: Boolean = true,
 )
 
 @Serializable

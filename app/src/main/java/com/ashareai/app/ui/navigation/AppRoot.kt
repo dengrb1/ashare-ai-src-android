@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.CandlestickChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.*
@@ -64,11 +63,10 @@ object Routes {
 private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
 
 private val bottomTabs = listOf(
-    BottomTab(Routes.HOME, "研究概览", Icons.Outlined.Home),
-    BottomTab(Routes.MARKET, "行情", Icons.Outlined.CandlestickChart),
-    BottomTab(Routes.RESEARCH_HUB, "研究", Icons.Outlined.Science),
-    BottomTab(Routes.AI_CHAT, "AI 问答", Icons.AutoMirrored.Outlined.Chat),
-    BottomTab(Routes.PROFILE, "个人与系统", Icons.Outlined.AccountCircle),
+    BottomTab(Routes.HOME, "监控", Icons.Outlined.Home),
+    BottomTab(Routes.RESEARCH_HUB, "研究 / 回测", Icons.Outlined.Science),
+    BottomTab(Routes.AI_CHAT, "AI 诊断", Icons.AutoMirrored.Outlined.Chat),
+    BottomTab(Routes.PROFILE, "设置", Icons.Outlined.AccountCircle),
 )
 
 @Composable

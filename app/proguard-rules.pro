@@ -12,8 +12,30 @@
 -keepclassmembers class com.ashareai.app.standalone.** { *** Companion; }
 -keepclasseswithmembers class com.ashareai.app.standalone.** { kotlinx.serialization.KSerializer serializer(...); }
 
+# Keep enums and data classes with serialization
+-keepclassmembers enum * { *; }
+-keep class * implements java.io.Serializable { *; }
+-keepnames class * implements android.os.Parcelable { *; }
+
 # Room loads generated implementations by name.
 -keep class * extends androidx.room.RoomDatabase
+
+# Keep Application class and critical components
+-keep class com.ashareai.app.HybridApp { *; }
+-keep class com.ashareai.app.MainActivity { *; }
+
+# Keep workspace related classes
+-keep class com.ashareai.app.workspace.** { *; }
+
+# Keep all data classes and containers
+-keep class com.ashareai.app.data.** { *; }
+-keep class com.ashareai.app.standalone.** { *; }
+-keep class com.ashareai.app.ui.** { *; }
+-keep class com.ashareai.app.island.** { *; }
+
+# Keep ViewModels
+-keep class * extends androidx.lifecycle.ViewModel { *; }
+-keep class * extends androidx.lifecycle.AndroidViewModel { *; }
 
 -keepclassmembers,allowshrinking,allowobfuscation interface * {
     @retrofit2.http.* <methods>;

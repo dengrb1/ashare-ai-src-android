@@ -21,7 +21,7 @@ data class FocusCapabilities(
     val islandSupported: Boolean,
     val focusPermissionGranted: Boolean,
     val appIdConfigured: Boolean,
-    val hyperOSVersion: HyperOSVersion,
+    val hyperOSVersion: HyperOSVersion = HyperOSVersion.UNKNOWN,
 ) {
     val focusSupported: Boolean get() = protocolVersion > 0
     val superIslandReady: Boolean get() = islandSupported && focusPermissionGranted && appIdConfigured
@@ -56,10 +56,10 @@ internal data class IslandNotificationSpec(
     val islandTimeoutSeconds: Int,
 ) {
     fun normalized() = copy(
-        title = title.take(12),
-        content = content.take(16),
-        subContent = subContent?.take(20)?.takeIf { it.isNotBlank() },
-        ticker = ticker.take(20),
+        title = title.take(40),
+        content = content.take(80),
+        subContent = subContent?.take(80)?.takeIf { it.isNotBlank() },
+        ticker = ticker.take(30),
         timeoutMinutes = timeoutMinutes.coerceIn(1, 720),
         islandTimeoutSeconds = islandTimeoutSeconds.coerceIn(60, 3_600),
     )

@@ -14,6 +14,7 @@ class AppContainer(
     val connectionRepository = ConnectionRepository(settings, services)
     val sessionRepository = SessionRepository(settings, services, connectionRepository)
     val marketRepository = MarketRepository(services)
+    val monitoringRepository = MonitoringRepository(services)
     val researchRepository = ResearchRepository(services)
     val simulationRepository = SimulationRepository(services)
     val aiRepository = AiRepository(services)
@@ -95,6 +96,15 @@ class MarketRepository(private val services: ApiServiceProvider) {
         api.klines(symbol, period, limit, start = start, end = end)
     suspend fun financialSearch(query: String) = api.financialSearch(query)
     suspend fun searchStatus() = api.searchStatus()
+}
+
+class MonitoringRepository(private val services: ApiServiceProvider) {
+    private val api get() = services.service()
+
+    suspend fun live(
+        refresh: Boolean? = null,
+        includeWatchlist: Boolean? = null,
+    ) = api.liveMonitor(refresh, includeWatchlist)
 }
 
 class ResearchRepository(private val services: ApiServiceProvider) {

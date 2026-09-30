@@ -47,6 +47,13 @@ interface ApiService : HealthApi {
         @Body body: MarketRefreshRequest,
     ): AssetState
 
+    // ---- 实时持仓监控（手机端） ----
+    @GET("api/v1/mobile/monitor/live")
+    suspend fun liveMonitor(
+        @Query("refresh") refresh: Boolean? = null,
+        @Query("include_watchlist") includeWatchlist: Boolean? = null,
+    ): LiveMonitorResponse
+
     // ---- 行情 ----
     @GET("api/v1/market/quotes/{symbol}")
     suspend fun quote(
