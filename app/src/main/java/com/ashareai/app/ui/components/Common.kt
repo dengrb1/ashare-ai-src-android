@@ -29,29 +29,44 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import com.ashareai.app.ui.theme.changeColor
+import com.ashareai.app.ui.theme.GlassCard
+import com.ashareai.app.ui.theme.LocalGlassEnabled
 
-/** 简约卡片：主题色面、圆角、细描边，顶部一条主题色微光渐隐（边缘光层次）。 */
+/** 简约卡片：主题色面、圆角、细描边，顶部一条主题色微光渐隐（边缘光层次）。
+ *
+ * @param glassMorphism 是否使用玻璃态材质效果（默认 false，保持原有简约风格）
+ */
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
+    glassMorphism: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val edgeTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-    Surface(
-        modifier = modifier.drawWithContent {
-            drawContent()
-            val edge = 2.dp.toPx()
-            drawRect(
-                brush = Brush.verticalGradient(0f to edgeTint, edge to Color.Transparent),
-                topLeft = Offset(0f, 0f),
-                size = Size(size.width, edge),
-            )
-        },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(modifier = Modifier.padding(12.dp), content = content)
+    val glassEnabled = LocalGlassEnabled.current
+
+    if (glassMorphism && glassEnabled) {
+        GlassCard(
+            modifier = modifier,
+            content = content,
+        )
+    } else {
+        val edgeTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        Surface(
+            modifier = modifier.drawWithContent {
+                drawContent()
+                val edge = 2.dp.toPx()
+                drawRect(
+                    brush = Brush.verticalGradient(0f to edgeTint, edge to Color.Transparent),
+                    topLeft = Offset(0f, 0f),
+                    size = Size(size.width, edge),
+                )
+            },
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(modifier = Modifier.padding(12.dp), content = content)
+        }
     }
 }
 

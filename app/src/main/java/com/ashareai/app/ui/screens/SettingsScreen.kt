@@ -27,12 +27,14 @@ import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.MarketRefreshIntervals
 import com.ashareai.app.ui.components.AppCard
 import com.ashareai.app.ui.components.KeyValueRow
+import com.ashareai.app.ui.components.SectionTitle
+import com.ashareai.app.workspace.SharedDataStore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-/** 设置：服务器地址、前台行情刷新间隔、深浅色、超级岛监控开关。 */
+/** 设置：服务器地址、前台行情刷新间隔、深浅色、超级岛监控开关、工作区数据共享。 */
 @Composable
 fun SettingsScreen(appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
@@ -43,6 +45,15 @@ fun SettingsScreen(appViewModel: AppViewModel) {
     val foregroundRefreshIntervalSeconds by marketViewModel.refreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = true)
+
+    // 工作区数据共享状态
+    val sharedDataStore = remember { SharedDataStore(context) }
+    val sharedSettings by sharedDataStore.sharedSettings.collectAsState(
+        initial = SharedDataStore.SharedSettings()
+    )
+    val sharedValues by sharedDataStore.sharedValues.collectAsState(
+        initial = SharedDataStore.SharedValues()
+    )
 
     var baseUrl by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -205,6 +216,42 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
+                            Text("省电模式自动优化", style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "检测到手机进入省电模式时，自动降低液体玻璃特效和动画强度，延长续航时间。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = sharedSettings.autoOptimizeInPowerSaver,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.setAutoOptimizeInPowerSaver(enabled)
+                                }
+                            },
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                    val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
+                    val batteryLevel by appViewModel.batteryLevel.collectAsState()
+                    KeyValueRow("当前电量", "$batteryLevel%")
+                    KeyValueRow("省电模式", if (isPowerSaveMode) "已开启" else "未开启")
+                    if (isPowerSaveMode && sharedSettings.autoOptimizeInPowerSaver) {
+                        Text(
+                            "✓ 已启用省电优化：液体玻璃特效已简化",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            item {
+                AppCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
                             Text("行情与研究通知", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(2.dp))
                             Text(
@@ -280,6 +327,161 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     }) {
                         Text("测试上岛")
                     }
+                }
+            }
+
+            item {
+                AppCard {
+                    Text("工作区数据共享", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "选择在连接版和独立版之间共享的设置项。持仓数据、研究记录和登录凭证始终隔离。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("主题设置", style = MaterialTheme.typography.bodyMedium)
+                            Text("深色模式偏好", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareTheme,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareTheme = enabled))
+                                    if (enabled) {
+                                        sharedDataStore.syncThemeMode(darkMode)
+                                    }
+                                }
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("超级岛开关", style = MaterialTheme.typography.bodyMedium)
+                            Text("后台监控通知", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareIsland,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareIsland = enabled))
+                                    if (enabled) {
+                                        sharedDataStore.syncIslandEnabled(islandEnabled)
+                                    }
+                                }
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("AI 配置", style = MaterialTheme.typography.bodyMedium)
+                            Text("提供商和模型选择", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareAiConfig,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareAiConfig = enabled))
+                                }
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("通知偏好", style = MaterialTheme.typography.bodyMedium)
+                            Text("通知总开关状态", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareNotifications,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareNotifications = enabled))
+                                    if (enabled) {
+                                        sharedDataStore.syncNotificationsEnabled(islandEnabled)
+                                    }
+                                }
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("玻璃态材质", style = MaterialTheme.typography.bodyMedium)
+                            Text("UI 高级视觉效果", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareGlassEffect,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareGlassEffect = enabled))
+                                    if (enabled) {
+                                        sharedDataStore.syncGlassEffectEnabled(true)
+                                    }
+                                }
+                            },
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                sharedDataStore.updateSharedValues(
+                                    SharedDataStore.SharedValues(
+                                        themeMode = darkMode,
+                                        islandEnabled = islandEnabled,
+                                        notificationsEnabled = islandEnabled,
+                                        glassEffectEnabled = true,
+                                    )
+                                )
+                                message = "当前设置已同步到共享存储"
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("立即同步到共享存储")
+                    }
+
+                    Text(
+                        "切换工作区时自动应用已启用的共享设置。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 

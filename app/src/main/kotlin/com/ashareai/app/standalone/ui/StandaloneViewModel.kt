@@ -59,6 +59,11 @@ class StandaloneViewModel(
     private val technicalEngine = DeterministicResearchEngine()
     private val exitEngine = ExitResearchEngine(alertEvaluator)
 
+    // 省电模式管理器
+    private val powerSaverManager = com.ashareai.app.ui.PowerSaverManager(appContext)
+    val isPowerSaveMode: StateFlow<Boolean> get() = powerSaverManager.isPowerSaveMode
+    val batteryLevel: StateFlow<Int> get() = powerSaverManager.batteryLevel
+
     val holdings = local.holdings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val watchlist = local.watchlist.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val quotes = local.quotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -107,6 +112,10 @@ class StandaloneViewModel(
         val quoteMap = cached.associateBy(MarketQuote::symbol)
         held.map { it to quoteMap[it.symbol] }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    init {
+        powerSaverManager.start()
+    }
 
     fun loadCatalog(limit: Int = 100) {
         viewModelScope.launch {
@@ -443,24 +452,37 @@ class StandaloneViewModel(
         }
     }
 
-    fun testAiProvider(providerId: String) {
-        viewModelScope.launch {
-            val output = StringBuilder()
-            var error: String? = null
-            app.container.aiClient.stream(
-                AiRequest(
-                    providerId = providerId,
-                    systemInstruction = "Reply with a short connection confirmation.",
-                    prompt = "connection test",
-                ),
-            ).collect { event ->
-                when (event) {
-                    is AiStreamEvent.Delta -> output.append(event.text)
-                    is AiStreamEvent.Failed -> error = event.message
-                    else -> Unit
-                }
+    // 用于新的 Provider 配置界面的挂起函数版本
+    suspend fun saveAiProviderSuspend(draft: AiProviderDraft): Result<Unit> = runCatching {
+        app.container.aiProviders.save(draft)
+    }
+
+    suspend fun deleteAiProvider(id: String) {
+        app.container.aiProviders.remove(id)
+    }
+
+    suspend fun testAiProviderSuspend(providerId: String): String {
+        val output = StringBuilder()
+        var error: String? = null
+        app.container.aiClient.stream(
+            AiRequest(
+                providerId = providerId,
+                systemInstruction = "Reply with a short connection confirmation.",
+                prompt = "connection test",
+            ),
+        ).collect { event ->
+            when (event) {
+                is AiStreamEvent.Delta -> output.append(event.text)
+                is AiStreamEvent.Failed -> error = event.message
+                else -> Unit
             }
-            _aiTestResult.value = output.toString().takeIf(String::isNotBlank) ?: error ?: "连接未返回文本"
+        }
+        return if (error != null) {
+            "✗ 测试失败: $error"
+        } else if (output.isNotBlank()) {
+            "✓ 连接成功: ${output.toString().take(100)}"
+        } else {
+            "✗ 连接未返回文本"
         }
     }
 
@@ -570,6 +592,11 @@ class StandaloneViewModel(
 
     fun dismissMessage() {
         _message.value = null
+    }
+
+    override fun onCleared() {
+        powerSaverManager.stop()
+        super.onCleared()
     }
 
     private companion object {

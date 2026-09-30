@@ -21,11 +21,21 @@ data class FocusCapabilities(
     val islandSupported: Boolean,
     val focusPermissionGranted: Boolean,
     val appIdConfigured: Boolean,
+    val hyperOSVersion: HyperOSVersion,
 ) {
     val focusSupported: Boolean get() = protocolVersion > 0
     val superIslandReady: Boolean get() = islandSupported && focusPermissionGranted && appIdConfigured
     val v3PayloadAttached: Boolean
         get() = true
+}
+
+/**
+ * HyperOS 版本检测：OS3 (HyperOS 1.x) 和 OS4 (HyperOS 2.x)。
+ */
+enum class HyperOSVersion {
+    OS3,  // HyperOS 1.x
+    OS4,  // HyperOS 2.x
+    UNKNOWN
 }
 
 data class IslandNotificationSpec(
@@ -39,10 +49,10 @@ data class IslandNotificationSpec(
     val islandTimeoutSeconds: Int,
 ) {
     fun normalized() = copy(
-        title = title.take(40),
-        content = content.take(80),
-        subContent = subContent?.take(80)?.takeIf(String::isNotBlank),
-        ticker = ticker.take(30),
+        title = title.take(12),
+        content = content.take(16),
+        subContent = subContent?.take(20)?.takeIf(String::isNotBlank),
+        ticker = ticker.take(20),
         timeoutMinutes = timeoutMinutes.coerceIn(1, 720),
         islandTimeoutSeconds = islandTimeoutSeconds.coerceIn(60, 3_600),
     )
@@ -71,8 +81,32 @@ object FocusNotification {
             islandSupported = protocol >= 3 || islandSystemProperty() || isHyperOS4(),
             focusPermissionGranted = hasFocusPermission(context),
             appIdConfigured = hasConfiguredAppId(context),
+            hyperOSVersion = detectHyperOSVersion(),
         )
     }
+
+    /**
+     * 检测 HyperOS 版本：通过系统属性判断 OS3 (1.x) 或 OS4 (2.x)。
+     */
+    private fun detectHyperOSVersion(): HyperOSVersion = runCatching {
+        val systemProperties = Class.forName("android.os.SystemProperties")
+        val get = systemProperties.getDeclaredMethod("get", String::class.java, String::class.java)
+        val version = get.invoke(null, "ro.mi.os.version.incremental", "") as? String ?: ""
+
+        when {
+            version.startsWith("OS1.") -> HyperOSVersion.OS3
+            version.startsWith("OS2.") -> HyperOSVersion.OS4
+            else -> {
+                // 备选方案：通过 Android 版本推断
+                val androidVersion = android.os.Build.VERSION.SDK_INT
+                when {
+                    androidVersion <= 34 -> HyperOSVersion.OS3  // Android 14 及以下通常为 OS3
+                    androidVersion >= 35 -> HyperOSVersion.OS4  // Android 15+ 通常为 OS4
+                    else -> HyperOSVersion.UNKNOWN
+                }
+            }
+        }
+    }.getOrDefault(HyperOSVersion.UNKNOWN)
 
     fun decorate(
         context: Context,
@@ -112,7 +146,7 @@ object FocusNotification {
         val builder = NotificationCompat.Builder(context, HybridApp.CHANNEL_LOCAL_ALERT)
             .setSmallIcon(R.drawable.ic_stat_trend)
             .setContentTitle("霁衡智研")
-            .setContentText("测试通知：行情监控正常")
+            .setContentText("测试通知")
             .setContentIntent(openApp)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -125,7 +159,7 @@ object FocusNotification {
                 builder = builder,
                 title = "霁衡智研",
                 content = "测试通知",
-                subContent = "标准通知与 v3 载荷已发送",
+                subContent = "超级岛载荷已发送",
                 colorContent = "#E53935",
                 enableFloat = true,
                 timeoutMinutes = 10,
@@ -146,12 +180,12 @@ object FocusNotification {
             timeout = spec.timeoutMinutes
             updatable = true
             enableFloat = spec.enableFloat
-            islandFirstFloat = spec.enableFloat  // 只有重要通知才首次悬浮
-            business = "ashare_standalone_alert"  // 业务标识改为 alert，区分重要通知
+            islandFirstFloat = spec.enableFloat
+            business = "ashare_standalone_alert"
             baseInfo {
                 type = 2
                 title = spec.title
-                content = listOfNotNull(spec.content, spec.subContent).joinToString(" · ")
+                content = spec.content
             }
             picInfo {
                 type = 1
@@ -159,11 +193,9 @@ object FocusNotification {
                 picDark = iconKey
             }
             island {
-                // islandProperty = 1 表示这是超级岛通知
-                // HyperOS 4 会识别此标识并在状态栏显示超级岛
                 islandProperty = if (spec.enableFloat) 1 else 0
                 islandTimeout = spec.islandTimeoutSeconds
-                highlightColor = spec.colorContent ?: "#E53935"
+                highlightColor = spec.colorContent?.let { softenColor(it) } ?: "#FF6B6B"
                 smallIslandArea {
                     picInfo {
                         type = 1
@@ -181,13 +213,22 @@ object FocusNotification {
                     imageTextInfoRight {
                         type = 3
                         textInfo {
-                            title = spec.content.take(18)
-                            content = spec.subContent.orEmpty().take(22).ifEmpty { " " }
+                            title = spec.content
+                            content = spec.subContent.orEmpty().ifEmpty { " " }
                         }
                     }
                 }
             }
         }
+
+    /**
+     * 柔和化颜色：红色和绿色使用更柔和的色调，提升视觉舒适度。
+     */
+    private fun softenColor(color: String): String = when (color) {
+        "#E53935" -> "#FF6B6B"  // 红涨：更柔和的红色
+        "#00A86B" -> "#51CF66"  // 绿跌：更柔和的绿色
+        else -> color
+    }
 
     private fun hasFocusPermission(context: Context): Boolean = runCatching {
         val extras = Bundle().apply { putString("package", context.packageName) }

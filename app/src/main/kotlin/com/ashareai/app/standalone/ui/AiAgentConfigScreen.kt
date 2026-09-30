@@ -29,19 +29,26 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiAgentConfig
 import com.ashareai.app.standalone.data.ai.AiAgentRole
+import com.ashareai.app.standalone.data.ai.AiCacheManager
+import com.ashareai.app.standalone.data.ai.AiSchedulingPolicy
+import com.ashareai.app.standalone.data.ai.LocalInferenceDetector
 import com.ashareai.app.standalone.data.ai.ProviderTemplates
 import com.ashareai.app.standalone.domain.AiProvider
+import kotlinx.coroutines.launch
 
 /**
  * AI Agent配置屏幕
@@ -57,12 +64,30 @@ fun AiAgentConfigScreen(
     onNavigateToProviders: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selectedRole by rememberSaveable { mutableStateOf(AiAgentRole.CHAT_ASSISTANT) }
     var selectedProviderId by rememberSaveable { mutableStateOf<String?>(null) }
     var enableCache by rememberSaveable { mutableStateOf(true) }
     var maxRetries by rememberSaveable { mutableStateOf("2") }
     var timeoutSeconds by rememberSaveable { mutableStateOf("60") }
     var showTemplates by rememberSaveable { mutableStateOf(false) }
+
+    // AI 能效状态
+    var localInferenceAvailable by remember { mutableStateOf(false) }
+    var inferenceCapability by remember { mutableStateOf("检测中...") }
+    var schedulingPolicy by remember { mutableStateOf<AiSchedulingPolicy?>(null) }
+    var cacheStats by remember { mutableStateOf<com.ashareai.app.standalone.data.ai.CacheStats?>(null) }
+
+    // 检测本地推理能力和加载缓存统计
+    LaunchedEffect(Unit) {
+        localInferenceAvailable = LocalInferenceDetector.isLocalInferenceAvailable(context)
+        inferenceCapability = LocalInferenceDetector.getCapabilityDescription(context)
+        schedulingPolicy = AiSchedulingPolicy.create(context)
+
+        val cacheManager = AiCacheManager(context)
+        cacheStats = cacheManager.getStats()
+    }
 
     Column(
         modifier = modifier
@@ -335,6 +360,86 @@ fun AiAgentConfigScreen(
 
         // 缓存统计
         Text("系统状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        // AI 能效状态卡片
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (localInferenceAvailable) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                }
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (localInferenceAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+            ),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("AI 能效状态", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("端侧推理：$inferenceCapability", style = MaterialTheme.typography.bodySmall)
+                schedulingPolicy?.let { policy ->
+                    Text(
+                        "当前策略：${when (policy.modelPreference) {
+                            AiSchedulingPolicy.ModelPreference.FASTEST -> "省电模式"
+                            AiSchedulingPolicy.ModelPreference.BALANCED -> "平衡模式"
+                            AiSchedulingPolicy.ModelPreference.STRONGEST -> "性能模式"
+                        }}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (policy.useLocalInference) {
+                        Text(
+                            "✓ 优先使用本地推理",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (policy.cachePriority == AiSchedulingPolicy.CachePriority.HIGH) {
+                        Text(
+                            "✓ 高优先级缓存",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        // 缓存统计卡片
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("缓存统计", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = {
+                        scope.launch {
+                            val cacheManager = AiCacheManager(context)
+                            cacheManager.clearAll()
+                            cacheStats = cacheManager.getStats()
+                        }
+                    }) {
+                        Text("清空缓存", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                cacheStats?.let { stats ->
+                    Text("总条目：${stats.totalEntries}", style = MaterialTheme.typography.bodySmall)
+                    Text("有效条目：${stats.validEntries}", style = MaterialTheme.typography.bodySmall)
+                    Text("过期条目：${stats.expiredEntries}", style = MaterialTheme.typography.bodySmall)
+                    Text("缓存命中率：${(stats.hitRate * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                } ?: Text("加载中...", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        // Agent 分配策略
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
