@@ -13,6 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,6 +22,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +32,14 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ashareai.app.workspace.Workspace
+import com.ashareai.app.performance.AppVisibilityState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -56,19 +62,35 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val workspace by app.workspaceStore.currentWorkspace.collectAsState(initial = Workspace.LOCAL)
+            val localFullAnimationsEnabled by app.localContainer.settings.settings
+                .map { it.fullAnimationsEnabled }
+                .collectAsState(initial = true)
+            val fusionFullAnimationsEnabled by app.fusionSettings.fullAnimationsEnabled.collectAsState(initial = true)
+            val fullAnimationsEnabled = if (workspace == Workspace.LOCAL) {
+                localFullAnimationsEnabled
+            } else {
+                fusionFullAnimationsEnabled
+            }
+            val systemPowerSave = remember {
+                getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+            }
 
             AnimatedContent(
                 targetState = workspace,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(300)) + scaleIn(
-                        initialScale = 0.95f,
-                        animationSpec = tween(300)
-                    )).togetherWith(
-                        fadeOut(animationSpec = tween(300)) + scaleOut(
-                            targetScale = 0.95f,
+                    if (!fullAnimationsEnabled || systemPowerSave) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        (fadeIn(animationSpec = tween(300)) + scaleIn(
+                            initialScale = 0.95f,
                             animationSpec = tween(300)
+                        )).togetherWith(
+                            fadeOut(animationSpec = tween(300)) + scaleOut(
+                                targetScale = 0.95f,
+                                animationSpec = tween(300)
+                            )
                         )
-                    )
+                    }
                 },
                 label = "workspace_transition"
             ) { targetWorkspace ->
@@ -77,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     // 本地工作区：复用原 standalone MainActivity 逻辑
                     val viewModel: com.ashareai.app.standalone.ui.StandaloneViewModel = viewModel()
                     val settings by viewModel.settings.collectAsState()
+                    val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
                     var permissionState by remember { mutableStateOf(readPermissionState()) }
                     val notificationLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.RequestPermission(),
@@ -100,13 +123,26 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(settings.monitoringEnabled) {
                         if (settings.monitoringEnabled) {
                             com.ashareai.app.standalone.monitor.MarketMonitorService.start(this@MainActivity)
+                        } else {
+                            com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
                         }
                     }
-                    com.ashareai.app.standalone.ui.StandaloneTheme {
+                    com.ashareai.app.standalone.ui.StandaloneTheme(
+                        darkModePref = settings.darkMode,
+                        glassEnabled = settings.glassEnabled,
+                        fullAnimationsEnabled = settings.fullAnimationsEnabled,
+                        powerSaveMode = isPowerSaveMode,
+                    ) {
                         com.ashareai.app.standalone.ui.StandaloneAppRoot(
                             viewModel = viewModel,
                             pendingRoute = pendingRoute,
                             onRouteConsumed = { pendingRoute.value = null },
+                            onSwitchToConnected = {
+                                lifecycleScope.launch {
+                                    com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
+                                    app.workspaceStore.setWorkspace(Workspace.FUSION)
+                                }
+                            },
                             permissionState = permissionState,
                             onRequestNotifications = requestNotifications,
                             onOpenBatterySettings = {
@@ -129,6 +165,9 @@ class MainActivity : ComponentActivity() {
                     val appViewModel: com.ashareai.app.ui.AppViewModel = viewModel()
                     val marketViewModel: com.ashareai.app.ui.MarketViewModel = viewModel()
                     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
+                    val glassEnabled by appViewModel.settings.glassEnabled.collectAsState(initial = true)
+                    val fullAnimationsEnabled by appViewModel.settings.fullAnimationsEnabled.collectAsState(initial = true)
+                    val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
                     val authState by appViewModel.authState.collectAsState()
                     val foreground by appViewModel.foreground.collectAsState()
                     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = false)
@@ -144,6 +183,22 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(appViewModel) {
                         appViewModel.attachHostContext(this@MainActivity)
+                    }
+
+                    DisposableEffect(appViewModel) {
+                        val owner = this@MainActivity
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                Lifecycle.Event.ON_START -> appViewModel.onForeground()
+                                Lifecycle.Event.ON_STOP -> appViewModel.onBackground()
+                                else -> Unit
+                            }
+                        }
+                        owner.lifecycle.addObserver(observer)
+                        onDispose {
+                            owner.lifecycle.removeObserver(observer)
+                            appViewModel.detachHostContext(owner)
+                        }
                     }
 
                     // 登录后按设置启动持仓监控前台服务
@@ -170,14 +225,27 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    com.ashareai.app.ui.theme.AShareTheme(darkModePref = darkMode) {
+                    com.ashareai.app.ui.theme.AShareTheme(
+                        darkModePref = darkMode,
+                        glassEnabled = glassEnabled,
+                        fullAnimationsEnabled = fullAnimationsEnabled,
+                        powerSaveMode = isPowerSaveMode,
+                    ) {
                         androidx.compose.runtime.CompositionLocalProvider(
                             com.ashareai.app.ui.LocalAppContainer provides appViewModel.container,
                             com.ashareai.app.ui.LocalMarketViewModel provides marketViewModel,
                         ) {
-                            com.ashareai.app.ui.navigation.AppRoot(appViewModel, pendingRoute) {
-                                pendingRoute.value = null
-                            }
+                            com.ashareai.app.ui.navigation.AppRoot(
+                                appViewModel = appViewModel,
+                                pendingRoute = pendingRoute,
+                                onRouteConsumed = { pendingRoute.value = null },
+                                onSwitchToLocal = {
+                                    lifecycleScope.launch {
+                                        com.ashareai.app.island.MonitorService.stop(this@MainActivity)
+                                        app.workspaceStore.setWorkspace(Workspace.LOCAL)
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -194,10 +262,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // 前后台状态由各工作区 ViewModel 自行管理
+        AppVisibilityState.isForeground = true
     }
 
     override fun onStop() {
+        AppVisibilityState.isForeground = false
         super.onStop()
     }
 

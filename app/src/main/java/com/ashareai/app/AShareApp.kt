@@ -8,7 +8,7 @@ import com.ashareai.app.data.AppContainer
 import com.ashareai.app.data.SettingsStore
 import kotlinx.coroutines.runBlocking
 
-class AShareApp : Application() {
+open class AShareApp : Application() {
 
     lateinit var settings: SettingsStore
         private set

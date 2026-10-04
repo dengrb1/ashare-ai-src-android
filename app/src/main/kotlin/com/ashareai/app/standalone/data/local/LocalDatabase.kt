@@ -24,8 +24,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ChatMessageEntity::class,
         LocalBacktestEntity::class,
         LocalBacktestTradeEntity::class,
+        SyncOperationEntity::class,
+        SyncTombstoneEntity::class,
+        SyncBaselineEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true,
 )
 abstract class LocalDatabase : RoomDatabase() {
@@ -87,6 +90,44 @@ abstract class LocalDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_operations (
+                        idempotencyKey TEXT NOT NULL PRIMARY KEY,
+                        direction TEXT NOT NULL,
+                        scope TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        previewJson TEXT,
+                        errorMessage TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_tombstones (
+                        collection TEXT NOT NULL,
+                        recordKey TEXT NOT NULL,
+                        deletedAt INTEGER NOT NULL,
+                        sourceRevision INTEGER,
+                        PRIMARY KEY(collection, recordKey)
+                    )
+                """.trimIndent())
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_baselines (
+                        accountKey TEXT NOT NULL PRIMARY KEY,
+                        snapshotJson TEXT NOT NULL,
+                        savedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun create(context: Context): LocalDatabase = Room.databaseBuilder(
             context.applicationContext,
             LocalDatabase::class.java,
@@ -95,6 +136,8 @@ abstract class LocalDatabase : RoomDatabase() {
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
         ).enableMultiInstanceInvalidation()
             .build()
 

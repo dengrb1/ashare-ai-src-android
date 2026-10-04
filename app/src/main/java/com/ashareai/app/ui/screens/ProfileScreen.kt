@@ -18,7 +18,11 @@ import com.ashareai.app.ui.navigation.Routes
 
 /** 我的页：用户信息 + 设置入口 + 退出登录。 */
 @Composable
-fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) {
+fun ProfileScreen(
+    appViewModel: AppViewModel,
+    navController: NavHostController,
+    onSwitchToLocal: () -> Unit = {},
+) {
     val authState by appViewModel.authState.collectAsState()
     val user = (authState as? AppViewModel.AuthState.LoggedIn)?.user
     var confirmLogout by remember { mutableStateOf(false) }
@@ -44,6 +48,8 @@ fun ProfileScreen(appViewModel: AppViewModel, navController: NavHostController) 
 
             item { ProfileEntry("通知中心") { navController.navigate(Routes.NOTIFICATIONS) } }
             item { ProfileEntry("个人档案（导出/导入）") { navController.navigate(Routes.PERSONAL_DATA) } }
+            item { ProfileEntry("双工作区同步") { navController.navigate(Routes.WORKSPACE_SYNC) } }
+            item { ProfileEntry("切换到独立版") { onSwitchToLocal() } }
             item { ProfileEntry("设置") { navController.navigate(Routes.SETTINGS) } }
             if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) {
                 item {

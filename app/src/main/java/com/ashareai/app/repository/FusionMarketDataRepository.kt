@@ -1,6 +1,9 @@
 package com.ashareai.app.repository
 
 import com.ashareai.app.data.KlineRepository
+import com.ashareai.app.data.KlinePeriod
+import com.ashareai.app.data.KlineRange
+import com.ashareai.app.data.ApiService
 import com.ashareai.app.standalone.data.market.MarketRepository
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketQuote
@@ -13,19 +16,35 @@ import com.ashareai.app.standalone.domain.Security
  */
 class FusionMarketDataRepository(
     private val klineRepository: KlineRepository,
+    private val api: ApiService? = null,
 ) : MarketDataRepository {
 
     override suspend fun catalog(limit: Int): List<Security> {
-        // Fusion 工作区不提供证券目录接口，返回空列表
-        // 客户端应使用搜索接口
-        return emptyList()
+        val service = api ?: return emptyList()
+        return service.financialSearch("").entities.take(limit.coerceIn(1, 500)).mapNotNull {
+            val code = it.code ?: return@mapNotNull null
+            Security(code, it.name ?: code, it.type ?: "")
+        }
     }
 
     override suspend fun refreshQuotes(symbols: Collection<String>): List<MarketQuote> {
-        // Fusion 工作区通过 K 线接口获取最新行情
-        // 需要转换为 MarketQuote 格式
-        // 暂时返回空列表，待 API 接口确认后实现
-        return emptyList()
+        val service = api ?: return emptyList()
+        if (symbols.isEmpty()) return emptyList()
+        val fetchedAt = System.currentTimeMillis()
+        return service.quotes(symbols.distinct().joinToString(","), refresh = true).map {
+            MarketQuote(
+                symbol = it.symbol,
+                name = it.name ?: it.symbol,
+                lastPrice = it.price,
+                previousClose = it.previous_close,
+                changePercent = it.change_percent,
+                volume = it.volume,
+                provider = it.status?.source ?: "fusion",
+                fetchedAt = fetchedAt,
+                freshness = if (it.price != null) com.ashareai.app.standalone.domain.MarketFreshness.FRESH
+                else com.ashareai.app.standalone.domain.MarketFreshness.UNAVAILABLE,
+            )
+        }
     }
 
     override suspend fun refreshQuote(symbol: String): MarketQuote {
@@ -38,10 +57,16 @@ class FusionMarketDataRepository(
         limit: Int,
         forceRefresh: Boolean,
     ): List<DailyCandle> {
-        // Fusion 工作区通过 KlineRepository 获取 K 线
-        // 需要转换为 DailyCandle 格式
-        // 暂时返回空列表，待接口转换逻辑实现后补全
-        return emptyList()
+        val result = klineRepository.load(
+            symbol = symbol,
+            period = KlinePeriod.DAY,
+            range = KlineRange.YEAR_1,
+        )
+        return result.bars.takeLast(limit).mapNotNull { bar ->
+            val date = runCatching { java.time.Instant.parse(bar.timestamp).atZone(java.time.ZoneId.of("Asia/Shanghai")).toLocalDate() }
+                .getOrNull() ?: return@mapNotNull null
+            DailyCandle(symbol, date, bar.open, bar.close, bar.high, bar.low, bar.volume, "fusion", System.currentTimeMillis())
+        }
     }
 
     override fun isStale(quote: MarketQuote, maximumAgeMillis: Long): Boolean {
@@ -50,7 +75,6 @@ class FusionMarketDataRepository(
     }
 
     override suspend fun getCachedCandle(symbol: String, date: String): DailyCandle? {
-        // Fusion 工作区不缓存 K 线到本地，返回 null
         return null
     }
 }

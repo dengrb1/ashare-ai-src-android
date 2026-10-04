@@ -13,8 +13,13 @@ import com.ashareai.app.standalone.data.local.ResearchCandidateEntity
 import com.ashareai.app.standalone.data.local.ResearchReportEntity
 import com.ashareai.app.standalone.data.local.ResearchRunEntity
 import com.ashareai.app.standalone.data.local.SimulationPortfolioEntity
+import com.ashareai.app.standalone.data.local.SyncOperationEntity
+import com.ashareai.app.standalone.data.local.SyncBaselineEntity
+import com.ashareai.app.standalone.data.local.SyncTombstoneEntity
 import com.ashareai.app.standalone.data.local.WatchlistEntity
 import com.ashareai.app.standalone.data.archive.ArchiveAlert
+import com.ashareai.app.standalone.data.archive.ArchiveBacktest
+import com.ashareai.app.standalone.data.archive.ArchiveBacktestTrade
 import com.ashareai.app.standalone.data.archive.ArchiveCandidate
 import com.ashareai.app.standalone.data.archive.ArchiveChatMessage
 import com.ashareai.app.standalone.data.archive.ArchiveChatSession
@@ -24,7 +29,12 @@ import com.ashareai.app.standalone.data.archive.ArchiveNotification
 import com.ashareai.app.standalone.data.archive.ArchiveReport
 import com.ashareai.app.standalone.data.archive.ArchiveResearchRun
 import com.ashareai.app.standalone.data.archive.ArchiveSimulationPortfolio
+import com.ashareai.app.standalone.data.archive.ArchiveMergePlanner
+import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
+import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
+import com.ashareai.app.standalone.data.archive.ArchiveTombstone
 import com.ashareai.app.standalone.data.archive.ArchiveWatchlistItem
+import com.ashareai.app.standalone.data.archive.ArchiveScope
 import com.ashareai.app.standalone.data.archive.LocalArchiveSnapshot
 import com.ashareai.app.standalone.domain.AiProvider
 import com.ashareai.app.standalone.domain.AlertKind
@@ -47,6 +57,8 @@ import com.ashareai.app.standalone.domain.WatchlistItem
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -55,6 +67,7 @@ class LocalRepository(
     private val dao: LocalDao,
     private val json: Json = Json,
 ) {
+    private val archiveImportMutex = Mutex()
     val holdings: Flow<List<Holding>> = dao.observeHoldings().map { entities -> entities.map { it.toDomain() } }
     val watchlist: Flow<List<WatchlistItem>> = dao.observeWatchlist().map { entities -> entities.map { it.toDomain() } }
     val quotes: Flow<List<MarketQuote>> = dao.observeQuotes().map {
@@ -80,23 +93,35 @@ class LocalRepository(
 
     suspend fun watchlistNow(): List<WatchlistItem> = dao.watchlist().map { it.toDomain() }
 
-    suspend fun saveHolding(holding: Holding) = dao.upsertHolding(
-        HoldingEntity(
-            symbol = holding.symbol,
-            name = holding.name,
-            quantity = holding.quantity.coerceAtLeast(0.0),
-            averageCost = holding.averageCost.coerceAtLeast(0.0),
-            updatedAt = holding.updatedAt,
-        ),
-    )
+    suspend fun saveHolding(holding: Holding) {
+        dao.upsertHolding(
+            HoldingEntity(
+                symbol = holding.symbol,
+                name = holding.name,
+                quantity = holding.quantity.coerceAtLeast(0.0),
+                averageCost = holding.averageCost.coerceAtLeast(0.0),
+                updatedAt = holding.updatedAt,
+            ),
+        )
+        dao.clearSyncTombstone("holdings", holding.symbol)
+    }
 
-    suspend fun removeHolding(symbol: String) = dao.deleteHolding(symbol)
+    suspend fun removeHolding(symbol: String) {
+        val existing = dao.holding(symbol)
+        dao.deleteHolding(symbol)
+        existing?.let { dao.saveSyncTombstone(SyncTombstoneEntity("holdings", symbol, System.currentTimeMillis(), it.updatedAt)) }
+    }
 
-    suspend fun saveWatchlist(item: WatchlistItem) = dao.upsertWatchlist(
-        WatchlistEntity(item.symbol, item.name, item.addedAt),
-    )
+    suspend fun saveWatchlist(item: WatchlistItem) {
+        dao.upsertWatchlist(WatchlistEntity(item.symbol, item.name, item.addedAt))
+        dao.clearSyncTombstone("watchlist", item.symbol)
+    }
 
-    suspend fun removeWatchlist(symbol: String) = dao.deleteWatchlist(symbol)
+    suspend fun removeWatchlist(symbol: String) {
+        val existing = dao.watchlistItem(symbol)
+        dao.deleteWatchlist(symbol)
+        existing?.let { dao.saveSyncTombstone(SyncTombstoneEntity("watchlist", symbol, System.currentTimeMillis(), it.addedAt)) }
+    }
 
     suspend fun cachedQuotes(symbols: Collection<String>): List<MarketQuote> {
         if (symbols.isEmpty()) return emptyList()
@@ -152,23 +177,33 @@ class LocalRepository(
 
     suspend fun activeAlerts(): List<AlertRule> = dao.activeAlerts().map { it.toDomain() }
 
-    suspend fun saveAlert(rule: AlertRule) = dao.upsertAlert(
-        AlertRuleEntity(
-            id = rule.id,
-            symbol = rule.symbol,
-            name = rule.name,
-            kind = rule.kind.name,
-            lowerBound = rule.lowerBound,
-            upperBound = rule.upperBound,
-            enabled = rule.enabled,
-            expiresAt = rule.expiresAt,
-            cooldownMinutes = rule.cooldownMinutes.coerceAtLeast(1),
-            lastTriggeredAt = rule.lastTriggeredAt,
-            configJson = rule.configJson,
-        ),
-    )
+    suspend fun saveAlert(rule: AlertRule) {
+        dao.upsertAlert(
+            AlertRuleEntity(
+                id = rule.id,
+                symbol = rule.symbol,
+                name = rule.name,
+                kind = rule.kind.name,
+                lowerBound = rule.lowerBound,
+                upperBound = rule.upperBound,
+                enabled = rule.enabled,
+                expiresAt = rule.expiresAt,
+                cooldownMinutes = rule.cooldownMinutes.coerceAtLeast(1),
+                lastTriggeredAt = rule.lastTriggeredAt,
+                configJson = rule.configJson,
+            ),
+        )
+        dao.clearSyncTombstone("alerts", rule.id)
+    }
 
-    suspend fun removeAlert(id: String) = dao.deleteAlert(id)
+    suspend fun removeAlert(id: String) {
+        val existing = dao.alert(id)
+        dao.deleteAlert(id)
+        existing?.let {
+            val revision = it.lastTriggeredAt ?: it.expiresAt ?: 0L
+            dao.saveSyncTombstone(SyncTombstoneEntity("alerts", id, System.currentTimeMillis(), revision))
+        }
+    }
 
     suspend fun markAlertTriggered(id: String, at: Long) = dao.markAlertTriggered(id, at)
 
@@ -195,6 +230,8 @@ class LocalRepository(
 
     suspend fun researchRun(id: String): ResearchRun? = dao.researchRun(id)?.toDomain()
 
+    suspend fun allResearchRuns(): List<ResearchRun> = dao.allResearchRuns().map { it.toDomain() }
+
     suspend fun recoverableResearchRuns(): List<ResearchRun> = dao.recoverableResearchRuns().map { it.toDomain() }
 
     suspend fun updateResearchRun(
@@ -218,6 +255,8 @@ class LocalRepository(
         ),
     )
 
+    suspend fun allReports(): List<ResearchReport> = dao.reports().map { it.toDomain() }
+
     suspend fun replaceCandidates(runId: String, candidates: List<ResearchCandidate>) {
         dao.deleteCandidatesForRun(runId)
         dao.upsertCandidates(
@@ -235,6 +274,9 @@ class LocalRepository(
             },
         )
     }
+
+    suspend fun candidatesForRun(runId: String): List<ResearchCandidate> =
+        dao.getCandidatesByReportId(runId).map { it.toDomain() }
 
     suspend fun saveSimulationPortfolio(portfolio: SimulationPortfolio) = dao.upsertSimulationPortfolio(
         SimulationPortfolioEntity(
@@ -341,6 +383,37 @@ class LocalRepository(
         simulationPortfolios = dao.simulationPortfolios().map {
             ArchiveSimulationPortfolio(it.id, it.runId, it.name, it.holdingsJson, it.score, it.createdAt)
         },
+        backtests = dao.allBacktests().map {
+            ArchiveBacktest(
+                id = it.id,
+                startDate = it.startDate,
+                endDate = it.endDate,
+                initialCash = it.initialCash,
+                benchmark = it.benchmark,
+                reportId = it.reportId,
+                feeRate = it.feeRate,
+                status = it.status,
+                metricsJson = it.metricsJson,
+                errorMessage = it.errorMessage,
+                createdAt = it.createdAt,
+                completedAt = it.completedAt,
+            )
+        },
+        backtestTrades = dao.allBacktestTrades().map {
+            ArchiveBacktestTrade(
+                id = it.id,
+                backtestId = it.backtestId,
+                symbol = it.symbol,
+                name = it.name,
+                action = it.action,
+                date = it.date,
+                price = it.price,
+                quantity = it.quantity,
+                amount = it.amount,
+                fee = it.fee,
+                reason = it.reason,
+            )
+        },
         chatSessions = dao.chatSessions().map {
             ArchiveChatSession(it.id, it.title, it.updatedAt)
         },
@@ -355,14 +428,101 @@ class LocalRepository(
                 includedPortfolio = it.includedPortfolio,
             )
         },
+        tombstones = dao.allSyncTombstones().map {
+            ArchiveTombstone(it.collection, it.recordKey, it.deletedAt, it.sourceRevision)
+        },
     )
+
+    suspend fun previewImportArchive(
+        archive: LocalArchiveSnapshot,
+        scopes: Set<String> = ArchiveScope.all,
+    ): ArchiveMergePreview = ArchiveMergePlanner.preview(exportArchive(), archive, scopes)
+
+    /** Applies an already reviewed preview. Replaying the same key is a no-op. */
+    suspend fun applyImportArchive(
+        archive: LocalArchiveSnapshot,
+        preview: ArchiveMergePreview,
+        resolutions: Map<String, ArchiveMergeResolution> = emptyMap(),
+        idempotencyKey: String,
+        scopes: Set<String> = ArchiveScope.all,
+    ): ArchiveImportSummary = archiveImportMutex.withLock {
+        val previous = dao.syncOperation(idempotencyKey)
+        if (previous?.state == "COMPLETED") {
+            return ArchiveImportSummary(
+                holdings = 0,
+                watchlist = 0,
+                reports = 0,
+                messages = 0,
+                alreadyApplied = true,
+            )
+        }
+        require(idempotencyKey.isNotBlank()) { "导入幂等键不能为空" }
+        val currentPreview = previewImportArchive(archive, scopes)
+        check(currentPreview == preview) { "导入预览已过期，请重新预览" }
+        val now = System.currentTimeMillis()
+        dao.saveSyncOperation(SyncOperationEntity(idempotencyKey, "LOCAL_ARCHIVE_IMPORT", "ARCHIVE", "APPLYING", createdAt = now, updatedAt = now))
+        val conflictKeys = currentPreview.conflicts
+            .filter { ArchiveScope.includes(scopes, it.collection) }
+            .map { "${it.collection}:${it.key}" }.toSet()
+        try {
+            fun accepts(collection: String, key: String): Boolean {
+                val compound = "$collection:$key"
+                return compound !in conflictKeys || resolutions[compound] == ArchiveMergeResolution.KEEP_IMPORTED
+            }
+            val filtered = archive.copy(
+                holdings = archive.holdings.filter { ArchiveScope.includes(scopes, "holdings") && accepts("holdings", it.symbol) },
+                watchlist = archive.watchlist.filter { ArchiveScope.includes(scopes, "watchlist") && accepts("watchlist", it.symbol) },
+                alerts = archive.alerts.filter { ArchiveScope.includes(scopes, "alerts") && accepts("alerts", it.id) },
+                notifications = archive.notifications.filter { ArchiveScope.includes(scopes, "notifications") && accepts("notifications", it.id) },
+                researchRuns = archive.researchRuns.filter { ArchiveScope.includes(scopes, "researchRuns") && accepts("researchRuns", it.id) },
+                reports = archive.reports.filter { ArchiveScope.includes(scopes, "reports") && accepts("reports", it.id) },
+                candidates = archive.candidates.filter { ArchiveScope.includes(scopes, "candidates") && accepts("candidates", it.id) },
+                simulationPortfolios = archive.simulationPortfolios.filter { ArchiveScope.includes(scopes, "simulationPortfolios") && accepts("simulationPortfolios", it.id) },
+                backtests = archive.backtests.filter { ArchiveScope.includes(scopes, "backtests") && accepts("backtests", it.id) },
+                backtestTrades = archive.backtestTrades.filter { ArchiveScope.includes(scopes, "backtestTrades") && accepts("backtestTrades", it.id) },
+                chatSessions = archive.chatSessions.filter { ArchiveScope.includes(scopes, "chatSessions") && accepts("chatSessions", it.id) },
+                chatMessages = archive.chatMessages.filter { ArchiveScope.includes(scopes, "chatMessages") && accepts("chatMessages", it.id) },
+                tombstones = emptyList(),
+            )
+            val summary = importArchive(filtered)
+            var deleted = 0
+            archive.tombstones.forEach { tombstone ->
+                val compound = "${tombstone.collection}:${tombstone.recordKey}"
+                if (ArchiveScope.includes(scopes, tombstone.collection) && resolutions[compound] != ArchiveMergeResolution.KEEP_LOCAL) {
+                    deleteImportedRecord(tombstone.collection, tombstone.recordKey)
+                    dao.saveSyncTombstone(SyncTombstoneEntity(tombstone.collection, tombstone.recordKey, tombstone.deletedAt, tombstone.sourceRevision))
+                    deleted++
+                }
+            }
+            dao.saveSyncOperation(SyncOperationEntity(idempotencyKey, "LOCAL_ARCHIVE_IMPORT", "ARCHIVE", "COMPLETED", createdAt = previous?.createdAt ?: now, updatedAt = System.currentTimeMillis()))
+            return summary.copy(
+                deleted = deleted,
+                skippedConflicts = conflictKeys.count { resolutions[it] != ArchiveMergeResolution.KEEP_IMPORTED },
+            )
+        } catch (error: Throwable) {
+            dao.saveSyncOperation(
+                SyncOperationEntity(
+                    idempotencyKey,
+                    "LOCAL_ARCHIVE_IMPORT",
+                    "ARCHIVE",
+                    "FAILED",
+                    errorMessage = error.message,
+                    createdAt = previous?.createdAt ?: now,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            throw error
+        }
+    }
 
     suspend fun importArchive(archive: LocalArchiveSnapshot): ArchiveImportSummary {
         archive.holdings.forEach {
             dao.upsertHolding(HoldingEntity(it.symbol, it.name, it.quantity, it.averageCost, it.updatedAt))
+            dao.clearSyncTombstone("holdings", it.symbol)
         }
         archive.watchlist.forEach {
             dao.upsertWatchlist(WatchlistEntity(it.symbol, it.name, it.addedAt))
+            dao.clearSyncTombstone("watchlist", it.symbol)
         }
         archive.alerts.forEach {
             dao.upsertAlert(
@@ -380,6 +540,7 @@ class LocalRepository(
                     configJson = it.configJson,
                 ),
             )
+            dao.clearSyncTombstone("alerts", it.id)
         }
         archive.notifications.forEach {
             dao.upsertNotification(
@@ -394,6 +555,7 @@ class LocalRepository(
                     payloadJson = "{}",
                 ),
             )
+            dao.clearSyncTombstone("notifications", it.id)
         }
         archive.researchRuns.forEach {
             dao.upsertResearchRun(
@@ -418,22 +580,64 @@ class LocalRepository(
                     configVersion = it.configVersion,
                 ),
             )
+            dao.clearSyncTombstone("researchRuns", it.id)
         }
         archive.reports.forEach {
             dao.upsertReport(ResearchReportEntity(it.id, it.runId, it.title, it.deterministicBody, it.aiExplanation, it.createdAt))
+            dao.clearSyncTombstone("reports", it.id)
         }
         archive.candidates.forEach {
             dao.upsertCandidates(
                 listOf(ResearchCandidateEntity(it.id, it.runId, it.symbol, it.name, it.score, it.risk, it.reason, it.createdAt)),
             )
+            dao.clearSyncTombstone("candidates", it.id)
         }
         archive.simulationPortfolios.forEach {
             dao.upsertSimulationPortfolio(
                 SimulationPortfolioEntity(it.id, it.runId, it.name, it.holdingsJson, it.score, it.createdAt),
             )
+            dao.clearSyncTombstone("simulationPortfolios", it.id)
+        }
+        archive.backtests.forEach {
+            dao.insertBacktest(
+                com.ashareai.app.standalone.data.local.LocalBacktestEntity(
+                    id = it.id,
+                    startDate = it.startDate,
+                    endDate = it.endDate,
+                    initialCash = it.initialCash,
+                    benchmark = it.benchmark,
+                    reportId = it.reportId,
+                    feeRate = it.feeRate,
+                    status = it.status,
+                    metricsJson = it.metricsJson,
+                    errorMessage = it.errorMessage,
+                    createdAt = it.createdAt,
+                    completedAt = it.completedAt,
+                ),
+            )
+            dao.clearSyncTombstone("backtests", it.id)
+        }
+        archive.backtestTrades.forEach {
+            dao.insertBacktestTrade(
+                com.ashareai.app.standalone.data.local.LocalBacktestTradeEntity(
+                    id = it.id,
+                    backtestId = it.backtestId,
+                    symbol = it.symbol,
+                    name = it.name,
+                    action = it.action,
+                    date = it.date,
+                    price = it.price,
+                    quantity = it.quantity,
+                    amount = it.amount,
+                    fee = it.fee,
+                    reason = it.reason,
+                ),
+            )
+            dao.clearSyncTombstone("backtestTrades", it.id)
         }
         archive.chatSessions.forEach {
             dao.upsertChatSession(ChatSessionEntity(it.id, it.title, it.updatedAt))
+            dao.clearSyncTombstone("chatSessions", it.id)
         }
         archive.chatMessages.forEach {
             dao.upsertChatMessage(
@@ -447,13 +651,36 @@ class LocalRepository(
                     includedPortfolio = it.includedPortfolio,
                 ),
             )
+            dao.clearSyncTombstone("chatMessages", it.id)
         }
         return ArchiveImportSummary(
             holdings = archive.holdings.size,
             watchlist = archive.watchlist.size,
             reports = archive.reports.size,
             messages = archive.chatMessages.size,
+            backtests = archive.backtests.size,
+            backtestTrades = archive.backtestTrades.size,
         )
+    }
+
+    private suspend fun deleteImportedRecord(collection: String, key: String) {
+        when (collection) {
+            "holdings" -> dao.deleteHolding(key)
+            "watchlist" -> dao.deleteWatchlist(key)
+            "alerts" -> dao.deleteAlert(key)
+            "notifications" -> dao.deleteNotification(key)
+            "researchRuns" -> dao.deleteResearchRun(key)
+            "reports" -> dao.deleteReport(key)
+            "candidates" -> dao.deleteCandidate(key)
+            "simulationPortfolios" -> dao.deleteSimulationPortfolio(key)
+            "backtests" -> {
+                dao.deleteBacktest(key)
+                dao.deleteBacktestTrades(key)
+            }
+            "backtestTrades" -> dao.deleteBacktestTrade(key)
+            "chatSessions" -> dao.deleteChatSession(key)
+            "chatMessages" -> dao.deleteChatMessage(key)
+        }
     }
 
     private fun ResearchRun.toEntity() = ResearchRunEntity(
@@ -699,10 +926,54 @@ class LocalRepository(
         }
 
     suspend fun deleteBacktest(id: String) {
+        val existing = dao.backtest(id)
         dao.deleteBacktest(id)
         dao.deleteBacktestTrades(id)
+        existing?.let {
+            dao.saveSyncTombstone(
+                SyncTombstoneEntity(
+                    collection = "backtests",
+                    recordKey = id,
+                    deletedAt = System.currentTimeMillis(),
+                    sourceRevision = it.completedAt ?: it.createdAt,
+                ),
+            )
+        }
     }
 
     suspend fun getCandidatesByReportId(reportId: String): List<com.ashareai.app.standalone.domain.ResearchCandidate> =
         dao.getCandidatesByReportId(reportId).map { it.toDomain() }
+
+    suspend fun saveSyncOperation(
+        idempotencyKey: String,
+        direction: String,
+        scope: String,
+        state: String,
+        previewJson: String? = null,
+        errorMessage: String? = null,
+        now: Long = System.currentTimeMillis(),
+    ) = dao.saveSyncOperation(SyncOperationEntity(idempotencyKey, direction, scope, state, previewJson, errorMessage, now, now))
+
+    suspend fun syncOperation(idempotencyKey: String): SyncOperationEntity? = dao.syncOperation(idempotencyKey)
+
+    suspend fun recordSyncDeletion(collection: String, key: String, sourceRevision: Long? = null) =
+        dao.saveSyncTombstone(SyncTombstoneEntity(collection, key, System.currentTimeMillis(), sourceRevision))
+
+    suspend fun clearSyncDeletion(collection: String, key: String) = dao.clearSyncTombstone(collection, key)
+
+    suspend fun syncBaseline(accountKey: String): LocalArchiveSnapshot? =
+        dao.syncBaseline(accountKey)?.let { entity ->
+            runCatching { json.decodeFromString<LocalArchiveSnapshot>(entity.snapshotJson) }.getOrNull()
+        }
+
+    suspend fun saveSyncBaseline(accountKey: String, snapshot: LocalArchiveSnapshot, savedAt: Long = System.currentTimeMillis()) {
+        require(accountKey.isNotBlank()) { "同步基线账号标识不能为空" }
+        dao.saveSyncBaseline(
+            SyncBaselineEntity(
+                accountKey = accountKey,
+                snapshotJson = json.encodeToString(snapshot),
+                savedAt = savedAt,
+            ),
+        )
+    }
 }

@@ -9,6 +9,40 @@ import retrofit2.http.*
 
 interface ApiService : HealthApi {
 
+    // ---- 确定性决策 / 策略演化 ----
+    @POST("api/v1/decision/predict")
+    suspend fun predictDecision(@Body body: DecisionPredictRequest): DecisionPredictResponse
+
+    @POST("api/v1/decision/batch")
+    suspend fun batchPredictDecision(@Body body: DecisionBatchRequest): DecisionBatchResponse
+
+    @POST("api/v1/strategies/evolution")
+    suspend fun strategyEvolution(@Body body: StrategyEvolutionRequest): StrategyEvolutionResponse
+
+    @GET("api/v1/strategies/evolution/active")
+    suspend fun activeStrategyVersion(): JsonObject
+
+    @GET("api/v1/strategies/evolution/candidates")
+    suspend fun strategyCandidates(
+        @Query("status") status: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): StrategyCandidatesResponse
+
+    @POST("api/v1/strategies/evolution/candidates/{candidateId}/approve")
+    suspend fun approveStrategy(
+        @Path("candidateId") candidateId: String,
+        @Body body: StrategyReviewRequest,
+    ): JsonObject
+
+    @POST("api/v1/strategies/evolution/candidates/{candidateId}/reject")
+    suspend fun rejectStrategy(
+        @Path("candidateId") candidateId: String,
+        @Body body: StrategyReviewRequest,
+    ): JsonObject
+
+    @POST("api/v1/strategies/evolution/rollback")
+    suspend fun rollbackStrategy(@Body body: StrategyReviewRequest): JsonObject
+
     // ---- 健康 / 认证 ----
     @GET("api/v1/health")
     override suspend fun health(): HealthResponse
@@ -33,7 +67,10 @@ interface ApiService : HealthApi {
     suspend fun assets(): AssetState
 
     @PUT("api/v1/assets")
-    suspend fun saveAssets(@Body body: AssetStateRequest): AssetState
+    suspend fun saveAssets(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: AssetStateRequest,
+    ): AssetState
 
     @PUT("api/v1/assets/exit-monitor")
     suspend fun saveExitMonitor(

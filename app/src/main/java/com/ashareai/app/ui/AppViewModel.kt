@@ -36,6 +36,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val powerSaverManager = PowerSaverManager(appContext)
     val isPowerSaveMode: StateFlow<Boolean> get() = powerSaverManager.isPowerSaveMode
     val batteryLevel: StateFlow<Int> get() = powerSaverManager.batteryLevel
+    val isCharging: StateFlow<Boolean> get() = powerSaverManager.isCharging
+    val screenInteractive: StateFlow<Boolean> get() = powerSaverManager.screenInteractive
+    val thermalStatus: StateFlow<Int> get() = powerSaverManager.thermalStatus
 
     // ---- 登录态 ----
     sealed class AuthState {

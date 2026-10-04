@@ -1,23 +1,16 @@
 package com.ashareai.app.ui.navigation
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import com.ashareai.app.ui.theme.LiquidGlassSurface
-import com.ashareai.app.ui.theme.LiquidGlassDefaults
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -27,6 +20,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.components.LiquidGlassBottomBar
+import com.ashareai.app.ui.components.LiquidGlassTab
 import com.ashareai.app.ui.screens.*
 import com.ashareai.app.island.NotificationNavigation
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +31,8 @@ object Routes {
     const val HOME = "home"
     const val MARKET = "market"
     const val RESEARCH_HUB = "research_hub"
+    const val STRATEGY_EVOLUTION = "strategy_evolution"
+    const val WORKSPACE_SYNC = "workspace_sync"
     const val AI_CHAT = "ai_chat"
     const val PROFILE = "profile"
 
@@ -74,6 +71,7 @@ fun AppRoot(
     appViewModel: AppViewModel,
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
+    onSwitchToLocal: () -> Unit = {},
 ) {
     val authState by appViewModel.authState.collectAsState()
 
@@ -86,7 +84,12 @@ fun AppRoot(
             onRetry = appViewModel::retrySessionRestore,
             onReturnToLogin = appViewModel::showLogin,
         )
-        is AppViewModel.AuthState.LoggedIn -> MainScaffold(appViewModel, pendingRoute, onRouteConsumed)
+        is AppViewModel.AuthState.LoggedIn -> MainScaffold(
+            appViewModel,
+            pendingRoute,
+            onRouteConsumed,
+            onSwitchToLocal,
+        )
     }
 }
 
@@ -95,6 +98,7 @@ private fun MainScaffold(
     appViewModel: AppViewModel,
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
+    onSwitchToLocal: () -> Unit,
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
@@ -118,58 +122,18 @@ private fun MainScaffold(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                LiquidGlassSurface(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    style = LiquidGlassDefaults.Medium,
-                    shape = RoundedCornerShape(24.dp),
+                LiquidGlassBottomBar(
+                    tabs = bottomTabs.map { LiquidGlassTab(it.route, it.label, it.icon) },
+                    selectedKey = currentRoute ?: Routes.HOME,
                     powerSaveMode = isPowerSaveMode,
-                ) {
-                    NavigationBar(
-                        modifier = Modifier.height(56.dp),
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
-                    ) {
-                        bottomTabs.forEach { tab ->
-                            val selected = currentRoute == tab.route
-                            val iconColor by animateColorAsState(
-                                targetValue = if (selected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                animationSpec = tween(300),
-                                label = "iconColor_${tab.route}"
-                            )
-                            val iconSize by animateDpAsState(
-                                targetValue = if (selected) 26.dp else 24.dp,
-                                animationSpec = tween(300),
-                                label = "iconSize_${tab.route}"
-                            )
-
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        tab.icon,
-                                        contentDescription = tab.label,
-                                        tint = iconColor,
-                                        modifier = Modifier.padding(iconSize - 24.dp)
-                                    )
-                                },
-                                label = { Text(tab.label) },
-                                alwaysShowLabel = false,
-                            )
+                    onSelect = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                    }
-                }
+                    },
+                )
             }
         },
     ) { padding ->
@@ -183,8 +147,9 @@ private fun MainScaffold(
             composable(Routes.HOME) { DashboardScreen(appViewModel, navController) }
             composable(Routes.MARKET) { MarketScreen(appViewModel, navController) }
             composable(Routes.RESEARCH_HUB) { ResearchHubScreen(appViewModel, navController) }
+            composable(Routes.STRATEGY_EVOLUTION) { StrategyEvolutionScreen(appViewModel, navController) }
             composable(Routes.AI_CHAT) { AIChatScreen(appViewModel) }
-            composable(Routes.PROFILE) { ProfileScreen(appViewModel, navController) }
+            composable(Routes.PROFILE) { ProfileScreen(appViewModel, navController, onSwitchToLocal) }
 
             composable(Routes.ASSETS) { AssetsScreen(appViewModel, navController) }
             composable(Routes.RESEARCH) { ResearchScreen(appViewModel, navController) }
@@ -210,6 +175,7 @@ private fun MainScaffold(
             composable(Routes.SEARCH) { FinancialSearchScreen(appViewModel) }
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel, navController) }
             composable(Routes.PERSONAL_DATA) { PersonalDataScreen(appViewModel) }
+            composable(Routes.WORKSPACE_SYNC) { WorkspaceSyncScreen(appViewModel, navController) }
             composable(Routes.SETTINGS) { SettingsScreen(appViewModel) }
             composable(Routes.MODEL_SETTINGS) { ModelSettingsScreen(appViewModel) }
             composable(Routes.SYSTEM_SETTINGS) { SystemSettingsScreen(appViewModel) }

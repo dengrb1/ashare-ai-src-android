@@ -45,5 +45,8 @@ class ResearchEngineTest {
         assertTrue(result.score.total in 0.0..100.0)
         assertTrue(result.score.unavailable.any { it.startsWith("基本面") })
         assertTrue(result.score.unavailable.any { it.startsWith("事件数据") })
+        assertTrue(result.score.factorDecision != null)
+        assertTrue(result.score.factorFormulaVersion == "factor-v1.0.0")
+        assertTrue(result.score.factorParameterSha256?.length == 64)
     }
 }

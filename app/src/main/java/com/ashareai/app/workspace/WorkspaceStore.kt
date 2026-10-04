@@ -6,8 +6,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import com.ashareai.app.data.SettingsStore as FusionSettingsStore
+import com.ashareai.app.standalone.data.settings.SettingsStore as LocalSettingsStore
 
 private val Context.workspaceDataStore by preferencesDataStore(name = "workspace_settings")
 
@@ -18,6 +22,9 @@ private val Context.workspaceDataStore by preferencesDataStore(name = "workspace
 class WorkspaceStore(context: Context) {
     private val context = context.applicationContext
     private val sharedDataStore = SharedDataStore(context)
+    private val _syncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Emitted after an explicit workspace switch; sync services may collect this signal. */
+    val syncRequests: SharedFlow<Unit> = _syncRequests
 
     companion object {
         private val KEY_CURRENT_WORKSPACE = stringPreferencesKey("current_workspace")
@@ -59,8 +66,23 @@ class WorkspaceStore(context: Context) {
      * 在工作区切换时自动调用，将 SharedDataStore 中的共享设置应用到当前工作区。
      */
     suspend fun syncToWorkspace() {
-        // 共享数据同步逻辑在各工作区的 ViewModel 或 Repository 中实现
-        // WorkspaceStore 仅负责触发同步信号
+        val settings = sharedDataStore.sharedSettings.first()
+        val values = sharedDataStore.sharedValues.first()
+        when (currentWorkspaceValue()) {
+            Workspace.LOCAL -> LocalSettingsStore(context).also { target ->
+                if (settings.shareTheme) target.setDarkMode(values.themeMode)
+                if (settings.shareGlassEffect) target.setGlassEnabled(values.glassEffectEnabled)
+                if (settings.shareFullAnimations) target.setFullAnimationsEnabled(values.fullAnimationsEnabled)
+                if (settings.shareIsland) target.setIslandEnabled(values.islandEnabled)
+            }
+            Workspace.FUSION -> FusionSettingsStore(context).also { target ->
+                if (settings.shareTheme) target.setDarkMode(values.themeMode)
+                if (settings.shareGlassEffect) target.setGlassEnabled(values.glassEffectEnabled)
+                if (settings.shareFullAnimations) target.setFullAnimationsEnabled(values.fullAnimationsEnabled)
+                if (settings.shareIsland) target.setIslandEnabled(values.islandEnabled)
+            }
+        }
+        _syncRequests.tryEmit(Unit)
     }
 
     /**

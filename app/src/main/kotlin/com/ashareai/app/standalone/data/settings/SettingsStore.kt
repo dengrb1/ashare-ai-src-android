@@ -29,6 +29,9 @@ data class LocalSettings(
     val dailyReportBEnabled: Boolean = false,
     val marketScanLimit: Int = 100,
     val portfolioDataAllowedForAi: Boolean = false,
+    val darkMode: String = "system",
+    val glassEnabled: Boolean = true,
+    val fullAnimationsEnabled: Boolean = true,
     val lastDailyScheduleAt: Long = 0,
     val automaticReports: List<AutomaticResearchReportConfig> = defaultAutomaticReports(),
 )
@@ -79,6 +82,9 @@ class SettingsStore(
             dailyReportBEnabled = preferences[DAILY_REPORT_B_ENABLED] ?: false,
             marketScanLimit = (preferences[MARKET_SCAN_LIMIT] ?: 100).coerceIn(1, 500),
             portfolioDataAllowedForAi = preferences[PORTFOLIO_DATA_ALLOWED_FOR_AI] ?: false,
+            darkMode = preferences[DARK_MODE] ?: "system",
+            glassEnabled = preferences[GLASS_ENABLED] ?: true,
+            fullAnimationsEnabled = preferences[FULL_ANIMATIONS_ENABLED] ?: true,
             lastDailyScheduleAt = preferences[LAST_DAILY_SCHEDULE_AT] ?: 0,
             automaticReports = automaticReports,
         )
@@ -154,6 +160,15 @@ class SettingsStore(
 
     suspend fun setPortfolioDataAllowedForAi(allowed: Boolean) = setBoolean(PORTFOLIO_DATA_ALLOWED_FOR_AI, allowed)
 
+    suspend fun setDarkMode(mode: String) {
+        require(mode in setOf("system", "light", "dark"))
+        context.standaloneDataStore.edit { it[DARK_MODE] = mode }
+    }
+
+    suspend fun setGlassEnabled(enabled: Boolean) = setBoolean(GLASS_ENABLED, enabled)
+
+    suspend fun setFullAnimationsEnabled(enabled: Boolean) = setBoolean(FULL_ANIMATIONS_ENABLED, enabled)
+
     suspend fun setLastDailyScheduleAt(epochMillis: Long) {
         context.standaloneDataStore.edit {
             it[LAST_DAILY_SCHEDULE_AT] = epochMillis
@@ -219,6 +234,9 @@ class SettingsStore(
         val DAILY_REPORT_B_ENABLED = booleanPreferencesKey("daily_report_b_enabled")
         val MARKET_SCAN_LIMIT = intPreferencesKey("market_scan_limit")
         val PORTFOLIO_DATA_ALLOWED_FOR_AI = booleanPreferencesKey("portfolio_data_allowed_for_ai")
+        val DARK_MODE = stringPreferencesKey("dark_mode")
+        val GLASS_ENABLED = booleanPreferencesKey("glass_enabled")
+        val FULL_ANIMATIONS_ENABLED = booleanPreferencesKey("full_animations_enabled")
         val LAST_DAILY_SCHEDULE_AT = longPreferencesKey("last_daily_schedule_at")
         val AI_AGENTS_JSON = stringPreferencesKey("ai_agents_json")
 

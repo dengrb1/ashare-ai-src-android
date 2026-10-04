@@ -134,6 +134,8 @@ val AppTypography = Typography(
 fun HybridTheme(
     darkModePref: String = "system",
     glassEnabled: Boolean = true,
+    fullAnimationsEnabled: Boolean = true,
+    powerSaveMode: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val dark = when (darkModePref) {
@@ -143,6 +145,8 @@ fun HybridTheme(
     }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalGlassEnabled provides glassEnabled,
+        LocalFullAnimationsEnabled provides fullAnimationsEnabled,
+        LocalPowerSaveMode provides powerSaveMode,
     ) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,
@@ -159,8 +163,17 @@ fun HybridTheme(
 @Composable
 fun AShareTheme(
     darkModePref: String = "system",
+    glassEnabled: Boolean = true,
+    fullAnimationsEnabled: Boolean = true,
+    powerSaveMode: Boolean = false,
     content: @Composable () -> Unit,
-) = HybridTheme(darkModePref = darkModePref, glassEnabled = true, content = content)
+) = HybridTheme(
+    darkModePref = darkModePref,
+    glassEnabled = glassEnabled,
+    fullAnimationsEnabled = fullAnimationsEnabled,
+    powerSaveMode = powerSaveMode,
+    content = content,
+)
 
 /** 涨跌配色：>0 红，<0 绿，0/缺失 灰。 */
 fun changeColor(value: Double?): Color = when {

@@ -1,6 +1,8 @@
 package com.ashareai.app.standalone
 
 import android.content.Context
+import com.ashareai.app.performance.DeviceResourcePolicy
+import com.ashareai.app.performance.ResourceTaskPriority
 import com.ashareai.app.standalone.alerts.AlertEvaluator
 import com.ashareai.app.standalone.data.LocalRepository
 import com.ashareai.app.standalone.data.ai.AiProviderRepository
@@ -58,7 +60,11 @@ class AppContainer(
     val aiClient = OpenAiCompatibleClient(aiProviders, httpClient)
     val archive = LocalArchiveService(local)
     val backtest = com.ashareai.app.standalone.backtest.BacktestService(
-        engine = com.ashareai.app.standalone.backtest.LocalBacktestEngine(market, local),
+        engine = com.ashareai.app.standalone.backtest.LocalBacktestEngine(
+            market = market,
+            local = local,
+            resourceBudget = { DeviceResourcePolicy.from(appContext, ResourceTaskPriority.USER_INITIATED) },
+        ),
         local = local,
     )
     val financialSearch = com.ashareai.app.standalone.search.LocalFinancialSearchRepository(
@@ -72,6 +78,7 @@ class AppContainer(
         engine = DeterministicResearchEngine(),
         aiClient = aiClient,
         notifications = notifications,
+        resourceBudget = { DeviceResourcePolicy.from(appContext, ResourceTaskPriority.DEFERRED) },
     )
     val monitoring = MarketMonitoringCoordinator(
         local = local,
@@ -80,6 +87,7 @@ class AppContainer(
         alerts = alertEvaluator,
         notifications = notifications,
         calendar = calendar,
+        resourceBudget = { DeviceResourcePolicy.from(appContext, ResourceTaskPriority.MONITORING) },
     )
     val dailyResearchScheduler = DailyResearchScheduler(appContext, settings, calendar)
     val monitoringFallbackScheduler = MonitoringFallbackScheduler(appContext)

@@ -4,6 +4,14 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -99,6 +107,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
+import com.ashareai.app.ui.components.LiquidGlassBottomBar
+import com.ashareai.app.ui.components.LiquidGlassTab
+import com.ashareai.app.ui.theme.LocalGlassEnabled
+import com.ashareai.app.ui.theme.LocalPowerSaveMode
+import com.ashareai.app.workspace.SharedDataStore
+import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
+import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketFreshness
@@ -166,6 +181,7 @@ fun StandaloneAppRoot(
     viewModel: StandaloneViewModel,
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
+    onSwitchToConnected: () -> Unit = {},
     permissionState: DevicePermissionState,
     onRequestNotifications: () -> Unit,
     onOpenBatterySettings: () -> Unit,
@@ -174,6 +190,8 @@ fun StandaloneAppRoot(
     val incomingRoute by pendingRoute.collectAsState()
     val message by viewModel.message.collectAsState()
     val unread by viewModel.unreadNotifications.collectAsState()
+    val settings by viewModel.settings.collectAsState()
+    val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
     var route by rememberSaveable { mutableStateOf("home") }
     LaunchedEffect(incomingRoute) {
@@ -193,12 +211,13 @@ fun StandaloneAppRoot(
             GlassTopBar(route = route)
         },
         bottomBar = {
-            val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
             LiquidGlassBottomBar(
-                route = route,
-                unread = unread,
-                isPowerSaveMode = isPowerSaveMode,
-                onNavigate = { destination ->
+                tabs = bottomDestinations.map {
+                    LiquidGlassTab(it.route, it.label, it.icon, if (it.route == "notifications") unread else 0)
+                },
+                selectedKey = route,
+                powerSaveMode = isPowerSaveMode,
+                onSelect = { destination ->
                     route = destination
                     if (destination == "market") viewModel.loadCatalog()
                 },
@@ -208,7 +227,26 @@ fun StandaloneAppRoot(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
-        when (route) {
+        AnimatedContent(
+            targetState = route,
+            transitionSpec = {
+                if (!settings.fullAnimationsEnabled || isPowerSaveMode) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else (fadeIn(animationSpec = androidx.compose.animation.core.tween(180)) +
+                    slideInHorizontally(
+                        initialOffsetX = { it / 18 },
+                        animationSpec = androidx.compose.animation.core.tween(220),
+                    )).togetherWith(
+                    fadeOut(animationSpec = androidx.compose.animation.core.tween(120)) +
+                        slideOutHorizontally(
+                            targetOffsetX = { -it / 24 },
+                            animationSpec = androidx.compose.animation.core.tween(160),
+                        )
+                )
+            },
+            label = "standalone_route_transition",
+        ) { targetRoute ->
+        when (targetRoute) {
             "home" -> HomeScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
@@ -252,6 +290,7 @@ fun StandaloneAppRoot(
             "settings" -> SettingsScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
+                onSwitchToConnected = onSwitchToConnected,
                 permissionState = permissionState,
                 onRequestNotifications = onRequestNotifications,
                 onOpenBatterySettings = onOpenBatterySettings,
@@ -267,6 +306,7 @@ fun StandaloneAppRoot(
                 onOpenBatterySettings = onOpenBatterySettings,
                 navigate = { route = it },
             )
+        }
         }
     }
 }
@@ -286,102 +326,9 @@ private val bottomDestinations = listOf(
 )
 
 @Composable
-private fun LiquidGlassBottomBar(
-    route: String,
-    unread: Int,
-    isPowerSaveMode: Boolean,
-    onNavigate: (String) -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        com.ashareai.app.ui.theme.LiquidGlassSurface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 560.dp),
-            style = com.ashareai.app.ui.theme.LiquidGlassDefaults.Medium,
-            shape = RoundedCornerShape(28.dp),
-            powerSaveMode = isPowerSaveMode,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                bottomDestinations.forEach { destination ->
-                    LiquidGlassNavigationItem(
-                        destination = destination,
-                        selected = route == destination.route,
-                        unread = if (destination.route == "notifications") unread else 0,
-                        onClick = { onNavigate(destination.route) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LiquidGlassNavigationItem(
-    destination: BottomDestination,
-    selected: Boolean,
-    unread: Int,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val containerColor by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f) else Color.Transparent,
-        label = "bottom-navigation-container",
-    )
-    val contentColor by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        label = "bottom-navigation-content",
-    )
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(22.dp))
-            .background(containerColor)
-            .selectable(
-                selected = selected,
-                onClick = onClick,
-                role = Role.Tab,
-            )
-            .padding(vertical = 5.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        BadgedBox(
-            badge = {
-                if (unread > 0) Badge { Text(unread.coerceAtMost(99).toString()) }
-            },
-        ) {
-            Icon(
-                imageVector = destination.icon,
-                contentDescription = destination.label,
-                modifier = Modifier.size(23.dp),
-                tint = contentColor,
-            )
-        }
-        Text(
-            text = destination.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
 private fun GlassTopBar(route: String) {
     val dark = isSystemInDarkTheme()
+    val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier = Modifier
@@ -393,17 +340,23 @@ private fun GlassTopBar(route: String) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.85f),
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.16f else 0.22f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.85f else 0.82f),
-                        ),
-                    ),
+                .then(
+                    if (glassEnabled) {
+                        Modifier.background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.85f),
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.16f else 0.22f),
+                                    MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.85f else 0.82f),
+                                ),
+                            ),
+                        )
+                    } else {
+                        Modifier.background(MaterialTheme.colorScheme.surface)
+                    }
                 )
                 .then(
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (glassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         Modifier.graphicsLayer {
                             renderEffect = BlurEffect(18f, 18f, TileMode.Clamp)
                         }
@@ -413,6 +366,7 @@ private fun GlassTopBar(route: String) {
                 )
                 .drawWithContent {
                     drawContent()
+                    if (glassEnabled) {
                     // 顶部高光边框
                     drawLine(
                         brush = Brush.horizontalGradient(
@@ -433,6 +387,9 @@ private fun GlassTopBar(route: String) {
                         end = Offset(size.width, size.height),
                         strokeWidth = 0.5.dp.toPx(),
                     )
+                    } else {
+                        drawLine(outlineColor, Offset(0f, size.height), Offset(size.width, size.height), 0.5.dp.toPx())
+                    }
                 }
         )
 
@@ -1633,6 +1590,7 @@ private fun ChatScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 private fun SettingsScreen(
     viewModel: StandaloneViewModel,
     modifier: Modifier,
+    onSwitchToConnected: () -> Unit,
     permissionState: DevicePermissionState,
     onRequestNotifications: () -> Unit,
     onOpenBatterySettings: () -> Unit,
@@ -1643,12 +1601,22 @@ private fun SettingsScreen(
     val context = viewModel.appContext
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.collectAsState()
+    val batteryLevel by viewModel.batteryLevel.collectAsState()
+    val isCharging by viewModel.isCharging.collectAsState()
+    val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
+    val thermalStatus by viewModel.thermalStatus.collectAsState()
+    val sharedDataStore = remember { SharedDataStore(context) }
+    val sharedSettings by sharedDataStore.sharedSettings.collectAsState(initial = SharedDataStore.SharedSettings())
     val providers by viewModel.aiProviders.collectAsState()
     val aiTestResult by viewModel.aiTestResult.collectAsState()
     var intervalText by rememberSaveable { mutableStateOf(settings.monitoringIntervalSeconds.toString()) }
     var exportPassphrase by rememberSaveable { mutableStateOf("") }
     var importPassphrase by rememberSaveable { mutableStateOf("") }
     var archiveStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingArchiveBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var archivePreview by remember { mutableStateOf<ArchiveMergePreview?>(null) }
+    var archiveConflictChoice by rememberSaveable { mutableStateOf("KEEP_LOCAL") }
+    var archiveBusy by rememberSaveable { mutableStateOf(false) }
     var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
     LaunchedEffect(Unit) {
         focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
@@ -1671,17 +1639,38 @@ private fun SettingsScreen(
     val openArchive = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             scope.launch {
+                archiveBusy = true
                 archiveStatus = runCatching {
                     val data = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         ?: error("无法读取所选文件")
-                    val result = viewModel.importArchive(data, importPassphrase.toCharArray())
-                    importPassphrase = ""
-                    result
+                    val preview = viewModel.previewArchive(data, importPassphrase.toCharArray())
+                    pendingArchiveBytes = data
+                    archivePreview = preview
+                    "已生成导入预览，请确认后合并"
                 }.getOrElse { it.message ?: "导入失败" }
+                archiveBusy = false
             }
         }
     }
     ScreenColumn(modifier) {
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("当前工作区：独立版", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "切换到连接版后登录服务端；本地数据、任务和 Keystore 密钥保持隔离。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = onSwitchToConnected,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.CloudQueue, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("切换到连接版")
+                }
+            }
+        }
         PermissionCard(
             state = permissionState,
             onRequestNotifications = onRequestNotifications,
@@ -1718,6 +1707,83 @@ private fun SettingsScreen(
             title = "资源状态",
             text = "无任务及非交易时段不请求行情。前台服务超时后会停止并降级为约 15 分钟 WorkManager 检查。目标：监控 CPU < 1.5%，PSS < 120 MiB；系统策略可能仍会终止进程。",
         )
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("当前调度", fontWeight = FontWeight.SemiBold)
+                Text("电量 $batteryLevel% · ${if (isCharging) "充电中" else "未充电"}")
+                Text("系统省电：${if (isPowerSaveMode) "开启，降低动画与轮询" else "未开启"}")
+                Text(
+                    "热状态：" + when {
+                        thermalStatus >= 4 -> "严重，暂停非必要任务"
+                        thermalStatus >= 3 -> "受限，降低后台频率"
+                        thermalStatus >= 2 -> "温热"
+                        else -> "正常"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        SectionTitle("外观与动效")
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("主题", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value, label) ->
+                        FilterChip(
+                            selected = settings.darkMode == value,
+                            onClick = { viewModel.setDarkMode(value) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+        }
+        SwitchRow("液态玻璃", settings.glassEnabled, onChange = viewModel::setGlassEnabled)
+        SwitchRow("完整动画", settings.fullAnimationsEnabled, onChange = viewModel::setFullAnimationsEnabled)
+        if (isPowerSaveMode) {
+            Text(
+                "系统省电模式已覆盖材质与动效设置，当前使用简化材质和即时切换。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("工作区共享", style = MaterialTheme.typography.titleSmall)
+                Text("在连接版和独立版之间同步外观偏好。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SwitchRow(
+                    "共享液态玻璃",
+                    sharedSettings.shareGlassEffect,
+                    onChange = { enabled ->
+                        scope.launch {
+                            sharedDataStore.updateSharedSettings(sharedSettings.copy(shareGlassEffect = enabled))
+                            if (enabled) sharedDataStore.syncGlassEffectEnabled(settings.glassEnabled)
+                        }
+                    },
+                )
+                SwitchRow(
+                    "共享完整动画",
+                    sharedSettings.shareFullAnimations,
+                    onChange = { enabled ->
+                        scope.launch {
+                            sharedDataStore.updateSharedSettings(sharedSettings.copy(shareFullAnimations = enabled))
+                            if (enabled) sharedDataStore.syncFullAnimationsEnabled(settings.fullAnimationsEnabled)
+                        }
+                    },
+                )
+                Button(
+                    onClick = {
+                        scope.launch {
+                            sharedDataStore.syncThemeMode(settings.darkMode)
+                            sharedDataStore.syncAppearance(settings.glassEnabled, settings.fullAnimationsEnabled)
+                            archiveStatus = "外观偏好已同步到共享存储"
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("立即同步外观偏好") }
+            }
+        }
         AdaptiveActionRow {
             OutlinedButton(onClick = viewModel::clearMarketCache) { Text("清除缓存") }
             OutlinedButton(onClick = viewModel::testMarketProvider) { Text("测试行情源") }
@@ -1776,8 +1842,69 @@ private fun SettingsScreen(
         OutlinedTextField(importPassphrase, { importPassphrase = it }, label = { Text("导入档案口令") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedButton(
             onClick = { if (importPassphrase.isNotBlank()) openArchive.launch(arrayOf("application/octet-stream", "*/*")) },
+            enabled = !archiveBusy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("导入 .ashare-local") }
+        archivePreview?.let { preview ->
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("导入预览", fontWeight = FontWeight.SemiBold)
+                    Text("新增 ${preview.additions.size}，更新 ${preview.updates.size}，冲突 ${preview.conflicts.size}，删除 ${preview.deletions.size}")
+                    if (preview.conflicts.isNotEmpty()) {
+                        Text("冲突处理", style = MaterialTheme.typography.labelMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = archiveConflictChoice == "KEEP_LOCAL",
+                                onClick = { archiveConflictChoice = "KEEP_LOCAL" },
+                                label = { Text("保留本地") },
+                            )
+                            FilterChip(
+                                selected = archiveConflictChoice == "KEEP_IMPORTED",
+                                onClick = { archiveConflictChoice = "KEEP_IMPORTED" },
+                                label = { Text("使用导入") },
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            val bytes = pendingArchiveBytes ?: return@Button
+                            scope.launch {
+                                archiveBusy = true
+                                archiveStatus = runCatching {
+                                    val resolution = if (archiveConflictChoice == "KEEP_IMPORTED") {
+                                        ArchiveMergeResolution.KEEP_IMPORTED
+                                    } else {
+                                        ArchiveMergeResolution.KEEP_LOCAL
+                                    }
+                                    val resolutions = preview.conflicts.associate {
+                                        "${it.collection}:${it.key}" to resolution
+                                    }
+                                    val result = viewModel.applyArchive(
+                                        bytes = bytes,
+                                        passphrase = importPassphrase.toCharArray(),
+                                        preview = preview,
+                                        resolutions = resolutions,
+                                    )
+                                    pendingArchiveBytes = null
+                                    archivePreview = null
+                                    importPassphrase = ""
+                                    result
+                                }.getOrElse { it.message ?: "合并失败，可使用相同档案重试" }
+                                archiveBusy = false
+                            }
+                        },
+                        enabled = !archiveBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (archiveBusy) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("确认合并")
+                    }
+                }
+            }
+        }
         archiveStatus?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
     }
 }

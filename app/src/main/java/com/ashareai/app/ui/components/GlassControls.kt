@@ -3,6 +3,7 @@ package com.ashareai.app.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,16 +36,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.ui.theme.GlassMorphismDefaults
 import com.ashareai.app.ui.theme.LocalGlassEnabled
+import com.ashareai.app.ui.theme.LocalFullAnimationsEnabled
+import com.ashareai.app.ui.theme.LocalPowerSaveMode
 import kotlin.math.roundToInt
 
 /**
@@ -62,7 +62,8 @@ fun GlassSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val glassEnabled = LocalGlassEnabled.current
+    val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
+    val motionEnabled = LocalFullAnimationsEnabled.current && !LocalPowerSaveMode.current
 
     if (!glassEnabled) {
         // 降级到标准 Material 3 Switch
@@ -81,7 +82,7 @@ fun GlassSwitch(
             checked -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
         },
-        animationSpec = tween(300),
+        animationSpec = if (motionEnabled) tween(300) else snap(),
         label = "trackColor",
     )
 
@@ -91,13 +92,13 @@ fun GlassSwitch(
             checked -> MaterialTheme.colorScheme.primaryContainer
             else -> MaterialTheme.colorScheme.surface
         },
-        animationSpec = tween(300),
+        animationSpec = if (motionEnabled) tween(300) else snap(),
         label = "thumbColor",
     )
 
     val thumbOffset by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
-        animationSpec = tween(300),
+        animationSpec = if (motionEnabled) tween(300) else snap(),
         label = "thumbOffset",
     )
 
@@ -105,7 +106,7 @@ fun GlassSwitch(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.92f else 1f,
-        animationSpec = tween(100),
+        animationSpec = if (motionEnabled) tween(100) else snap(),
         label = "scale",
     )
 
@@ -115,9 +116,6 @@ fun GlassSwitch(
             .width(52.dp)
             .height(32.dp)
             .clip(CircleShape)
-            .graphicsLayer {
-                renderEffect = BlurEffect(4f, 4f, TileMode.Clamp)
-            }
             .background(trackColor)
             .clickable(
                 interactionSource = interactionSource,
@@ -174,7 +172,8 @@ fun GlassSlider(
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
 ) {
-    val glassEnabled = LocalGlassEnabled.current
+    val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
+    val motionEnabled = LocalFullAnimationsEnabled.current && !LocalPowerSaveMode.current
 
     if (!glassEnabled) {
         Slider(
@@ -205,9 +204,6 @@ fun GlassSlider(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .graphicsLayer {
-                        renderEffect = BlurEffect(6f, 6f, TileMode.Clamp)
-                    }
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .drawWithContent {
                         drawContent()
@@ -237,7 +233,8 @@ fun GlassFilterChip(
     enabled: Boolean = true,
     leadingIcon: @Composable (() -> Unit)? = null,
 ) {
-    val glassEnabled = LocalGlassEnabled.current
+    val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
+    val motionEnabled = LocalFullAnimationsEnabled.current && !LocalPowerSaveMode.current
 
     if (!glassEnabled) {
         FilterChip(
@@ -257,7 +254,7 @@ fun GlassFilterChip(
             selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
             else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
         },
-        animationSpec = tween(200),
+        animationSpec = if (motionEnabled) tween(200) else snap(),
         label = "chipBackground",
     )
 
@@ -267,7 +264,7 @@ fun GlassFilterChip(
             selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
         },
-        animationSpec = tween(200),
+        animationSpec = if (motionEnabled) tween(200) else snap(),
         label = "chipBorder",
     )
 
@@ -275,10 +272,7 @@ fun GlassFilterChip(
         selected = selected,
         onClick = onClick,
         label = label,
-        modifier = modifier
-            .graphicsLayer {
-                renderEffect = BlurEffect(3f, 3f, TileMode.Clamp)
-            },
+        modifier = modifier,
         enabled = enabled,
         leadingIcon = leadingIcon,
         colors = FilterChipDefaults.filterChipColors(

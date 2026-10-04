@@ -1,21 +1,22 @@
 package com.ashareai.app.ui.theme
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
  * 液体玻璃样式定义
@@ -64,7 +65,10 @@ object LiquidGlassDefaults {
 
 /**
  * 液体玻璃表面组件
- * 带有动态波纹和流光效果的毛玻璃材质
+ * 只在状态变化时做短时过渡的毛玻璃材质。
+ *
+ * 玻璃表面位于导航和临时操作层，不能通过无限动画持续唤醒 GPU；
+ * 需要持续刷新的状态应由内容本身表达，而不是让整个表面常驻动画。
  */
 @Composable
 fun LiquidGlassSurface(
@@ -74,88 +78,54 @@ fun LiquidGlassSurface(
     powerSaveMode: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val activeStyle = if (powerSaveMode) LiquidGlassDefaults.PowerSave else style
+    val effectivePowerSave = powerSaveMode || LocalPowerSaveMode.current
+    val animationsEnabled = LocalFullAnimationsEnabled.current && !effectivePowerSave
+    if (!LocalGlassEnabled.current || effectivePowerSave) {
+        Surface(
+            modifier = modifier,
+            shape = shape,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            content = content,
+        )
+        return
+    }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "liquidGlass")
-
-    val shimmerOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "shimmerOffset"
-    )
-
-    val wavePhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "wavePhase"
-    )
+    val activeStyle = style
 
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val primaryColor = MaterialTheme.colorScheme.primary
     val borderColor = MaterialTheme.colorScheme.outlineVariant
-
-    // 波纹效果：在省电模式下静止
-    val wave1 = if (activeStyle.animationEnabled) {
-        sin(wavePhase) * 0.03f + 0.97f
-    } else {
-        1f
-    }
-
-    val wave2 = if (activeStyle.animationEnabled) {
-        sin(wavePhase + PI.toFloat() * 0.5f) * 0.02f + 0.98f
-    } else {
-        1f
-    }
+    val transitionTarget = if (activeStyle.animationEnabled && animationsEnabled) 1f else 0f
+    val transition by animateFloatAsState(
+        targetValue = transitionTarget,
+        animationSpec = if (animationsEnabled) tween(220, easing = FastOutSlowInEasing) else androidx.compose.animation.core.snap(),
+        label = "glass_state_transition",
+    )
+    val tintAlpha = activeStyle.shimmerIntensity * 0.35f * transition
 
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = wave1
-                scaleY = wave2
-                // 省电模式下禁用模糊
-                if (!powerSaveMode) {
-                    renderEffect = androidx.compose.ui.graphics.BlurEffect(
-                        radiusX = activeStyle.blurRadius.toPx() * 0.3f,
-                        radiusY = activeStyle.blurRadius.toPx() * 0.3f,
-                    )
-                }
-            }
             .clip(shape)
-            .background(
-                brush = if (activeStyle.animationEnabled) {
-                    Brush.linearGradient(
-                        0f to surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
-                        shimmerOffset * 0.3f to surfaceColor
-                            .copy(alpha = activeStyle.backgroundAlpha + activeStyle.shimmerIntensity),
-                        shimmerOffset * 0.5f to primaryColor
-                            .copy(alpha = activeStyle.shimmerIntensity * 0.5f),
-                        shimmerOffset * 0.7f to surfaceColor
-                            .copy(alpha = activeStyle.backgroundAlpha + activeStyle.shimmerIntensity * 0.8f),
-                        1f to surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
-                    )
-                } else {
-                    Brush.linearGradient(
+    ) {
+        // Keep the material layer separate so its effect never blurs labels or icons.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.linearGradient(
                         listOf(
                             surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
+                            primaryColor.copy(alpha = tintAlpha),
                             surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
                         )
                     )
-                }
-            )
-            .border(
-                width = 1.dp,
-                color = borderColor.copy(alpha = activeStyle.borderAlpha),
-                shape = shape,
-            )
-    ) {
+                )
+                .border(
+                    width = 1.dp,
+                    color = borderColor.copy(alpha = activeStyle.borderAlpha),
+                    shape = shape,
+                ),
+        )
         content()
     }
 }

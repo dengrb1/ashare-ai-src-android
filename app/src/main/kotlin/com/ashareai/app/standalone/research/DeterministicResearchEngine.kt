@@ -5,6 +5,9 @@ import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.ResearchResult
 import com.ashareai.app.standalone.domain.ResearchScore
+import com.ashareai.app.scoring.FactorEvidence
+import com.ashareai.app.scoring.FactorScoring
+import com.ashareai.app.scoring.Risk
 import kotlin.math.roundToInt
 
 interface ResearchEngine {
@@ -113,9 +116,41 @@ class DeterministicResearchEngine : ResearchEngine {
             }
         }
 
-        // Basic-event and fundamental data are intentionally not inferred from a price feed.
-        unavailable += "基本面（本地行情源不可用）"
-        unavailable += "事件数据（本地行情源不可用）"
+        // Match the source FactorDecisionProvider: missing point-in-time evidence is neutral,
+        // while the quality component records how much evidence was actually present.
+        val factorTechnicalSignals = buildList {
+            if (sma20 != null && lastClose != null && sma20 != 0.0) {
+                add((50.0 + (lastClose - sma20) / sma20 * 500.0).coerceIn(0.0, 100.0))
+            }
+            if (macd != null && lastClose != null && lastClose != 0.0) {
+                add((50.0 + macd.histogram / lastClose * 2_000.0).coerceIn(0.0, 100.0))
+            }
+            if (rsi != null) add((50.0 + (rsi - 50.0)).coerceIn(0.0, 100.0))
+        }
+        val factorTechnical = factorTechnicalSignals.takeIf { it.isNotEmpty() }?.average() ?: 50.0
+        val qualityPresent = listOf(
+            sma20,
+            sma60,
+            macd?.histogram,
+            rsi,
+            volumeRatio,
+        ).count { it != null }
+        val factorQuality = 100.0 * qualityPresent / 17.0
+        val factorEvidence = FactorEvidence(
+            fundamental = 50.0,
+            technical = factorTechnical,
+            sentiment = 50.0,
+            quality = factorQuality,
+            marketScoreAdjustment = marketContext.scoreAdjustment,
+            marketRiskMultiplier = marketContext.riskMultiplier,
+        )
+        val factorDecision = FactorScoring.decide(factorEvidence)
+
+        // Fundamental, sentiment and event inputs are intentionally not inferred from prices.
+        // The deterministic provider still emits a decision using the source's neutral values.
+        unavailable += "基本面（本地行情源无财务证据，按中性 50 处理）"
+        unavailable += "情绪（本地行情源无情绪证据，按中性 50 处理）"
+        unavailable += "事件数据（本地行情源无事件证据，按中性风险乘数处理）"
 
         val components = listOf(
             trendScore,
@@ -133,21 +168,20 @@ class DeterministicResearchEngine : ResearchEngine {
             .filter { it.second != null }
             .sumOf { it.first }
         val normalizedTotal = if (availableMaximum == 0.0) 0.0 else availableTotal / availableMaximum * 100
-        val baseTotal = (normalizedTotal * 10).roundToInt() / 10.0
+        val technicalTotal = (normalizedTotal * 10).roundToInt() / 10.0
         if (marketContext.regime == MarketRegime.UNKNOWN) {
             unavailable += "大盘指数（K 线不足 20 日，按中性处理）"
         }
-        val total = (((baseTotal + marketContext.scoreAdjustment).coerceIn(0.0, 100.0) * marketContext.riskMultiplier) * 10)
-            .roundToInt() / 10.0
-        val risk = when {
-            quote?.freshness == MarketFreshness.UNAVAILABLE -> "数据不足"
-            total >= 70 && (volatility ?: 1.0) < 0.55 -> "中"
-            total >= 45 -> "中高"
-            else -> "高"
+        val baseTotal = factorDecision.baseScore
+        val total = factorDecision.score
+        val risk = when (factorDecision.risk) {
+            Risk.LOW -> "低"
+            Risk.MEDIUM -> "中"
+            Risk.HIGH -> "高"
         }
         val summary = buildString {
             append(name)
-            append(" 本地技术评分 ")
+            append(" 确定性因子评分 ")
             append(total)
             append(" / 100；风险：")
             append(risk)
@@ -180,6 +214,9 @@ class DeterministicResearchEngine : ResearchEngine {
                 marketContext = marketContext,
                 total = total,
                 unavailable = unavailable.distinct(),
+                factorFormulaVersion = factorDecision.formulaVersion,
+                factorParameterSha256 = com.ashareai.app.scoring.FactorGenome().parameterSha256,
+                factorDecision = factorDecision,
             ),
             risk = risk,
             summary = summary,

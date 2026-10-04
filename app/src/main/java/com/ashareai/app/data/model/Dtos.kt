@@ -526,6 +526,10 @@ data class Score(
     val market_risk_multiplier: Double? = null,
     val total_score: Double? = null,
     val formula_version: String? = null,
+    val parameter_sha256: String? = null,
+    val shadow_formula_version: String? = null,
+    val shadow_score: Double? = null,
+    val risk_state: String? = null,
 )
 
 @Serializable
@@ -1153,6 +1157,13 @@ data class ArchiveExportRequest(val passphrase: String)
 
 @Serializable
 data class PersonalArchiveJob(
+    /** Current server contract uses archive_id for both export and import jobs. */
+    val archive_id: String? = null,
+    val kind: String? = null,
+    val phase: String? = null,
+    val source_archive_id: String? = null,
+    val result: JsonElement? = null,
+    val error_code: String? = null,
     val job_id: String? = null,
     val export_id: String? = null,
     val import_id: String? = null,
@@ -1162,10 +1173,78 @@ data class PersonalArchiveJob(
     val created_at: String? = null,
     val completed_at: String? = null,
     val preview: JsonElement? = null,
-)
+) {
+    /** Stable identifier across old and current server responses. */
+    val archiveId: String?
+        get() = archive_id ?: export_id ?: import_id ?: job_id
+
+    /** The server renamed preview/result over time; expose one UI value. */
+    val previewOrResult: JsonElement?
+        get() = preview ?: result
+
+    val errorMessage: String?
+        get() = error_message ?: error_code
+}
 
 @Serializable
 data class ArchiveApplyRequest(val merge_options: JsonObject? = null)
+
+@Serializable
+data class DecisionPredictRequest(
+    val symbol: String,
+    val trading_date: String? = null,
+    val mode: String? = "factor",
+)
+
+@Serializable
+data class DecisionPredictResponse(
+    val decision: JsonObject = JsonObject(emptyMap()),
+    val status: String = "success",
+    val confidence: Double = 0.0,
+    val system2_state: String = "IDLE",
+    val system2_job_id: String? = null,
+)
+
+@Serializable
+data class DecisionBatchRequest(
+    val symbols: List<String>,
+    val trading_date: String? = null,
+    val mode: String? = "factor",
+)
+
+@Serializable
+data class DecisionBatchResponse(
+    val decisions: Map<String, JsonObject> = emptyMap(),
+    val status: String = "success",
+    val failed_symbols: List<String> = emptyList(),
+)
+
+@Serializable
+data class StrategyReviewRequest(val note: String? = null)
+
+@Serializable
+data class StrategyEvolutionRequest(
+    val dataset: List<JsonObject>,
+    val decision_at: String,
+    val baseline: JsonObject? = null,
+    val proposals: List<JsonObject> = emptyList(),
+    val persist: Boolean = true,
+)
+
+@Serializable
+data class StrategyEvolutionResponse(
+    val status: String = "",
+    val champion: JsonObject? = null,
+    val candidates: List<JsonObject> = emptyList(),
+    val rejected: List<JsonObject> = emptyList(),
+    val stored_candidate_ids: List<String> = emptyList(),
+)
+
+@Serializable
+data class StrategyCandidatesResponse(
+    val versions: List<JsonObject> = emptyList(),
+    val count: Int = 0,
+)
 
 // ---------- Bootstrap ----------
 

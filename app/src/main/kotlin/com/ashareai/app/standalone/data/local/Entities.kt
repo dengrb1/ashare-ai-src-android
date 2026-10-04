@@ -158,3 +158,31 @@ data class ChatMessageEntity(
     val selectedSymbol: String?,
     val includedPortfolio: Boolean,
 )
+
+@Entity(tableName = "sync_operations")
+data class SyncOperationEntity(
+    @PrimaryKey val idempotencyKey: String,
+    val direction: String,
+    val scope: String,
+    val state: String,
+    val previewJson: String? = null,
+    val errorMessage: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(tableName = "sync_tombstones", primaryKeys = ["collection", "recordKey"])
+data class SyncTombstoneEntity(
+    val collection: String,
+    val recordKey: String,
+    val deletedAt: Long,
+    val sourceRevision: Long? = null,
+)
+
+/** Last confirmed connected snapshot, isolated by authenticated account and server URL. */
+@Entity(tableName = "sync_baselines")
+data class SyncBaselineEntity(
+    @PrimaryKey val accountKey: String,
+    val snapshotJson: String,
+    val savedAt: Long,
+)

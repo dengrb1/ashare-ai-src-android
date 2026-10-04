@@ -30,6 +30,7 @@ private val primaryResearchEntries = listOf(
     HubEntry("研究报告", "日报正文、逐股评分与研究结论", "reports", Icons.AutoMirrored.Outlined.Article),
     HubEntry("候选池", "确定性评分、排名与风险过滤", Routes.CANDIDATES, Icons.Outlined.Leaderboard),
     HubEntry("模拟组合", "权重、现金比例与调仓建议", Routes.PORTFOLIO, Icons.Outlined.PieChart),
+    HubEntry("策略演化", "审核影子候选、批准或回滚公式版本", Routes.STRATEGY_EVOLUTION, Icons.Outlined.Tune),
 )
 
 private val toolEntries = listOf(

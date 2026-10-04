@@ -1,47 +1,87 @@
 package com.ashareai.app.repository
 
+import com.ashareai.app.data.ApiServiceProvider
+import com.ashareai.app.data.model.ResearchRequest as FusionResearchRequest
+import com.ashareai.app.data.newIdempotencyKey
+
 /**
  * Fusion 工作区研究仓库实现。
  *
  * 使用 Fusion API 提交研究、查询运行状态和获取报告。
  */
-class FusionResearchRepository : ResearchRepository {
+class FusionResearchRepository(private val services: ApiServiceProvider) : ResearchRepository {
+    private val api get() = services.service()
 
     override suspend fun submitResearch(request: ResearchRequest): String {
-        // Fusion 工作区通过 /api/v1/research/submit 提交研究
-        // 需要注入 ApiService 后实现
-        // 暂时返回占位 ID
-        return "fusion-${System.currentTimeMillis()}"
+        val run = api.submitResearch(
+            newIdempotencyKey(),
+            FusionResearchRequest(
+                trading_date = request.date ?: java.time.LocalDate.now().toString(),
+                scope = if (request.symbols.isEmpty()) "WATCHLIST" else "CUSTOM",
+                symbols = request.symbols.takeIf { it.isNotEmpty() },
+            ),
+        )
+        return run.run_id
     }
 
     override suspend fun getRunStatus(runId: String): ResearchRunStatus {
-        // Fusion 工作区通过 /api/v1/research/runs/{runId} 查询状态
-        // 暂时返回占位状态
+        val run = api.researchRun(runId)
         return ResearchRunStatus(
-            runId = runId,
-            status = "PENDING",
-            progress = 0,
-            message = null,
-            startedAt = System.currentTimeMillis(),
-            completedAt = null,
+            runId = run.run_id,
+            status = run.status,
+            progress = run.progress ?: 0,
+            message = run.error_message ?: run.reason_message,
+            startedAt = parseTime(run.started_at ?: run.created_at),
+            completedAt = parseTime(run.completed_at),
         )
     }
 
     override suspend fun listRuns(limit: Int): List<ResearchRun> {
-        // Fusion 工作区通过 /api/v1/research/runs 列出历史
-        // 暂时返回空列表
-        return emptyList()
+        return api.researchRuns(limit = limit.coerceIn(1, 100), mine = true).map {
+            ResearchRun(
+                runId = it.run_id,
+                date = it.trading_date ?: it.requested_date.orEmpty(),
+                status = it.status,
+                symbolCount = it.target_symbols.size,
+                startedAt = parseTime(it.started_at ?: it.created_at),
+                completedAt = parseTime(it.completed_at),
+            )
+        }
     }
 
     override suspend fun getReport(date: String, runId: String?): ResearchReport {
-        // Fusion 工作区通过 /api/v1/research/reports 获取报告
-        // 暂时抛出异常
-        throw NotImplementedError("Fusion research report API not yet implemented")
+        val report = api.report(date, runId)
+        val id = report.report_id ?: throw IllegalStateException("report id missing")
+        val body = api.reportContent(id)
+        val candidates = api.candidates(date, runId)
+        return ResearchReport(
+            runId = report.run_id ?: runId.orEmpty(),
+            date = report.trading_date ?: date,
+            summary = body.content ?: body.body.orEmpty(),
+            marketContext = report.market_index_snapshot?.regime.orEmpty(),
+            candidateCount = candidates.size,
+            generatedAt = parseTime(report.created_at),
+        )
     }
 
     override suspend fun getCandidates(date: String, runId: String?): List<ResearchCandidate> {
-        // Fusion 工作区通过 /api/v1/research/candidates 获取候选
-        // 暂时返回空列表
-        return emptyList()
+        return api.candidates(date, runId).map { candidate ->
+            ResearchCandidate(
+                symbol = candidate.symbol,
+                name = candidate.name.orEmpty(),
+                score = candidate.total_score ?: 0.0,
+                reason = "${candidate.industry_name.orEmpty()} ${candidate.trading_date.orEmpty()}".trim(),
+                risk = when {
+                    (candidate.event_risk_multiplier ?: 1.0) < .8 -> "HIGH"
+                    (candidate.total_score ?: 0.0) >= 70 -> "LOW"
+                    else -> "MEDIUM"
+                },
+            )
+        }
     }
+
+    private fun parseTime(value: String?): Long = value?.let {
+        runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+            ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+    } ?: 0L
 }

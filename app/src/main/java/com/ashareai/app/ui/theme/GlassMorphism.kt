@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -16,11 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -29,6 +27,10 @@ import androidx.compose.ui.unit.dp
  * 默认启用，可在主题层级禁用以降级到标准 Material 3 组件。
  */
 val LocalGlassEnabled = compositionLocalOf { true }
+
+/** Controls non-essential motion in glass surfaces and shared navigation controls. */
+val LocalFullAnimationsEnabled = compositionLocalOf { true }
+val LocalPowerSaveMode = compositionLocalOf { false }
 
 /**
  * 玻璃态材质配置：模糊强度、透明度、色彩叠加层。
@@ -74,20 +76,27 @@ fun GlassSurface(
     shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.medium,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    if (!LocalGlassEnabled.current || LocalPowerSaveMode.current) {
+        androidx.compose.material3.Surface(
+            modifier = modifier,
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface,
+            content = { Box(content = content) },
+        )
+        return
+    }
     val surfaceColor = MaterialTheme.colorScheme.surface
     val primaryColor = MaterialTheme.colorScheme.primary
     val borderColor = MaterialTheme.colorScheme.outline
 
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                // 模糊效果：iOS 风格的背景模糊
-                renderEffect = BlurEffect(style.blurRadius, style.blurRadius, TileMode.Clamp)
-            }
-            .clip(shape)
-            .background(surfaceColor.copy(alpha = style.backgroundAlpha))
-            .drawWithContent {
-                drawContent()
+    Box(modifier = modifier.clip(shape)) {
+        // Keep material decoration behind content so labels remain crisp.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(surfaceColor.copy(alpha = style.backgroundAlpha))
+                .drawWithContent {
+                    drawContent()
                 // 主题色彩叠加层：增强色彩深度
                 drawRect(
                     color = primaryColor.copy(alpha = style.tintAlpha),
@@ -130,9 +139,10 @@ fun GlassSurface(
                     topLeft = Offset(size.width - strokeWidth, 0f),
                     size = Size(strokeWidth, size.height),
                 )
-            },
-        content = content,
-    )
+                },
+        )
+        content()
+    }
 }
 
 /**

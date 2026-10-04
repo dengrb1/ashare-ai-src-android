@@ -35,6 +35,8 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
         private val KEY_REMEMBER_PASSWORD = booleanPreferencesKey("remember_password")
         private val KEY_REMEMBERED_PASSWORD = stringPreferencesKey("remembered_password")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode") // system | light | dark
+        private val KEY_GLASS_ENABLED = booleanPreferencesKey("glass_enabled")
+        private val KEY_FULL_ANIMATIONS_ENABLED = booleanPreferencesKey("full_animations_enabled")
         private val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
         private val KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS =
             intPreferencesKey("foreground_market_refresh_interval_seconds")
@@ -50,6 +52,8 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
     val username: Flow<String?> = context.dataStore.data.map { it[KEY_USERNAME] }
     val rememberPassword: Flow<Boolean> = context.dataStore.data.map { it[KEY_REMEMBER_PASSWORD] ?: false }
     val darkMode: Flow<String> = context.dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
+    val glassEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GLASS_ENABLED] ?: true }
+    val fullAnimationsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_FULL_ANIMATIONS_ENABLED] ?: true }
     val islandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_ISLAND_ENABLED] ?: false }
     val foregroundMarketRefreshIntervalSeconds: Flow<Int> = context.dataStore.data.map {
         it[KEY_FOREGROUND_MARKET_REFRESH_INTERVAL_SECONDS] ?: 5
@@ -100,6 +104,14 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
 
     suspend fun setDarkMode(mode: String) {
         context.dataStore.edit { it[KEY_DARK_MODE] = mode }
+    }
+
+    suspend fun setGlassEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_GLASS_ENABLED] = enabled }
+    }
+
+    suspend fun setFullAnimationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_FULL_ANIMATIONS_ENABLED] = enabled }
     }
 
     suspend fun setIslandEnabled(enabled: Boolean) {

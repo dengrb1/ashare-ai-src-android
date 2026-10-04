@@ -25,7 +25,7 @@ import kotlinx.coroutines.runBlocking
  *
  * 两套数据、密钥、任务和通知完全隔离，通过 WorkspaceStore 管理当前工作区。
  */
-class HybridApp : Application() {
+class HybridApp : AShareApp() {
     lateinit var workspaceStore: WorkspaceStore
         private set
 
@@ -47,11 +47,9 @@ class HybridApp : Application() {
         workspaceStore = WorkspaceStore(this)
         localContainer = LocalAppContainer(this)
 
-        // Fusion 容器初始化
-        fusionSettings = FusionSettingsStore(this)
-        runBlocking { fusionSettings.migrateLegacyServerAddress() }
-        ApiClient.init(fusionSettings)
-        fusionContainer = FusionAppContainer(fusionSettings)
+        // AShareApp 已初始化连接版容器；保留别名供双工作区代码使用。
+        fusionSettings = settings
+        fusionContainer = container
 
         createNotificationChannels()
 

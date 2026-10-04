@@ -1,6 +1,8 @@
 package com.ashareai.app.standalone.research
 
 import android.content.Context
+import com.ashareai.app.performance.DeviceResourcePolicy
+import com.ashareai.app.performance.ResourceBudget
 import com.ashareai.app.standalone.data.LocalRepository
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
@@ -20,6 +22,11 @@ import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
 import java.util.UUID
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -30,6 +37,7 @@ class ResearchCoordinator(
     private val engine: ResearchEngine,
     private val aiClient: OpenAiCompatibleClient,
     private val notifications: NotificationRepository,
+    private val resourceBudget: () -> ResourceBudget = { DeviceResourcePolicy.from(context) },
     private val clock: () -> Long = System::currentTimeMillis,
     private val json: Json = Json,
 ) {
@@ -130,7 +138,7 @@ class ResearchCoordinator(
                     spec.symbol to market.dailyCandles(spec.symbol, limit = 100)
                 },
             )
-            val batches = ResearchBatchPlanner.batches(original.symbols)
+            val batches = ResearchBatchPlanner.batches(original.symbols, resourceBudget().chunkSize)
             var completed = original.completedCount
             batches.forEach { batch ->
                 if (isCancellationRequested(runId)) {
@@ -138,22 +146,33 @@ class ResearchCoordinator(
                     return
                 }
                 val quotes = market.refreshQuotes(batch).associateBy { it.symbol }
-                batch.forEach { symbol ->
+                val parallelism = resourceBudget().maxParallelTasks.coerceIn(1, batch.size.coerceAtLeast(1))
+                val analysisDispatcher = Dispatchers.Default.limitedParallelism(parallelism)
+                val batchResults = coroutineScope {
+                    batch.map { symbol ->
+                        async(analysisDispatcher) {
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                            val candles = market.dailyCandles(symbol, limit = 100)
+                            val quote = quotes[symbol]
+                            val result = engine.analyse(
+                                symbol = symbol,
+                                name = quote?.name ?: symbol,
+                                quote = quote,
+                                candles = candles,
+                                marketContext = marketContext,
+                            )
+                            AnalysedSecurity(result, candles)
+                        }
+                    }.awaitAll()
+                }
+                batchResults.forEach { item ->
                     if (isCancellationRequested(runId)) {
                         finishCancelled(local.researchRun(runId) ?: original)
                         return
                     }
-                    val candles = market.dailyCandles(symbol, limit = 100)
-                    val quote = quotes[symbol]
-                    val result = engine.analyse(
-                        symbol = symbol,
-                        name = quote?.name ?: symbol,
-                        quote = quote,
-                        candles = candles,
-                        marketContext = marketContext,
-                    )
-                    analysed += AnalysedSecurity(result, candles)
+                    analysed += item
                     completed += 1
+                    kotlinx.coroutines.yield()
                     local.updateResearchRun(runId, ResearchRunState.RUNNING, completed, now = clock())
                     val progressRun = local.researchRun(runId)
                     if (progressRun != null) onProgress(progressRun)

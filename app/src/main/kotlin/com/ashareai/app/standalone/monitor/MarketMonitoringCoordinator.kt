@@ -8,6 +8,8 @@ import com.ashareai.app.standalone.domain.Holding
 import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ShanghaiTradingCalendar
+import com.ashareai.app.performance.ResourceBudget
+import com.ashareai.app.performance.DeviceResourceLevel
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -28,6 +30,9 @@ class MarketMonitoringCoordinator(
     private val notifications: NotificationRepository,
     private val calendar: ShanghaiTradingCalendar,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val resourceBudget: () -> ResourceBudget = {
+        ResourceBudget(DeviceResourceLevel.NORMAL, 1, 128, 128, "默认监控预算")
+    },
 ) {
     suspend fun monitorLoop(onUpdate: (MonitoringSnapshot) -> Unit) {
         while (true) {
@@ -40,16 +45,24 @@ class MarketMonitoringCoordinator(
 
     suspend fun checkOnce(): MonitoringSnapshot {
         val preferences = settings.settings.first()
+        val budget = resourceBudget()
+        val intervalSeconds = (preferences.monitoringIntervalSeconds * budget.refreshIntervalMultiplier)
+            .toInt()
+            .coerceIn(15, 900)
         val now = clock()
         if (!preferences.monitoringEnabled) {
-            return inactive(preferences.monitoringIntervalSeconds, "持仓监控已关闭", now)
+            return inactive(intervalSeconds, "持仓监控已关闭", now)
         }
-        val holdings = local.holdingsNow()
+        // Mobile clients are push-only. Minute-level quote polling is owned by
+        // the desktop/server monitor; the phone only displays high-severity
+        // notifications delivered through the existing notification channel.
+        return inactive(intervalSeconds, "手机端仅接收高等级推送，不进行行情轮询", now)
+        /* val holdings = local.holdingsNow()
         if (holdings.isEmpty()) {
-            return inactive(preferences.monitoringIntervalSeconds, "无持仓，已停止行情轮询", now)
+            return inactive(intervalSeconds, "无持仓，已停止行情轮询", now)
         }
         if (!calendar.isTradingSession()) {
-            return inactive(preferences.monitoringIntervalSeconds, "非交易时段，保留最后行情时间", now)
+            return inactive(intervalSeconds, "非交易时段，保留最后行情时间", now)
         }
         val quotes = market.refreshQuotes(holdings.map(Holding::symbol))
         if (preferences.alertsEnabled) {
@@ -74,11 +87,11 @@ class MarketMonitoringCoordinator(
         }
         return MonitoringSnapshot(
             active = true,
-            intervalSeconds = preferences.monitoringIntervalSeconds,
+            intervalSeconds = intervalSeconds,
             title = "持仓监控 · " + holdings.size + " 只",
             body = "市值 " + format(value) + " · 盈亏 " + format(profit),
             updatedAt = now,
-        )
+        ) */
     }
 
     private fun inactive(intervalSeconds: Int, message: String, now: Long) = MonitoringSnapshot(

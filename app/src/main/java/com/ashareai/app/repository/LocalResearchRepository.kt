@@ -1,6 +1,13 @@
 package com.ashareai.app.repository
 
 import com.ashareai.app.standalone.data.LocalRepository
+import com.ashareai.app.standalone.domain.ResearchRequest as LocalResearchRequest
+import com.ashareai.app.standalone.domain.ResearchRunState
+import com.ashareai.app.standalone.domain.ResearchScope
+import com.ashareai.app.standalone.research.ResearchCoordinator
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * 本地工作区研究仓库实现。
@@ -9,31 +16,48 @@ import com.ashareai.app.standalone.data.LocalRepository
  */
 class LocalResearchRepository(
     private val local: LocalRepository,
+    private val coordinator: ResearchCoordinator? = null,
 ) : ResearchRepository {
 
     override suspend fun submitResearch(request: ResearchRequest): String {
-        // 本地研究通过后台服务触发，此接口暂不实现
-        // 返回占位 ID
-        return "local-${System.currentTimeMillis()}"
+        val runner = requireNotNull(coordinator) { "本地研究协调器未配置" }
+        val symbols = request.symbols.map(String::trim).filter(String::isNotBlank).distinct()
+        val scope = if (symbols.isNotEmpty()) ResearchScope.CUSTOM else ResearchScope.WATCHLIST
+        return runner.enqueue(
+            LocalResearchRequest(
+                scope = scope,
+                symbols = symbols,
+                marketLimit = symbols.size.coerceAtLeast(1),
+                includePortfolioDataForAi = false,
+                aiProviderId = null,
+            ),
+            startImmediately = true,
+        ).id
     }
 
     override suspend fun getRunStatus(runId: String): ResearchRunStatus {
         val run = local.researchRun(runId)
             ?: throw IllegalArgumentException("Run not found: $runId")
 
+        val completed = run.state in setOf(
+            ResearchRunState.SUCCEEDED,
+            ResearchRunState.FAILED,
+            ResearchRunState.CANCELLED,
+        )
         return ResearchRunStatus(
             runId = run.id,
             status = run.state.name,
-            progress = if (run.state == com.ashareai.app.standalone.domain.ResearchRunState.SUCCEEDED) 100 else 50,
+            progress = if (run.totalCount > 0) {
+                (run.completedCount * 100 / run.totalCount).coerceIn(0, 100)
+            } else if (completed) 100 else 0,
             message = run.errorMessage,
             startedAt = run.startedAt,
-            completedAt = if (run.state == com.ashareai.app.standalone.domain.ResearchRunState.SUCCEEDED) run.updatedAt else null,
+            completedAt = if (completed) run.updatedAt else null,
         )
     }
 
     override suspend fun listRuns(limit: Int): List<ResearchRun> {
-        // 本地工作区使用 recoverableResearchRuns 查询运行历史
-        return local.recoverableResearchRuns().take(limit).map { run ->
+        return local.allResearchRuns().take(limit).map { run ->
             ResearchRun(
                 runId = run.id,
                 date = run.startedAt.toString(),
@@ -46,24 +70,41 @@ class LocalResearchRepository(
     }
 
     override suspend fun getReport(date: String, runId: String?): ResearchReport {
-        // 本地工作区使用 ResearchReport entity
-        // 暂时不完全实现，返回占位数据
-        val actualRunId = runId ?: "unknown"
-
+        val reports = local.allReports()
+        val report = runId?.let { id -> reports.firstOrNull { it.runId == id } }
+            ?: reports.firstOrNull { reportDate(it.createdAt) == date }
+            ?: reports.firstOrNull()
+            ?: throw IllegalArgumentException("本地没有可用研究报告")
+        val candidates = local.candidatesForRun(report.runId)
+        val body = report.deterministicBody.trim()
         return ResearchReport(
-            runId = actualRunId,
-            date = date,
-            summary = "本地研究报告",
-            marketContext = "",
-            candidateCount = 0,
-            generatedAt = System.currentTimeMillis(),
+            runId = report.runId,
+            date = reportDate(report.createdAt),
+            summary = body.lineSequence().firstOrNull { it.isNotBlank() && !it.startsWith("#") } ?: report.title,
+            marketContext = body.substringAfter("## 冻结大盘环境", "").substringBefore("## ").trim(),
+            candidateCount = candidates.size,
+            generatedAt = report.createdAt,
         )
     }
 
     override suspend fun getCandidates(date: String, runId: String?): List<ResearchCandidate> {
-        // 本地工作区通过 getCandidatesByReportId 查询候选
-        // 需要根据 runId 关联 reportId
-        // 暂时返回空列表
-        return emptyList()
+        val selectedRunId = runId ?: local.allReports()
+            .firstOrNull { reportDate(it.createdAt) == date }
+            ?.runId
+            ?: local.allReports().firstOrNull()?.runId
+            ?: return emptyList()
+        return local.candidatesForRun(selectedRunId).map {
+            ResearchCandidate(
+                symbol = it.symbol,
+                name = it.name,
+                score = it.score,
+                reason = it.reason,
+                risk = it.risk,
+            )
+        }
     }
+
+    private fun reportDate(epochMillis: Long): String =
+        Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+            .format(DateTimeFormatter.ISO_LOCAL_DATE)
 }

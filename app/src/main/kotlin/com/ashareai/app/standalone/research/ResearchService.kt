@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
 import kotlinx.coroutines.CoroutineScope
@@ -23,20 +23,20 @@ class ResearchService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val runId = intent?.getStringExtra(EXTRA_RUN_ID) ?: return START_NOT_STICKY
         activeRunId = runId
-        val app = application as StandaloneApp
+        val app = HybridApp.from(this)
         startForeground(
             NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
-            app.container.notifications.researchProgressNotification("本地研究", "正在准备研究任务"),
+            app.localContainer.notifications.researchProgressNotification("本地研究", "正在准备研究任务"),
         )
         runJob?.cancel()
         runJob = serviceScope.launch {
-            val queuedRun = app.container.local.researchRun(runId)
+            val queuedRun = app.localContainer.local.researchRun(runId)
             val notificationTitle = queuedRun?.automaticReportSlot?.let { "自动研究报告 $it" } ?: "本地研究"
-            app.container.notifications.showResearchProgress(notificationTitle, "正在准备研究任务")
-            app.container.research.run(runId) { run ->
+            app.localContainer.notifications.showResearchProgress(notificationTitle, "正在准备研究任务")
+            app.localContainer.research.run(runId) { run ->
                 val body = "已完成 " + run.completedCount + " / " + run.totalCount + " 只股票"
                 val progress = if (run.totalCount <= 0) 0 else run.completedCount * 100 / run.totalCount
-                app.container.notifications.showResearchProgress(notificationTitle, body, progress)
+                app.localContainer.notifications.showResearchProgress(notificationTitle, body, progress)
             }
             stopForeground(STOP_FOREGROUND_DETACH)
             stopSelf(startId)

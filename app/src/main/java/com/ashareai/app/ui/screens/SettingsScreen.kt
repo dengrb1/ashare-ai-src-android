@@ -44,6 +44,9 @@ fun SettingsScreen(appViewModel: AppViewModel) {
     val marketViewModel = LocalMarketViewModel.current
     val foregroundRefreshIntervalSeconds by marketViewModel.refreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
+    val glassEnabled by appViewModel.settings.glassEnabled.collectAsState(initial = true)
+    val fullAnimationsEnabled by appViewModel.settings.fullAnimationsEnabled.collectAsState(initial = true)
+    val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
     val islandEnabled by appViewModel.settings.islandEnabled.collectAsState(initial = true)
 
     // 工作区数据共享状态
@@ -214,6 +217,35 @@ fun SettingsScreen(appViewModel: AppViewModel) {
 
             item {
                 AppCard {
+                    Text("外观与动效", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("液态玻璃", style = MaterialTheme.typography.bodyMedium)
+                            Text("用于顶部栏、底部导航和临时操作层。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = glassEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setGlassEnabled(enabled) } })
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("完整动画", style = MaterialTheme.typography.bodyMedium)
+                            Text("控制页面切换、底栏吸附和控件状态过渡。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = fullAnimationsEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setFullAnimationsEnabled(enabled) } })
+                    }
+                    if (isPowerSaveMode) {
+                        Text(
+                            "系统省电模式已覆盖以上设置，当前使用简化材质和即时切换。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            item {
+                AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("省电模式自动优化", style = MaterialTheme.typography.titleSmall)
@@ -236,8 +268,20 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     HorizontalDivider(Modifier.padding(vertical = 10.dp))
                     val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
                     val batteryLevel by appViewModel.batteryLevel.collectAsState()
+                    val isCharging by appViewModel.isCharging.collectAsState()
+                    val thermalStatus by appViewModel.thermalStatus.collectAsState()
                     KeyValueRow("当前电量", "$batteryLevel%")
+                    KeyValueRow("充电状态", if (isCharging) "充电中" else "未充电")
                     KeyValueRow("省电模式", if (isPowerSaveMode) "已开启" else "未开启")
+                    KeyValueRow(
+                        "热状态",
+                        when {
+                            thermalStatus >= 4 -> "严重，暂停非必要任务"
+                            thermalStatus >= 3 -> "受限，降低后台频率"
+                            thermalStatus >= 2 -> "温热"
+                            else -> "正常"
+                        },
+                    )
                     if (isPowerSaveMode && sharedSettings.autoOptimizeInPowerSaver) {
                         Text(
                             "✓ 已启用省电优化：液体玻璃特效已简化",
@@ -449,8 +493,30 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                                 scope.launch {
                                     sharedDataStore.updateSharedSettings(sharedSettings.copy(shareGlassEffect = enabled))
                                     if (enabled) {
-                                        sharedDataStore.syncGlassEffectEnabled(true)
+                                        sharedDataStore.syncGlassEffectEnabled(glassEnabled)
                                     }
+                                }
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("完整动画", style = MaterialTheme.typography.bodyMedium)
+                            Text("页面和控件的非必要动效", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = sharedSettings.shareFullAnimations,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    sharedDataStore.updateSharedSettings(sharedSettings.copy(shareFullAnimations = enabled))
+                                    if (enabled) sharedDataStore.syncFullAnimationsEnabled(fullAnimationsEnabled)
                                 }
                             },
                         )
@@ -461,14 +527,12 @@ fun SettingsScreen(appViewModel: AppViewModel) {
                     Button(
                         onClick = {
                             scope.launch {
-                                sharedDataStore.updateSharedValues(
-                                    SharedDataStore.SharedValues(
-                                        themeMode = darkMode,
-                                        islandEnabled = islandEnabled,
-                                        notificationsEnabled = islandEnabled,
-                                        glassEffectEnabled = true,
-                                    )
-                                )
+                                // Use per-setting sync methods so disabled sharing options
+                                // keep each workspace's local preference isolated.
+                                sharedDataStore.syncThemeMode(darkMode)
+                                sharedDataStore.syncIslandEnabled(islandEnabled)
+                                sharedDataStore.syncNotificationsEnabled(islandEnabled)
+                                sharedDataStore.syncAppearance(glassEnabled, fullAnimationsEnabled)
                                 message = "当前设置已同步到共享存储"
                             }
                         },

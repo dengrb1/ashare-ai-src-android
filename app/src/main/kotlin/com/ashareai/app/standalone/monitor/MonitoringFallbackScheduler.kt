@@ -8,7 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.HybridApp
 import java.util.concurrent.TimeUnit
 
 class MonitoringFallbackScheduler(
@@ -19,6 +19,7 @@ class MonitoringFallbackScheduler(
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
                     .build(),
             )
             .build()
@@ -43,8 +44,8 @@ class MonitorFallbackWorker(
     parameters: WorkerParameters,
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
-        val app = applicationContext as StandaloneApp
-        app.container.monitoring.checkOnce()
+        val app = applicationContext as HybridApp
+        app.localContainer.monitoring.checkOnce()
         return Result.success()
     }
 }

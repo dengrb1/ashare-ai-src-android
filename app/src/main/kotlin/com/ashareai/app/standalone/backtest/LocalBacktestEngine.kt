@@ -3,6 +3,11 @@ package com.ashareai.app.standalone.backtest
 import com.ashareai.app.standalone.data.LocalRepository
 import com.ashareai.app.standalone.data.market.MarketRepository
 import com.ashareai.app.standalone.domain.DailyCandle
+import com.ashareai.app.performance.DeviceResourcePolicy
+import com.ashareai.app.performance.ResourceBudget
+import android.content.Context
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -25,6 +30,7 @@ import kotlin.math.min
 class LocalBacktestEngine(
     private val market: MarketRepository,
     private val local: LocalRepository,
+    private val resourceBudget: () -> ResourceBudget = { ResourceBudget(com.ashareai.app.performance.DeviceResourceLevel.NORMAL, 2, 256, 256, "默认") },
 ) {
     suspend fun runBacktest(request: BacktestRequest): BacktestResult = withContext(Dispatchers.Default) {
         val id = request.id
@@ -59,6 +65,7 @@ class LocalBacktestEngine(
         var currentDate = startDate
         var dayCount = 0
         while (!currentDate.isAfter(endDate)) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             dayCount++
             val dateStr = currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
@@ -207,6 +214,7 @@ class LocalBacktestEngine(
             )
 
             currentDate = currentDate.plusDays(1)
+            if (dayCount % resourceBudget().chunkSize.coerceAtLeast(1) == 0) yield()
         }
 
         // 计算回测指标

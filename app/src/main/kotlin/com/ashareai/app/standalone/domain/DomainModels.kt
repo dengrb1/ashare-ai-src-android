@@ -170,6 +170,9 @@ data class ResearchScore(
     val baseTotal: Double = total,
     val marketContext: com.ashareai.app.standalone.research.MarketIndexContext =
         com.ashareai.app.standalone.research.MarketIndexContext.unknown(),
+    val factorFormulaVersion: String? = null,
+    val factorParameterSha256: String? = null,
+    val factorDecision: com.ashareai.app.scoring.FactorDecision? = null,
 )
 
 data class ResearchResult(

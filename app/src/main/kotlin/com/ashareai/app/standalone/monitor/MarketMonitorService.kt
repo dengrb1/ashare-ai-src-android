@@ -4,8 +4,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
-import androidx.core.content.ContextCompat
-import com.ashareai.app.standalone.StandaloneApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,17 +16,17 @@ class MarketMonitorService : Service() {
     private var monitorJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val app = application as StandaloneApp
+        val app = com.ashareai.app.HybridApp.from(this)
         startForeground(
             NOTIFICATION_ID,
-            app.container.notifications.monitoringNotification("持仓监控启动中", "正在检查交易时段与持仓"),
+            app.localContainer.notifications.monitoringNotification("持仓监控启动中", "正在检查交易时段与持仓"),
         )
         monitorJob?.cancel()
         monitorJob = serviceScope.launch {
-            app.container.monitoring.monitorLoop { snapshot ->
+            app.localContainer.monitoring.monitorLoop { snapshot ->
                 getSystemService(android.app.NotificationManager::class.java).notify(
                     NOTIFICATION_ID,
-                    app.container.notifications.monitoringNotification(snapshot.title, snapshot.body),
+                    app.localContainer.notifications.monitoringNotification(snapshot.title, snapshot.body),
                 )
             }
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -38,8 +36,8 @@ class MarketMonitorService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        val app = application as StandaloneApp
-        app.container.monitoringFallbackScheduler.schedule()
+        val app = com.ashareai.app.HybridApp.from(this)
+        app.localContainer.monitoringFallbackScheduler.schedule()
         monitorJob?.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf(startId)
@@ -56,14 +54,10 @@ class MarketMonitorService : Service() {
         private const val NOTIFICATION_ID = 4401
 
         fun start(context: Context) {
-            runCatching {
-                ContextCompat.startForegroundService(context, Intent(context, MarketMonitorService::class.java))
-            }.onFailure {
-                (context.applicationContext as? StandaloneApp)
-                    ?.container
-                    ?.monitoringFallbackScheduler
-                    ?.schedule()
-            }
+            // Android is push-only for market monitoring. The server-side
+            // minute monitor delivers high-severity alerts; starting a local
+            // foreground loop would create an unwanted battery-heavy quote poll.
+            stop(context)
         }
 
         fun stop(context: Context) {

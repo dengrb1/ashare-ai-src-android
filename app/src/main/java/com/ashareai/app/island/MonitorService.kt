@@ -10,10 +10,15 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.ashareai.app.AShareApp
 import com.ashareai.app.MainActivity
 import com.ashareai.app.R
 import com.ashareai.app.data.SettingsStore
+import com.ashareai.app.performance.DeviceResourcePolicy
+import com.ashareai.app.performance.ResourceTaskPriority
+import com.ashareai.app.performance.DeviceResourceLevel
+import com.ashareai.app.data.model.LivePositionMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,18 +26,20 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import java.text.DecimalFormat
 
 /**
  * 持仓监控前台服务：
- * 1. 常驻通知（超级岛）显示总浮动盈亏，按用户刷新间隔轮询行情。
- * 2. 轮询通知 summary，出现退出研究/止损/高风险通知时以焦点浮窗弹出。
+ * 1. 常驻通知（超级岛）显示最近一次服务端状态。
+ * 2. 只接收服务端高等级推送并低频读取通知 summary，避免手机建立分钟级行情流。
  * 3. 存在活动研究任务时展示进度。
  */
 class MonitorService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var loop: Job? = null
+    private var auxiliaryLoop: Job? = null
     private val df = DecimalFormat("#,##0.00")
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -51,9 +58,20 @@ class MonitorService : Service() {
             return START_NOT_STICKY
         }
         if (loop == null) {
-            loop = scope.launch { monitorLoop() }
+            loop = scope.launch { notificationOnlyLoop() }
         }
         return START_STICKY
+    }
+
+    private suspend fun notificationOnlyLoop() {
+        val settings = (application as AShareApp).settings
+        while (true) {
+            val budget = DeviceResourcePolicy.from(this@MonitorService, ResourceTaskPriority.MONITORING)
+            if (budget.level != DeviceResourceLevel.LOW) {
+                runCatching { updateAuxiliaryOnce(settings) }
+            }
+            delay((120 * budget.refreshIntervalMultiplier).toLong().coerceIn(120, 900) * 1000L)
+        }
     }
 
     override fun onDestroy() {
@@ -78,6 +96,30 @@ class MonitorService : Service() {
         }
     }
 
+    /** Notifications and research progress have separate REST contracts. */
+    private suspend fun auxiliaryLoop() {
+        val settings = (application as AShareApp).settings
+        while (true) {
+            val budget = DeviceResourcePolicy.from(this@MonitorService, ResourceTaskPriority.MONITORING)
+            if (budget.level != DeviceResourceLevel.LOW) {
+                runCatching { updateAuxiliaryOnce(settings) }
+            }
+            delay((60 * budget.refreshIntervalMultiplier).toLong().coerceIn(60, 900) * 1000L)
+        }
+    }
+
+    private fun updatePositionNotification(position: LivePositionMonitor) {
+        val pnl = position.unrealized_pnl ?: return
+        val pct = position.unrealized_pnl_pct
+        val sign = if (pnl >= 0) "+" else ""
+        notifyMonitor(
+            title = "持仓监控 · ${position.symbol}",
+            content = "$sign${df.format(pnl)}",
+            subContent = pct?.let { "$sign${df.format(it)}% · ${position.risk_state}" },
+            color = if (pnl >= 0) "#E53935" else "#00A86B",
+        )
+    }
+
     /** 返回下次轮询间隔（秒）。 */
     private suspend fun updateOnce(settings: SettingsStore): Int {
         val token = settings.currentAccessToken()
@@ -87,9 +129,6 @@ class MonitorService : Service() {
         }
         val container = (application as AShareApp).container
         val market = container.marketRepository
-        val notifications = container.notificationRepository
-        val research = container.researchRepository
-
         // 1) 持仓盈亏
         var interval = 30
         try {
@@ -121,7 +160,17 @@ class MonitorService : Service() {
             // 保持上次内容
         }
 
-        // 2) 预警通知（退出研究建议 / 止损 / 高风险）
+        return interval
+    }
+
+    /** Notification and progress polling stays active without duplicating SSE quote requests. */
+    private suspend fun updateAuxiliaryOnce(settings: SettingsStore) {
+        if (settings.currentAccessToken().isNullOrBlank()) return
+        val container = (application as AShareApp).container
+        val notifications = container.notificationRepository
+        val research = container.researchRepository
+
+        // 1) 预警通知（退出研究建议 / 止损 / 高风险）
         try {
             val summary = notifications.summary()
             val unseen = settings.claimUnseenNotificationIds(
@@ -142,7 +191,7 @@ class MonitorService : Service() {
         } catch (_: Exception) {
         }
 
-        // 3) 活动研究任务进度
+        // 2) 活动研究任务进度
         try {
             val active = research.runs(limit = 5, mine = true)
                 .firstOrNull { it.status.uppercase() in setOf("PENDING", "QUEUED", "RUNNING", "PROCESSING") }
@@ -154,7 +203,6 @@ class MonitorService : Service() {
         } catch (_: Exception) {
         }
 
-        return interval
     }
 
     private fun contentIntent(route: String = "home"): PendingIntent = PendingIntent.getActivity(
@@ -262,7 +310,15 @@ class MonitorService : Service() {
         private const val ACTION_STOP = "com.ashareai.app.island.STOP"
 
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, MonitorService::class.java))
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, MonitorService::class.java),
+                )
+            }.onFailure {
+                // Android may reject background FGS starts. Monitoring remains available
+                // through the server push path and the next foreground activation.
+            }
         }
 
         @android.annotation.SuppressLint("ImplicitSamInstance")

@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.map
  * - 超级岛开关
  * - AI 提供商配置
  * - 通知偏好
- * - 玻璃态材质开关
+ * - 玻璃态材质和完整动画开关
  *
  * 不共享项：
  * - 持仓数据
@@ -36,6 +36,7 @@ class SharedDataStore(private val context: Context) {
         private val SHARE_AI_CONFIG = booleanPreferencesKey("share_ai_config")
         private val SHARE_NOTIFICATIONS = booleanPreferencesKey("share_notifications")
         private val SHARE_GLASS_EFFECT = booleanPreferencesKey("share_glass_effect")
+        private val SHARE_FULL_ANIMATIONS = booleanPreferencesKey("share_full_animations")
 
         // 共享数据值
         private val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -44,6 +45,7 @@ class SharedDataStore(private val context: Context) {
         private val AI_MODEL = stringPreferencesKey("ai_model")
         private val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         private val GLASS_EFFECT_ENABLED = booleanPreferencesKey("glass_effect_enabled")
+        private val FULL_ANIMATIONS_ENABLED = booleanPreferencesKey("full_animations_enabled")
         private val AUTO_OPTIMIZE_IN_POWER_SAVER = booleanPreferencesKey("auto_optimize_in_power_saver")
     }
 
@@ -56,6 +58,7 @@ class SharedDataStore(private val context: Context) {
         val shareAiConfig: Boolean = false, // AI 配置默认不共享（连接版可能有不同提供商）
         val shareNotifications: Boolean = true,
         val shareGlassEffect: Boolean = true,
+        val shareFullAnimations: Boolean = true,
         val autoOptimizeInPowerSaver: Boolean = true, // 省电模式自动优化
     )
 
@@ -69,6 +72,7 @@ class SharedDataStore(private val context: Context) {
         val aiModel: String? = null,
         val notificationsEnabled: Boolean = true,
         val glassEffectEnabled: Boolean = true,
+        val fullAnimationsEnabled: Boolean = true,
     )
 
     /**
@@ -81,6 +85,7 @@ class SharedDataStore(private val context: Context) {
             shareAiConfig = prefs[SHARE_AI_CONFIG] ?: false,
             shareNotifications = prefs[SHARE_NOTIFICATIONS] ?: true,
             shareGlassEffect = prefs[SHARE_GLASS_EFFECT] ?: true,
+            shareFullAnimations = prefs[SHARE_FULL_ANIMATIONS] ?: true,
             autoOptimizeInPowerSaver = prefs[AUTO_OPTIMIZE_IN_POWER_SAVER] ?: true,
         )
     }
@@ -96,6 +101,7 @@ class SharedDataStore(private val context: Context) {
             aiModel = prefs[AI_MODEL],
             notificationsEnabled = prefs[NOTIFICATIONS_ENABLED] ?: true,
             glassEffectEnabled = prefs[GLASS_EFFECT_ENABLED] ?: true,
+            fullAnimationsEnabled = prefs[FULL_ANIMATIONS_ENABLED] ?: true,
         )
     }
 
@@ -109,6 +115,8 @@ class SharedDataStore(private val context: Context) {
             prefs[SHARE_AI_CONFIG] = settings.shareAiConfig
             prefs[SHARE_NOTIFICATIONS] = settings.shareNotifications
             prefs[SHARE_GLASS_EFFECT] = settings.shareGlassEffect
+            prefs[SHARE_FULL_ANIMATIONS] = settings.shareFullAnimations
+            prefs[AUTO_OPTIMIZE_IN_POWER_SAVER] = settings.autoOptimizeInPowerSaver
         }
     }
 
@@ -123,6 +131,7 @@ class SharedDataStore(private val context: Context) {
             values.aiModel?.let { prefs[AI_MODEL] = it }
             prefs[NOTIFICATIONS_ENABLED] = values.notificationsEnabled
             prefs[GLASS_EFFECT_ENABLED] = values.glassEffectEnabled
+            prefs[FULL_ANIMATIONS_ENABLED] = values.fullAnimationsEnabled
         }
     }
 
@@ -170,9 +179,24 @@ class SharedDataStore(private val context: Context) {
         }
     }
 
+    suspend fun syncFullAnimationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            if (prefs[SHARE_FULL_ANIMATIONS] != false) {
+                prefs[FULL_ANIMATIONS_ENABLED] = enabled
+            }
+        }
+    }
+
     suspend fun setAutoOptimizeInPowerSaver(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[AUTO_OPTIMIZE_IN_POWER_SAVER] = enabled
+        }
+    }
+
+    suspend fun syncAppearance(glassEnabled: Boolean, fullAnimationsEnabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            if (prefs[SHARE_GLASS_EFFECT] != false) prefs[GLASS_EFFECT_ENABLED] = glassEnabled
+            if (prefs[SHARE_FULL_ANIMATIONS] != false) prefs[FULL_ANIMATIONS_ENABLED] = fullAnimationsEnabled
         }
     }
 }

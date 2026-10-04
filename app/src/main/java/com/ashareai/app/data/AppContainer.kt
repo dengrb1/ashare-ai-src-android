@@ -4,6 +4,8 @@ import com.ashareai.app.data.model.*
 import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 
 /** Manual dependency container for the connected Fusion client. */
@@ -83,7 +85,10 @@ class MarketRepository(private val services: ApiServiceProvider) {
     private val api get() = services.service()
 
     suspend fun assets() = api.assets()
-    suspend fun saveAssets(request: AssetStateRequest) = api.saveAssets(request)
+    suspend fun saveAssets(
+        request: AssetStateRequest,
+        idempotencyKey: String = newIdempotencyKey(),
+    ) = api.saveAssets(idempotencyKey, request)
     suspend fun saveExitMonitor(request: ExitMonitorRequest) = api.saveExitMonitor(newIdempotencyKey(), request)
     suspend fun saveMarketRefresh(request: MarketRefreshRequest) = api.saveMarketRefresh(newIdempotencyKey(), request)
     suspend fun quotes(symbols: Collection<String>, refresh: Boolean? = null) =
@@ -124,6 +129,16 @@ class ResearchRepository(private val services: ApiServiceProvider) {
     suspend fun activity(cursor: String? = null, type: String? = null, status: String? = null, limit: Int = 20) =
         api.runsActivity(cursor, type, status, limit)
     suspend fun audit(runId: String) = api.runAudit(runId)
+    suspend fun predict(request: DecisionPredictRequest) = api.predictDecision(request)
+    suspend fun batchPredict(request: DecisionBatchRequest) = api.batchPredictDecision(request)
+    suspend fun evolve(request: StrategyEvolutionRequest) = api.strategyEvolution(request)
+    suspend fun activeStrategyVersion() = api.activeStrategyVersion()
+    suspend fun strategyCandidates(status: String? = null, limit: Int = 50) = api.strategyCandidates(status, limit)
+    suspend fun approveStrategy(candidateId: String, note: String? = null) =
+        api.approveStrategy(candidateId, StrategyReviewRequest(note))
+    suspend fun rejectStrategy(candidateId: String, note: String? = null) =
+        api.rejectStrategy(candidateId, StrategyReviewRequest(note))
+    suspend fun rollbackStrategy(note: String? = null) = api.rollbackStrategy(StrategyReviewRequest(note))
 }
 
 class SimulationRepository(private val services: ApiServiceProvider) {
@@ -140,10 +155,15 @@ class SimulationRepository(private val services: ApiServiceProvider) {
     suspend fun exitAdvice(limit: Int = 50) = api.exitAdvice(limit)
     suspend fun manualExitAdvice(symbol: String) = api.manualExitAdvice(newIdempotencyKey(), ManualExitRequest(symbol))
     suspend fun buyEntryMonitors(limit: Int = 100) = api.buyEntryMonitors(limit)
-    suspend fun saveBuyEntryMonitor(request: BuyEntryMonitorRequest) = api.setBuyEntryMonitor(newIdempotencyKey(), request)
+    suspend fun saveBuyEntryMonitor(
+        request: BuyEntryMonitorRequest,
+        idempotencyKey: String = newIdempotencyKey(),
+    ) = api.setBuyEntryMonitor(idempotencyKey, request)
     suspend fun tradeAdviceMonitors() = api.tradeAdviceMonitors()
-    suspend fun saveTradeAdviceMonitor(request: TradeAdviceMonitorRequest) =
-        api.saveTradeAdviceMonitor(newIdempotencyKey(), request)
+    suspend fun saveTradeAdviceMonitor(
+        request: TradeAdviceMonitorRequest,
+        idempotencyKey: String = newIdempotencyKey(),
+    ) = api.saveTradeAdviceMonitor(idempotencyKey, request)
 }
 
 class AiRepository(private val services: ApiServiceProvider) {
@@ -182,6 +202,18 @@ class ProfileRepository(private val services: ApiServiceProvider) {
     suspend fun exportStatus(id: String) = api.exportStatus(id)
     suspend fun downloadExport(id: String): ResponseBody = api.downloadExport(id)
     suspend fun deleteExport(id: String) = api.deleteExport(id)
+    suspend fun createImport(payload: ByteArray, passphrase: String): PersonalArchiveJob {
+        val archiveBody = payload.toRequestBody("application/octet-stream".toMediaType())
+        val archivePart = MultipartBody.Part.createFormData("archive", "personal-profile.ashare", archiveBody)
+        val passphrasePart = MultipartBody.Part.createFormData("passphrase", passphrase)
+        return api.createImport(archivePart, passphrasePart)
+    }
+    suspend fun importStatus(id: String) = api.importStatus(id)
+    suspend fun applyImport(
+        id: String,
+        mergeOptions: JsonObject? = null,
+        idempotencyKey: String = newIdempotencyKey(),
+    ) = api.applyImport(id, idempotencyKey, ArchiveApplyRequest(mergeOptions))
 }
 
 class AdministrationRepository(private val services: ApiServiceProvider) {

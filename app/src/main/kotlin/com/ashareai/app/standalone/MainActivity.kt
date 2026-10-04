@@ -62,9 +62,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(settings.monitoringEnabled) {
-                if (settings.monitoringEnabled) MarketMonitorService.start(this@MainActivity)
+                if (settings.monitoringEnabled) {
+                    MarketMonitorService.start(this@MainActivity)
+                } else {
+                    MarketMonitorService.stop(this@MainActivity)
+                }
             }
-            StandaloneTheme {
+            val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
+            StandaloneTheme(
+                darkModePref = settings.darkMode,
+                glassEnabled = settings.glassEnabled,
+                fullAnimationsEnabled = settings.fullAnimationsEnabled,
+                powerSaveMode = isPowerSaveMode,
+            ) {
                 StandaloneAppRoot(
                     viewModel = viewModel,
                     pendingRoute = pendingRoute,

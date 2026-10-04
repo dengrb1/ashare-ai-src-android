@@ -11,7 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.data.settings.SettingsStore
 import java.time.Duration
 import java.time.ZonedDateTime
@@ -36,6 +36,7 @@ class DailyResearchScheduler(
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
                     .build(),
             )
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
@@ -58,33 +59,34 @@ class DailyResearchWorker(
     parameters: WorkerParameters,
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
-        val app = applicationContext as StandaloneApp
-        val calendar = app.container.calendar
+        val app = applicationContext as HybridApp
+        val local = app.localContainer
+        val calendar = local.calendar
         if (calendar.isTradingDay(java.time.LocalDate.now(ShanghaiTradingCalendar.ZONE))) {
-            app.container.settings.settings.first().automaticReports
+            local.settings.settings.first().automaticReports
                 .filter { it.enabled }
                 .sortedBy { it.slot }
                 .forEach { config ->
                     runCatching {
-                        val run = app.container.research.enqueueAutomatic(config, startImmediately = false)
-                        app.container.notifications.showResearchProgress(
+                        val run = local.research.enqueueAutomatic(config, startImmediately = false)
+                        local.notifications.showResearchProgress(
                             title = "自动研究报告 ${config.slot}",
                             body = "正在准备研究任务",
                         )
-                        app.container.research.run(run.id) { progressRun ->
+                        local.research.run(run.id) { progressRun ->
                             val progress = if (progressRun.totalCount <= 0) {
                                 0
                             } else {
                                 progressRun.completedCount * 100 / progressRun.totalCount
                             }
-                            app.container.notifications.showResearchProgress(
+                            local.notifications.showResearchProgress(
                                 title = "自动研究报告 ${config.slot}",
                                 body = "已完成 ${progressRun.completedCount} / ${progressRun.totalCount} 只股票",
                                 progress = progress,
                             )
                         }
                     }.onFailure { error ->
-                        app.container.notifications.publish(
+                        local.notifications.publish(
                             title = "自动报告 ${config.slot} 未运行",
                             body = error.message ?: "自动报告配置或研究范围不可用",
                             priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
@@ -95,7 +97,7 @@ class DailyResearchWorker(
                     }
                 }
         }
-        app.container.dailyResearchScheduler.schedule()
+        local.dailyResearchScheduler.schedule()
         return Result.success()
     }
 }
@@ -106,8 +108,8 @@ class ResearchFallbackWorker(
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
         val runId = inputData.getString(INPUT_RUN_ID) ?: return Result.failure()
-        val app = applicationContext as StandaloneApp
-        app.container.research.run(runId)
+        val app = applicationContext as HybridApp
+        app.localContainer.research.run(runId)
         return Result.success()
     }
 
@@ -120,6 +122,7 @@ class ResearchFallbackWorker(
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .setRequiresBatteryNotLow(true)
                         .build(),
                 )
                 .build()
@@ -138,10 +141,10 @@ class BootCompletedReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val app = context.applicationContext as StandaloneApp
-                app.container.dailyResearchScheduler.schedule()
-                app.container.research.recoverPendingRuns()
-                app.container.monitoringFallbackScheduler.schedule()
+                val app = context.applicationContext as HybridApp
+                app.localContainer.dailyResearchScheduler.schedule()
+                app.localContainer.research.recoverPendingRuns()
+                app.localContainer.monitoringFallbackScheduler.schedule()
             } finally {
                 pendingResult.finish()
             }

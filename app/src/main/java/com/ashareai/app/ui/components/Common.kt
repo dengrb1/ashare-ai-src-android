@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,8 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import com.ashareai.app.ui.theme.changeColor
 import com.ashareai.app.ui.theme.GlassCard
+import com.ashareai.app.ui.theme.LiquidGlassDefaults
+import com.ashareai.app.ui.theme.LiquidGlassSurface
 import com.ashareai.app.ui.theme.LocalGlassEnabled
 
 /** 简约卡片：主题色面、圆角、细描边，顶部一条主题色微光渐隐（边缘光层次）。
@@ -78,10 +81,10 @@ fun CompactTopBar(
     navigation: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Surface(
+    LiquidGlassSurface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
+        style = LiquidGlassDefaults.Light,
+        shape = RectangleShape,
     ) {
         Row(
             modifier = Modifier

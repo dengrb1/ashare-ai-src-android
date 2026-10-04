@@ -3,13 +3,15 @@ package com.ashareai.app.standalone.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.ashareai.app.standalone.StandaloneApp
+import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.data.ai.AiPayloadBuilder
 import com.ashareai.app.standalone.data.ai.AiAgentConfig
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
+import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
+import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.AlertRule
 import com.ashareai.app.standalone.domain.ChatMessage
@@ -52,10 +54,10 @@ class StandaloneViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     val appContext = application.applicationContext
-    private val app = application as StandaloneApp
-    private val local = app.container.local
-    private val market = app.container.market
-    private val alertEvaluator = app.container.alertEvaluator
+    private val app = application as HybridApp
+    private val local = app.localContainer.local
+    private val market = app.localContainer.market
+    private val alertEvaluator = app.localContainer.alertEvaluator
     private val technicalEngine = DeterministicResearchEngine()
     private val exitEngine = ExitResearchEngine(alertEvaluator)
 
@@ -63,6 +65,9 @@ class StandaloneViewModel(
     private val powerSaverManager = com.ashareai.app.ui.PowerSaverManager(appContext)
     val isPowerSaveMode: StateFlow<Boolean> get() = powerSaverManager.isPowerSaveMode
     val batteryLevel: StateFlow<Int> get() = powerSaverManager.batteryLevel
+    val isCharging: StateFlow<Boolean> get() = powerSaverManager.isCharging
+    val screenInteractive: StateFlow<Boolean> get() = powerSaverManager.screenInteractive
+    val thermalStatus: StateFlow<Int> get() = powerSaverManager.thermalStatus
 
     val holdings = local.holdings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val watchlist = local.watchlist.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -74,12 +79,12 @@ class StandaloneViewModel(
     val reports = local.reports.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val candidates = local.candidates.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val portfolios = local.simulationPortfolios.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val aiProviders = app.container.aiProviders.providers.stateIn(
+    val aiProviders = app.localContainer.aiProviders.providers.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
     )
-    val aiAgents = app.container.settings.aiAgents.stateIn(
+    val aiAgents = app.localContainer.settings.aiAgents.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
@@ -89,7 +94,7 @@ class StandaloneViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
     )
-    val settings = app.container.settings.settings.stateIn(
+    val settings = app.localContainer.settings.settings.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         com.ashareai.app.standalone.data.settings.LocalSettings(),
@@ -309,7 +314,7 @@ class StandaloneViewModel(
         }
         viewModelScope.launch {
             runCatching {
-                app.container.research.enqueue(
+                app.localContainer.research.enqueue(
                     ResearchRequest(
                         scope = scope,
                         symbols = customSymbols.split(",", " ", "\n").map(String::trim),
@@ -330,7 +335,7 @@ class StandaloneViewModel(
     }
 
     fun cancelResearch(runId: String) {
-        viewModelScope.launch { app.container.research.cancel(runId) }
+        viewModelScope.launch { app.localContainer.research.cancel(runId) }
     }
 
     fun researchEstimate(scope: ResearchScope, customSymbols: String, marketLimit: Int, aiEnabled: Boolean) =
@@ -346,43 +351,43 @@ class StandaloneViewModel(
 
     fun setMonitoringEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            app.container.settings.setMonitoringEnabled(enabled)
+            app.localContainer.settings.setMonitoringEnabled(enabled)
             if (enabled) MarketMonitorService.start(app) else MarketMonitorService.stop(app)
         }
     }
 
     fun setMonitoringInterval(seconds: Int) {
-        viewModelScope.launch { app.container.settings.setMonitoringIntervalSeconds(seconds) }
+        viewModelScope.launch { app.localContainer.settings.setMonitoringIntervalSeconds(seconds) }
     }
 
     fun setAlertsEnabled(enabled: Boolean) {
-        viewModelScope.launch { app.container.settings.setAlertsEnabled(enabled) }
+        viewModelScope.launch { app.localContainer.settings.setAlertsEnabled(enabled) }
     }
 
     fun setIslandEnabled(enabled: Boolean) {
-        viewModelScope.launch { app.container.settings.setIslandEnabled(enabled) }
+        viewModelScope.launch { app.localContainer.settings.setIslandEnabled(enabled) }
     }
 
     fun setDailyResearchEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            app.container.settings.setDailyResearchEnabled(enabled)
-            app.container.dailyResearchScheduler.schedule()
+            app.localContainer.settings.setDailyResearchEnabled(enabled)
+            app.localContainer.dailyResearchScheduler.schedule()
         }
     }
 
     fun setDailyReportAEnabled(enabled: Boolean) {
-        viewModelScope.launch { app.container.settings.setDailyReportAEnabled(enabled) }
+        viewModelScope.launch { app.localContainer.settings.setDailyReportAEnabled(enabled) }
     }
 
     fun setDailyReportBEnabled(enabled: Boolean) {
-        viewModelScope.launch { app.container.settings.setDailyReportBEnabled(enabled) }
+        viewModelScope.launch { app.localContainer.settings.setDailyReportBEnabled(enabled) }
     }
 
     fun saveAutomaticReports(reports: List<AutomaticResearchReportConfig>) {
         viewModelScope.launch {
             runCatching {
-                app.container.settings.saveAutomaticReports(reports)
-                app.container.dailyResearchScheduler.schedule()
+                app.localContainer.settings.saveAutomaticReports(reports)
+                app.localContainer.dailyResearchScheduler.schedule()
             }.onSuccess {
                 _message.value = "自动报告 A/B 配置已保存"
             }.onFailure {
@@ -392,15 +397,27 @@ class StandaloneViewModel(
     }
 
     fun setMarketScanLimit(limit: Int) {
-        viewModelScope.launch { app.container.settings.setMarketScanLimit(limit) }
+        viewModelScope.launch { app.localContainer.settings.setMarketScanLimit(limit) }
     }
 
     fun setPortfolioDataAllowedForAi(allowed: Boolean) {
-        viewModelScope.launch { app.container.settings.setPortfolioDataAllowedForAi(allowed) }
+        viewModelScope.launch { app.localContainer.settings.setPortfolioDataAllowedForAi(allowed) }
+    }
+
+    fun setDarkMode(mode: String) {
+        viewModelScope.launch { app.localContainer.settings.setDarkMode(mode) }
+    }
+
+    fun setGlassEnabled(enabled: Boolean) {
+        viewModelScope.launch { app.localContainer.settings.setGlassEnabled(enabled) }
+    }
+
+    fun setFullAnimationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { app.localContainer.settings.setFullAnimationsEnabled(enabled) }
     }
 
     fun completeFirstRun() {
-        viewModelScope.launch { app.container.settings.setFirstRunComplete() }
+        viewModelScope.launch { app.localContainer.settings.setFirstRunComplete() }
     }
 
     fun clearMarketCache() {
@@ -411,7 +428,7 @@ class StandaloneViewModel(
     }
 
     fun showIslandTest() {
-        app.container.notifications.showIslandTest()
+        app.localContainer.notifications.showIslandTest()
     }
 
     fun testMarketProvider() {
@@ -427,19 +444,19 @@ class StandaloneViewModel(
 
     fun saveAiProvider(draft: AiProviderDraft) {
         viewModelScope.launch {
-            runCatching { app.container.aiProviders.save(draft) }
+            runCatching { app.localContainer.aiProviders.save(draft) }
                 .onSuccess { _message.value = "AI Provider 已保存（密钥已由 Keystore 加密）" }
                 .onFailure { _message.value = it.message ?: "保存 AI Provider 失败" }
         }
     }
 
     fun removeAiProvider(id: String) {
-        viewModelScope.launch { app.container.aiProviders.remove(id) }
+        viewModelScope.launch { app.localContainer.aiProviders.remove(id) }
     }
 
     fun saveAiAgent(agent: AiAgentConfig) {
         viewModelScope.launch {
-            runCatching { app.container.settings.saveAiAgent(agent) }
+            runCatching { app.localContainer.settings.saveAiAgent(agent) }
                 .onSuccess { _message.value = "AI Agent 已保存" }
                 .onFailure { _message.value = it.message ?: "保存 AI Agent 失败" }
         }
@@ -447,24 +464,24 @@ class StandaloneViewModel(
 
     fun removeAiAgent(id: String) {
         viewModelScope.launch {
-            app.container.settings.removeAiAgent(id)
+            app.localContainer.settings.removeAiAgent(id)
             _message.value = "AI Agent 已删除"
         }
     }
 
     // 用于新的 Provider 配置界面的挂起函数版本
     suspend fun saveAiProviderSuspend(draft: AiProviderDraft): Result<Unit> = runCatching {
-        app.container.aiProviders.save(draft)
+        app.localContainer.aiProviders.save(draft)
     }
 
     suspend fun deleteAiProvider(id: String) {
-        app.container.aiProviders.remove(id)
+        app.localContainer.aiProviders.remove(id)
     }
 
     suspend fun testAiProviderSuspend(providerId: String): String {
         val output = StringBuilder()
         var error: String? = null
-        app.container.aiClient.stream(
+        app.localContainer.aiClient.stream(
             AiRequest(
                 providerId = providerId,
                 systemInstruction = "Reply with a short connection confirmation.",
@@ -548,7 +565,7 @@ class StandaloneViewModel(
             val prompt = AiPayloadBuilder.chatPrompt(text, result, candles, holding, authorizedPortfolio)
             val output = StringBuilder()
             var error: String? = null
-            app.container.aiClient.stream(
+            app.localContainer.aiClient.stream(
                 AiRequest(
                     providerId = providerId,
                     systemInstruction = "你是 A 股本地助手。不要虚构基础面、事件或价格，并且不能修改风险门槛。",
@@ -575,10 +592,24 @@ class StandaloneViewModel(
         }
     }
 
-    suspend fun exportArchive(passphrase: CharArray): ByteArray = app.container.archive.export(passphrase)
+    suspend fun exportArchive(passphrase: CharArray): ByteArray = app.localContainer.archive.export(passphrase)
+
+    suspend fun previewArchive(bytes: ByteArray, passphrase: CharArray): ArchiveMergePreview =
+        app.localContainer.archive.preview(bytes, passphrase)
+
+    suspend fun applyArchive(
+        bytes: ByteArray,
+        passphrase: CharArray,
+        preview: ArchiveMergePreview,
+        resolutions: Map<String, ArchiveMergeResolution> = emptyMap(),
+        idempotencyKey: String = UUID.randomUUID().toString(),
+    ): String {
+        val summary = app.localContainer.archive.apply(bytes, passphrase, preview, resolutions, idempotencyKey)
+        return "已合并 ${summary.holdings} 个持仓、${summary.watchlist} 个自选和 ${summary.reports} 份报告"
+    }
 
     suspend fun importArchive(bytes: ByteArray, passphrase: CharArray): String {
-        val summary = app.container.archive.import(bytes, passphrase)
+        val summary = app.localContainer.archive.import(bytes, passphrase)
         return "已导入 " + summary.holdings + " 个持仓、" + summary.watchlist + " 个自选和 " + summary.reports + " 份报告"
     }
 

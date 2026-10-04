@@ -14,6 +14,9 @@ interface LocalDao {
     @Query("SELECT * FROM holdings ORDER BY symbol")
     suspend fun holdings(): List<HoldingEntity>
 
+    @Query("SELECT * FROM holdings WHERE symbol = :symbol LIMIT 1")
+    suspend fun holding(symbol: String): HoldingEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertHolding(holding: HoldingEntity)
 
@@ -25,6 +28,9 @@ interface LocalDao {
 
     @Query("SELECT * FROM watchlist ORDER BY symbol")
     suspend fun watchlist(): List<WatchlistEntity>
+
+    @Query("SELECT * FROM watchlist WHERE symbol = :symbol LIMIT 1")
+    suspend fun watchlistItem(symbol: String): WatchlistEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWatchlist(item: WatchlistEntity)
@@ -68,11 +74,17 @@ interface LocalDao {
     @Query("SELECT * FROM alerts ORDER BY symbol, kind")
     suspend fun alerts(): List<AlertRuleEntity>
 
+    @Query("SELECT * FROM alerts WHERE id = :id LIMIT 1")
+    suspend fun alert(id: String): AlertRuleEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAlert(alert: AlertRuleEntity)
 
     @Query("DELETE FROM alerts WHERE id = :id")
     suspend fun deleteAlert(id: String)
+
+    @Query("DELETE FROM local_notifications WHERE id = :id")
+    suspend fun deleteNotification(id: String)
 
     @Query("UPDATE alerts SET lastTriggeredAt = :at WHERE id = :id")
     suspend fun markAlertTriggered(id: String, at: Long)
@@ -113,6 +125,9 @@ interface LocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertResearchRun(run: ResearchRunEntity)
 
+    @Query("DELETE FROM research_runs WHERE id = :id")
+    suspend fun deleteResearchRun(id: String)
+
     @Query("UPDATE research_runs SET state = :state, completedCount = :completedCount, updatedAt = :updatedAt, errorMessage = :errorMessage WHERE id = :id")
     suspend fun updateResearchRun(
         id: String,
@@ -134,6 +149,9 @@ interface LocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertReport(report: ResearchReportEntity)
 
+    @Query("DELETE FROM research_reports WHERE id = :id")
+    suspend fun deleteReport(id: String)
+
     @Query("SELECT * FROM research_candidates ORDER BY score DESC, symbol")
     fun observeCandidates(): Flow<List<ResearchCandidateEntity>>
 
@@ -146,6 +164,9 @@ interface LocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCandidates(candidates: List<ResearchCandidateEntity>)
 
+    @Query("DELETE FROM research_candidates WHERE id = :id")
+    suspend fun deleteCandidate(id: String)
+
     @Query("SELECT * FROM simulation_portfolios ORDER BY createdAt DESC")
     fun observeSimulationPortfolios(): Flow<List<SimulationPortfolioEntity>>
 
@@ -154,6 +175,9 @@ interface LocalDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSimulationPortfolio(portfolio: SimulationPortfolioEntity)
+
+    @Query("DELETE FROM simulation_portfolios WHERE id = :id")
+    suspend fun deleteSimulationPortfolio(id: String)
 
     @Query("SELECT * FROM ai_providers ORDER BY createdAt ASC")
     fun observeAiProviders(): Flow<List<AiProviderEntity>>
@@ -179,6 +203,9 @@ interface LocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertChatSession(session: ChatSessionEntity)
 
+    @Query("DELETE FROM chat_sessions WHERE id = :id")
+    suspend fun deleteChatSession(id: String)
+
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY createdAt ASC")
     fun observeChatMessages(sessionId: String): Flow<List<ChatMessageEntity>>
 
@@ -187,6 +214,9 @@ interface LocalDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertChatMessage(message: ChatMessageEntity)
+
+    @Query("DELETE FROM chat_messages WHERE id = :id")
+    suspend fun deleteChatMessage(id: String)
 
     // 回测相关操作
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -213,12 +243,54 @@ interface LocalDao {
     @Query("SELECT * FROM local_backtests ORDER BY createdAt DESC LIMIT :limit")
     fun listBacktests(limit: Int): Flow<List<LocalBacktestEntity>>
 
+    @Query("SELECT * FROM local_backtests ORDER BY createdAt DESC")
+    suspend fun allBacktests(): List<LocalBacktestEntity>
+
+    @Query("SELECT * FROM local_backtests WHERE id = :id LIMIT 1")
+    suspend fun backtest(id: String): LocalBacktestEntity?
+
+    @Query("SELECT * FROM local_backtest_trades ORDER BY date ASC, id ASC")
+    suspend fun allBacktestTrades(): List<LocalBacktestTradeEntity>
+
     @Query("DELETE FROM local_backtests WHERE id = :id")
     suspend fun deleteBacktest(id: String)
 
     @Query("DELETE FROM local_backtest_trades WHERE backtestId = :backtestId")
     suspend fun deleteBacktestTrades(backtestId: String)
 
+    @Query("DELETE FROM local_backtest_trades WHERE id = :id")
+    suspend fun deleteBacktestTrade(id: String)
+
     @Query("SELECT * FROM research_candidates WHERE runId = :reportId ORDER BY score DESC")
     suspend fun getCandidatesByReportId(reportId: String): List<ResearchCandidateEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSyncOperation(operation: SyncOperationEntity)
+
+    @Query("SELECT * FROM sync_operations WHERE idempotencyKey = :key LIMIT 1")
+    suspend fun syncOperation(key: String): SyncOperationEntity?
+
+    @Query("SELECT * FROM sync_operations ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun syncOperations(limit: Int = 50): List<SyncOperationEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSyncTombstone(tombstone: SyncTombstoneEntity)
+
+    @Query("SELECT * FROM sync_tombstones WHERE collection = :collection")
+    suspend fun syncTombstones(collection: String): List<SyncTombstoneEntity>
+
+    @Query("SELECT * FROM sync_tombstones")
+    suspend fun allSyncTombstones(): List<SyncTombstoneEntity>
+
+    @Query("DELETE FROM sync_tombstones WHERE collection = :collection AND recordKey = :key")
+    suspend fun clearSyncTombstone(collection: String, key: String)
+
+    @Query("SELECT * FROM sync_baselines WHERE accountKey = :accountKey LIMIT 1")
+    suspend fun syncBaseline(accountKey: String): SyncBaselineEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSyncBaseline(baseline: SyncBaselineEntity)
+
+    @Query("DELETE FROM sync_baselines WHERE accountKey = :accountKey")
+    suspend fun deleteSyncBaseline(accountKey: String)
 }
