@@ -32,6 +32,7 @@ object Routes {
     const val MARKET = "market"
     const val RESEARCH_HUB = "research_hub"
     const val STRATEGY_EVOLUTION = "strategy_evolution"
+    const val STRATEGY_SETTINGS = "strategy_settings"
     const val WORKSPACE_SYNC = "workspace_sync"
     const val AI_CHAT = "ai_chat"
     const val PROFILE = "profile"
@@ -72,6 +73,8 @@ fun AppRoot(
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
     onSwitchToLocal: () -> Unit = {},
+    initialRoute: String? = null,
+    onRouteChanged: (String) -> Unit = {},
 ) {
     val authState by appViewModel.authState.collectAsState()
 
@@ -89,6 +92,8 @@ fun AppRoot(
             pendingRoute,
             onRouteConsumed,
             onSwitchToLocal,
+            initialRoute,
+            onRouteChanged,
         )
     }
 }
@@ -99,7 +104,10 @@ private fun MainScaffold(
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
     onSwitchToLocal: () -> Unit,
+    initialRoute: String?,
+    onRouteChanged: (String) -> Unit,
 ) {
+    val startRoute = initialRoute?.takeIf { it in bottomTabs.map(BottomTab::route) } ?: Routes.HOME
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -107,6 +115,10 @@ private fun MainScaffold(
 
     // 省电模式状态
     val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
+
+    LaunchedEffect(currentRoute) {
+        currentRoute?.takeIf { it in bottomTabs.map(BottomTab::route) }?.let(onRouteChanged)
+    }
 
     LaunchedEffect(requestedRoute) {
         requestedRoute?.let { untrusted ->
@@ -139,7 +151,7 @@ private fun MainScaffold(
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.HOME,
+            startDestination = startRoute,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
@@ -148,6 +160,7 @@ private fun MainScaffold(
             composable(Routes.MARKET) { MarketScreen(appViewModel, navController) }
             composable(Routes.RESEARCH_HUB) { ResearchHubScreen(appViewModel, navController) }
             composable(Routes.STRATEGY_EVOLUTION) { StrategyEvolutionScreen(appViewModel, navController) }
+            composable(Routes.STRATEGY_SETTINGS) { StrategySettingsScreen(appViewModel, navController) }
             composable(Routes.AI_CHAT) { AIChatScreen(appViewModel) }
             composable(Routes.PROFILE) { ProfileScreen(appViewModel, navController, onSwitchToLocal) }
 
@@ -176,7 +189,13 @@ private fun MainScaffold(
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel, navController) }
             composable(Routes.PERSONAL_DATA) { PersonalDataScreen(appViewModel) }
             composable(Routes.WORKSPACE_SYNC) { WorkspaceSyncScreen(appViewModel, navController) }
-            composable(Routes.SETTINGS) { SettingsScreen(appViewModel) }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    appViewModel = appViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenStrategySettings = { navController.navigate(Routes.STRATEGY_SETTINGS) },
+                )
+            }
             composable(Routes.MODEL_SETTINGS) { ModelSettingsScreen(appViewModel) }
             composable(Routes.SYSTEM_SETTINGS) { SystemSettingsScreen(appViewModel) }
             composable(Routes.EDGE_GATEWAY) { EdgeGatewayScreen(appViewModel) }

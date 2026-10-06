@@ -1,7 +1,11 @@
 package com.ashareai.app.standalone.data.ai
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 
 /**
  * HyperOS AI 引擎检测器：检测小米端侧 AI 推理能力。
@@ -14,6 +18,38 @@ import android.os.Build
  * 优先使用端侧推理可降低延迟、节省流量并保护隐私。
  */
 object LocalInferenceDetector {
+    private val adapters: List<LocalInferenceAdapter> = listOf(
+        AICoreLocalInferenceAdapter(),
+        MiAILocalInferenceAdapter(),
+        UnavailableLocalInferenceAdapter(),
+    )
+
+    /**
+     * Returns true only when a bundled local inference adapter can execute a
+     * request. Platform capability detection alone is intentionally not enough.
+     */
+    fun isLocalInferenceInvocable(context: Context): Boolean =
+        adapters.any { it.isInvocable(context) } && checkMemory(context)
+
+    fun runtimeSnapshot(context: Context, task: AiTaskType): AiRuntimeSnapshot {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val memoryInfo = android.app.ActivityManager.MemoryInfo()
+        activityManager?.getMemoryInfo(memoryInfo)
+        return AiRuntimeSnapshot(
+            task = task,
+            batteryPercent = getBatteryLevel(context),
+            charging = isCharging(context),
+            network = getNetworkType(context),
+            localInferenceAvailable = isLocalInferenceInvocable(context),
+            thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.currentThermalStatus ?: 0
+            } else {
+                0
+            },
+            memoryAvailableMb = memoryInfo.availMem / (1024 * 1024),
+        )
+    }
+
     /**
      * 检测 HyperOS AI 引擎可用性。
      *
@@ -24,10 +60,8 @@ object LocalInferenceDetector {
      */
     fun isLocalInferenceAvailable(context: Context): Boolean {
         // 检查 HyperOS AI 引擎
-        val hasMiAIEngine = checkMiAIEngine()
-
-        // 检查 Android AICore（Android 14+ Pixel 功能，部分 OEM 移植）
-        val hasAICore = Build.VERSION.SDK_INT >= 34 && checkAICore(context)
+        val hasMiAIEngine = adapters.first { it.id == "MiAI" }.isPlatformAvailable(context)
+        val hasAICore = Build.VERSION.SDK_INT >= 34 && adapters.first { it.id == "Android AICore" }.isPlatformAvailable(context)
 
         // 检查设备性能：需要至少 6GB RAM 才能流畅运行端侧模型
         val hasEnoughMemory = checkMemory(context)
@@ -42,16 +76,14 @@ object LocalInferenceDetector {
         if (!isLocalInferenceAvailable(context)) {
             return "端侧推理不可用"
         }
+        if (!isLocalInferenceInvocable(context)) {
+            return "检测到端侧引擎，但当前版本未接入调用适配器"
+        }
 
         val capabilities = mutableListOf<String>()
 
-        if (checkMiAIEngine()) {
-            capabilities.add("MiAI 引擎")
-        }
-
-        if (Build.VERSION.SDK_INT >= 34 && checkAICore(context)) {
-            capabilities.add("Android AICore")
-        }
+        adapters.filter { it.id != "不可用" && it.isPlatformAvailable(context) }
+            .forEach { capabilities.add(it.id) }
 
         val memoryGB = getTotalMemoryGB(context)
         capabilities.add("${memoryGB}GB RAM")
@@ -150,6 +182,7 @@ object LocalInferenceDetector {
         batteryManager.isCharging
     }.getOrDefault(false)
 
+    @SuppressLint("MissingPermission")
     internal fun getNetworkType(context: Context): NetworkType = runCatching {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
             as android.net.ConnectivityManager
@@ -160,6 +193,9 @@ object LocalInferenceDetector {
         when {
             capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
             capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                    return@runCatching NetworkType.TWO_G
+                }
                 val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE)
                     as android.telephony.TelephonyManager
                 when (telephonyManager.dataNetworkType) {

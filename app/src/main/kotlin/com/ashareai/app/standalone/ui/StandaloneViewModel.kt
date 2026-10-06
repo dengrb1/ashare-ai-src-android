@@ -6,9 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.data.ai.AiPayloadBuilder
 import com.ashareai.app.standalone.data.ai.AiAgentConfig
+import com.ashareai.app.standalone.data.ai.AiAgentRouter
+import com.ashareai.app.standalone.data.ai.AiExecutionTarget
+import com.ashareai.app.standalone.data.ai.AiTaskType
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
+import com.ashareai.app.standalone.data.ai.LocalInferenceDetector
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
 import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
@@ -37,6 +41,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 
 data class MarketUiState(
     val query: String = "600519",
@@ -47,6 +52,14 @@ data class MarketUiState(
     val indicesLoading: Boolean = false,
     val loading: Boolean = false,
     val message: String? = null,
+)
+
+data class AiStatusUiState(
+    val capability: String = "检测中...",
+    val target: String = "CACHE",
+    val providerName: String? = null,
+    val reason: String = "等待运行时路由",
+    val cacheEnabled: Boolean = true,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -60,6 +73,8 @@ class StandaloneViewModel(
     private val alertEvaluator = app.localContainer.alertEvaluator
     private val technicalEngine = DeterministicResearchEngine()
     private val exitEngine = ExitResearchEngine(alertEvaluator)
+    private val researchSubmitMutex = Mutex()
+    private val catalogLoadMutex = Mutex()
 
     // 省电模式管理器
     private val powerSaverManager = com.ashareai.app.ui.PowerSaverManager(appContext)
@@ -89,6 +104,21 @@ class StandaloneViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
     )
+    val aiStatus = combine(aiProviders, aiAgents) { providers, agents ->
+        val decision = AiAgentRouter.route(
+            runtime = LocalInferenceDetector.runtimeSnapshot(appContext, AiTaskType.CHAT),
+            agents = agents,
+            providers = providers,
+            providerStates = app.localContainer.aiClient.providerRuntimeStates(),
+        )
+        AiStatusUiState(
+            capability = LocalInferenceDetector.getCapabilityDescription(appContext),
+            target = decision.target.name,
+            providerName = decision.provider?.name,
+            reason = decision.reason,
+            cacheEnabled = decision.agent?.enableCache != false,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiStatusUiState())
     val chatSessions = local.chatSessions.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -98,6 +128,11 @@ class StandaloneViewModel(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         com.ashareai.app.standalone.data.settings.LocalSettings(),
+    )
+    val backtests = app.localContainer.backtest.listBacktests(20).stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
     )
 
     private val _marketState = MutableStateFlow(MarketUiState())
@@ -123,10 +158,15 @@ class StandaloneViewModel(
     }
 
     fun loadCatalog(limit: Int = 100) {
+        if (!catalogLoadMutex.tryLock()) return
         viewModelScope.launch {
-            _marketState.update { it.copy(loading = true, message = null) }
-            val catalog = market.catalog(limit)
-            _marketState.update { it.copy(catalog = catalog, loading = false) }
+            try {
+                _marketState.update { it.copy(loading = true, message = null) }
+                val catalog = market.catalog(limit)
+                _marketState.update { it.copy(catalog = catalog, loading = false) }
+            } finally {
+                catalogLoadMutex.unlock()
+            }
         }
     }
 
@@ -312,24 +352,29 @@ class StandaloneViewModel(
             _message.value = "最高可接受股价必须大于 0"
             return
         }
+        if (!researchSubmitMutex.tryLock()) return
         viewModelScope.launch {
-            runCatching {
-                app.localContainer.research.enqueue(
-                    ResearchRequest(
-                        scope = scope,
-                        symbols = customSymbols.split(",", " ", "\n").map(String::trim),
-                        marketLimit = ResearchBatchPlanner.clampMarketLimit(marketLimit),
-                        includePortfolioDataForAi = includePortfolioData && settings.value.portfolioDataAllowedForAi,
-                        aiProviderId = aiProviderId,
-                        totalBudget = totalBudget,
-                        perSymbolBudget = perSymbolBudget,
-                        maxStockPrice = maxStockPrice,
-                    ),
-                )
-            }.onSuccess {
-                _message.value = "研究已加入独立 :research 进程"
-            }.onFailure {
-                _message.value = it.message ?: "无法启动研究"
+            try {
+                runCatching {
+                    app.localContainer.research.enqueue(
+                        ResearchRequest(
+                            scope = scope,
+                            symbols = customSymbols.split(",", " ", "\n").map(String::trim),
+                            marketLimit = ResearchBatchPlanner.clampMarketLimit(marketLimit),
+                            includePortfolioDataForAi = includePortfolioData && settings.value.portfolioDataAllowedForAi,
+                            aiProviderId = aiProviderId,
+                            totalBudget = totalBudget,
+                            perSymbolBudget = perSymbolBudget,
+                            maxStockPrice = maxStockPrice,
+                        ),
+                    )
+                }.onSuccess {
+                    _message.value = "研究已加入独立 :research 进程"
+                }.onFailure {
+                    _message.value = it.message ?: "无法启动研究"
+                }
+            } finally {
+                researchSubmitMutex.unlock()
             }
         }
     }
@@ -404,6 +449,27 @@ class StandaloneViewModel(
         viewModelScope.launch { app.localContainer.settings.setPortfolioDataAllowedForAi(allowed) }
     }
 
+    fun submitWatchlistTraining(
+        startDate: String,
+        endDate: String,
+        initialCash: Double,
+        onDone: (String?) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                if (local.watchlistNow().isEmpty()) error("请先添加自选股")
+                app.localContainer.backtest.submitBacktest(
+                    startDate = startDate,
+                    endDate = endDate,
+                    initialCash = initialCash,
+                    benchmark = "000300",
+                    reportId = null,
+                )
+            }.onSuccess { onDone(null) }
+                .onFailure { onDone(it.message ?: "训练任务失败") }
+        }
+    }
+
     fun setDarkMode(mode: String) {
         viewModelScope.launch { app.localContainer.settings.setDarkMode(mode) }
     }
@@ -475,6 +541,9 @@ class StandaloneViewModel(
     }
 
     suspend fun deleteAiProvider(id: String) {
+        if (aiAgents.value.any { it.providerId == id }) {
+            throw IllegalStateException("该 Provider 仍被 Agent 使用，请先改为自动路由或重新绑定")
+        }
         app.localContainer.aiProviders.remove(id)
     }
 
@@ -541,13 +610,21 @@ class StandaloneViewModel(
                     includedPortfolio = authorizedPortfolio,
                 ),
             )
-            if (providerId == null) {
+            val routing = AiAgentRouter.route(
+                runtime = LocalInferenceDetector.runtimeSnapshot(appContext, AiTaskType.CHAT),
+                agents = aiAgents.value,
+                providers = aiProviders.value,
+                providerStates = app.localContainer.aiClient.providerRuntimeStates(),
+                explicitProviderId = providerId,
+            )
+            val selectedProviderId = routing.provider?.id
+            if (selectedProviderId == null || routing.target == AiExecutionTarget.LOCAL || routing.target == AiExecutionTarget.DETERMINISTIC) {
                 local.saveChatMessage(
                     ChatMessage(
                         id = UUID.randomUUID().toString(),
                         sessionId = sessionId,
                         role = "assistant",
-                        body = "尚未选择 AI Provider；本地行情、研究、提醒和报告仍可独立使用。",
+                        body = "${routing.reason}；本地行情、研究、提醒和报告仍可独立使用。",
                         createdAt = System.currentTimeMillis(),
                         selectedSymbol = selectedSymbol,
                         includedPortfolio = false,
@@ -565,13 +642,17 @@ class StandaloneViewModel(
             val prompt = AiPayloadBuilder.chatPrompt(text, result, candles, holding, authorizedPortfolio)
             val output = StringBuilder()
             var error: String? = null
-            app.localContainer.aiClient.stream(
-                AiRequest(
-                    providerId = providerId,
-                    systemInstruction = "你是 A 股本地助手。不要虚构基础面、事件或价格，并且不能修改风险门槛。",
-                    prompt = prompt,
-                ),
-            ).collect { event ->
+            val aiRequest = AiRequest(
+                providerId = selectedProviderId,
+                systemInstruction = "你是 A 股本地助手。不要虚构基础面、事件或价格，并且不能修改风险门槛。",
+                prompt = prompt,
+            )
+            val stream = if (routing.target == AiExecutionTarget.CACHE) {
+                app.localContainer.aiClient.streamCached(aiRequest)
+            } else {
+                app.localContainer.aiClient.streamWithFallback(aiRequest, routing.fallbackProviders.map { it.id })
+            }
+            stream.collect { event ->
                 when (event) {
                     is AiStreamEvent.Delta -> output.append(event.text)
                     is AiStreamEvent.Failed -> error = event.message

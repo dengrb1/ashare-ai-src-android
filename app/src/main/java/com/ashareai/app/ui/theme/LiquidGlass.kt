@@ -1,12 +1,12 @@
 package com.ashareai.app.ui.theme
 
+import android.os.Build
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -15,8 +15,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 
 /**
  * 液体玻璃样式定义
@@ -91,6 +96,7 @@ fun LiquidGlassSurface(
     }
 
     val activeStyle = style
+    val blurRadiusPx = with(LocalDensity.current) { activeStyle.blurRadius.toPx() }
 
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -106,25 +112,57 @@ fun LiquidGlassSurface(
     Box(
         modifier = modifier
             .clip(shape)
-    ) {
-        // Keep the material layer separate so its effect never blurs labels or icons.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.linearGradient(
-                        listOf(
-                            surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
-                            primaryColor.copy(alpha = tintAlpha),
-                            surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
-                        )
+            // Draw the material on the surface so an unconstrained bottom bar
+            // keeps its measured height.
+            .background(
+                brush = Brush.linearGradient(
+                    listOf(
+                        surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
+                        primaryColor.copy(alpha = tintAlpha),
+                        surfaceColor.copy(alpha = activeStyle.backgroundAlpha),
                     )
                 )
-                .border(
-                    width = 1.dp,
-                    color = borderColor.copy(alpha = activeStyle.borderAlpha),
-                    shape = shape,
-                ),
+            )
+            .border(
+                width = 1.dp,
+                color = borderColor.copy(alpha = activeStyle.borderAlpha),
+                shape = shape,
+            ),
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && activeStyle.blurRadius.value > 0f) {
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        renderEffect = BlurEffect(
+                            blurRadiusPx,
+                            blurRadiusPx,
+                            TileMode.Clamp,
+                        )
+                    }
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                primaryColor.copy(alpha = tintAlpha * 0.75f),
+                                Color.White.copy(alpha = tintAlpha * 0.35f),
+                                primaryColor.copy(alpha = tintAlpha * 0.55f),
+                            ),
+                        ),
+                    ),
+            )
+        }
+        Box(
+            modifier = androidx.compose.ui.Modifier
+                .matchParentSize()
+                .drawWithContent {
+                    drawContent()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.16f * transition),
+                            0.18f to Color.Transparent,
+                        ),
+                    )
+                },
         )
         content()
     }

@@ -41,7 +41,20 @@ class LocalBacktestEngine(
         val candidates = if (request.reportId != null) {
             local.getCandidatesByReportId(request.reportId)
         } else {
-            emptyList()
+            // A standalone training run is explicitly scoped to the local
+            // watchlist, so it does not require a server research report.
+            local.watchlistNow().map {
+                com.ashareai.app.standalone.domain.ResearchCandidate(
+                    id = "watchlist-${it.symbol}",
+                    runId = "local-watchlist",
+                    symbol = it.symbol,
+                    name = it.name,
+                    score = 0.0,
+                    risk = "WATCHLIST",
+                    reason = "本地自选股训练",
+                    createdAt = System.currentTimeMillis(),
+                )
+            }
         }
 
         if (candidates.isEmpty()) {

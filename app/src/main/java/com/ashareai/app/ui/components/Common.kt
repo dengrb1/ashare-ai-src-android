@@ -105,6 +105,7 @@ fun CompactTopBar(
                 maxLines = 1,
             )
             actions()
+            Spacer(Modifier.width(112.dp))
         }
     }
 }

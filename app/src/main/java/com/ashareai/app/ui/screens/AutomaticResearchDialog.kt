@@ -1,6 +1,7 @@
 package com.ashareai.app.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -145,7 +146,12 @@ private fun AutomaticDraftEditor(draft: AutomaticDraft, onUpdate: (AutomaticDraf
             Spacer(Modifier.width(8.dp))
             Switch(checked = draft.enabled, onCheckedChange = { onUpdate(draft.copy(enabled = it)) })
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             researchScopes.forEach { (value, label) ->
                 FilterChip(selected = draft.scope == value, onClick = { onUpdate(draft.copy(scope = value)) }, label = { Text(label) })
             }

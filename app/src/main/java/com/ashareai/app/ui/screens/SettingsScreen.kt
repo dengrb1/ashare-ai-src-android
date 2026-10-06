@@ -36,12 +36,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 /** 设置：服务器地址、前台行情刷新间隔、深浅色、超级岛监控开关、工作区数据共享。 */
 @Composable
-fun SettingsScreen(appViewModel: AppViewModel) {
+fun SettingsScreen(
+    appViewModel: AppViewModel,
+    onBack: () -> Unit = {},
+    onOpenStrategySettings: () -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val connectionViewModel: ConnectionViewModel = viewModel()
     val connectionState by connectionViewModel.state.collectAsState()
     val context = appViewModel.screenContext()
-    val marketViewModel = LocalMarketViewModel.current
+    // Settings can be opened from a restored/deep-linked route before the
+    // shared market CompositionLocal is installed. A page-scoped VM keeps the
+    // settings screen safe in both entry paths.
+    val marketViewModel: com.ashareai.app.ui.MarketViewModel = viewModel()
     val foregroundRefreshIntervalSeconds by marketViewModel.refreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
     val glassEnabled by appViewModel.settings.glassEnabled.collectAsState(initial = true)
@@ -106,12 +113,26 @@ fun SettingsScreen(appViewModel: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBarSimple(title = "设置")
+        TopAppBarSimple(title = "设置", onBack = onBack)
 
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item {
+                AppCard {
+                    Text("策略与智能训练", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "策略参数、服务端智能迭代、自选股模拟训练、报警与推荐入手价统一管理。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = onOpenStrategySettings, modifier = Modifier.fillMaxWidth()) {
+                        Text("打开策略设置")
+                    }
+                }
+            }
             item {
                 AppCard {
                     Text("服务器地址", style = MaterialTheme.typography.titleSmall)

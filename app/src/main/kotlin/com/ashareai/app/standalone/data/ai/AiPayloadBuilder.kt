@@ -1,6 +1,10 @@
 package com.ashareai.app.standalone.data.ai
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.annotation.SuppressLint
+import androidx.core.content.ContextCompat
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.Holding
 import com.ashareai.app.standalone.domain.MarketQuote
@@ -89,6 +93,7 @@ data class AiSchedulingPolicy(
         batteryManager.isCharging
     }.getOrDefault(false)
 
+    @SuppressLint("MissingPermission")
     private fun LocalInferenceDetector.getNetworkType(context: Context): LocalInferenceDetector.NetworkType = runCatching {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
             as android.net.ConnectivityManager
@@ -99,6 +104,9 @@ data class AiSchedulingPolicy(
         when {
             capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> LocalInferenceDetector.NetworkType.WIFI
             capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                    return@runCatching LocalInferenceDetector.NetworkType.TWO_G
+                }
                 val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE)
                     as android.telephony.TelephonyManager
                 when (telephonyManager.dataNetworkType) {

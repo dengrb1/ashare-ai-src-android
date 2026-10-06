@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.ashareai.app.data.SettingsStore as FusionSettingsStore
 import com.ashareai.app.standalone.data.settings.SettingsStore as LocalSettingsStore
 
@@ -22,6 +24,7 @@ private val Context.workspaceDataStore by preferencesDataStore(name = "workspace
 class WorkspaceStore(context: Context) {
     private val context = context.applicationContext
     private val sharedDataStore = SharedDataStore(context)
+    private val switchMutex = Mutex()
     private val _syncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** Emitted after an explicit workspace switch; sync services may collect this signal. */
     val syncRequests: SharedFlow<Unit> = _syncRequests
@@ -54,11 +57,14 @@ class WorkspaceStore(context: Context) {
     }
 
     suspend fun setWorkspace(workspace: Workspace) {
-        context.workspaceDataStore.edit { preferences ->
-            preferences[KEY_CURRENT_WORKSPACE] = workspace.name
+        switchMutex.withLock {
+            context.workspaceDataStore.edit { preferences ->
+                preferences[KEY_CURRENT_WORKSPACE] = workspace.name
+            }
+            // Sync while holding the same lock so rapid taps cannot apply preferences
+            // to the workspace that won the next write.
+            syncToWorkspace()
         }
-        // 工作区切换时自动同步共享数据（如果启用）
-        syncToWorkspace()
     }
 
     /**

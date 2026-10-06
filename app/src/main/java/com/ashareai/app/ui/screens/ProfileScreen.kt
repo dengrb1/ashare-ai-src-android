@@ -51,6 +51,7 @@ fun ProfileScreen(
             item { ProfileEntry("双工作区同步") { navController.navigate(Routes.WORKSPACE_SYNC) } }
             item { ProfileEntry("切换到独立版") { onSwitchToLocal() } }
             item { ProfileEntry("设置") { navController.navigate(Routes.SETTINGS) } }
+            item { ProfileEntry("策略设置与智能训练") { navController.navigate(Routes.STRATEGY_SETTINGS) } }
             if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) {
                 item {
                     Text(
@@ -60,7 +61,7 @@ fun ProfileScreen(
                         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
                     )
                 }
-                item { ProfileEntry("AI 模型配置") { navController.navigate(Routes.MODEL_SETTINGS) } }
+                item { ProfileEntry("AI Agent 设置") { navController.navigate(Routes.MODEL_SETTINGS) } }
                 item { ProfileEntry("系统资源与运行配置") { navController.navigate(Routes.SYSTEM_SETTINGS) } }
                 item { ProfileEntry("Edge Gateway") { navController.navigate(Routes.EDGE_GATEWAY) } }
             }

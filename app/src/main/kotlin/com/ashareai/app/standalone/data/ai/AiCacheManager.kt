@@ -23,10 +23,14 @@ class AiCacheManager(
     private val maxCacheEntries: Int = 100,
     private val defaultTtlMillis: Long = 24 * 60 * 60 * 1000, // 24小时
 ) {
+    private var queryCount = 0L
+    private var hitCount = 0L
+
     /**
      * 获取缓存的响应
      */
     suspend fun get(providerId: String, systemInstruction: String, prompt: String): String? {
+        queryCount = (queryCount + 1).coerceAtMost(1_000_000L)
         val key = cacheKey(providerId, systemInstruction, prompt)
         val preferences = context.aiCacheDataStore.data.first()
         val contentKey = stringPreferencesKey("content_$key")
@@ -48,6 +52,7 @@ class AiCacheManager(
             return null
         }
 
+        hitCount = (hitCount + 1).coerceAtMost(1_000_000L)
         return content
     }
 
@@ -118,13 +123,10 @@ class AiCacheManager(
         val now = System.currentTimeMillis()
 
         var expiredCount = 0
-        var hitCount = 0
         timestampKeys.forEach { key ->
             val timestamp = preferences[key as androidx.datastore.preferences.core.Preferences.Key<Long>] ?: 0L
             if (now - timestamp > defaultTtlMillis) {
                 expiredCount++
-            } else {
-                hitCount++
             }
         }
 
@@ -132,87 +134,8 @@ class AiCacheManager(
             totalEntries = timestampKeys.size,
             expiredEntries = expiredCount,
             validEntries = timestampKeys.size - expiredCount,
-            hitRate = if (Companion.totalQueries > 0) hitCount.toFloat() / Companion.totalQueries else 0f
+            hitRate = if (queryCount == 0L) 0f else hitCount.toFloat() / queryCount,
         )
-    }
-
-    /**
-     * 预测性加载：根据用户历史查询，预加载常见分析结果。
-     *
-     * 策略：
-     * - 维护访问频率统计（最近 30 天）
-     * - 预加载访问频率前 20 的股票分析
-     * - 后台异步执行，不阻塞 UI
-     *
-     * @param symbols 候选股票列表
-     * @param onPreload 预加载回调，用于执行实际的 AI 请求
-     */
-    suspend fun predictiveLoad(
-        symbols: List<String>,
-        onPreload: suspend (symbol: String) -> Unit
-    ) {
-        // 获取热门股票（访问频率前 20）
-        val hotSymbols = getHotSymbols(symbols, limit = 20)
-
-        // 异步预加载
-        hotSymbols.forEach { symbol ->
-            // 检查是否已缓存
-            val cached = get("default", "分析", symbol)
-            if (cached == null) {
-                // 执行预加载
-                runCatching { onPreload(symbol) }
-            }
-        }
-    }
-
-    /**
-     * 记录访问：用于预测性加载的频率统计。
-     */
-    suspend fun recordAccess(symbol: String) {
-        val key = stringPreferencesKey("access_count_$symbol")
-        val timestampKey = longPreferencesKey("access_timestamp_$symbol")
-        val now = System.currentTimeMillis()
-
-        context.aiCacheDataStore.edit { preferences ->
-            val count = preferences[key]?.toIntOrNull() ?: 0
-            preferences[key] = (count + 1).toString()
-            preferences[timestampKey] = now
-        }
-
-        Companion.totalQueries++
-    }
-
-    /**
-     * 获取热门股票：根据访问频率排序。
-     */
-    private suspend fun getHotSymbols(symbols: List<String>, limit: Int): List<String> {
-        val preferences = context.aiCacheDataStore.data.first()
-        val now = System.currentTimeMillis()
-        val thirtyDaysAgo = now - 30L * 24 * 60 * 60 * 1000
-
-        val symbolCounts = symbols.mapNotNull { symbol ->
-            val key = stringPreferencesKey("access_count_$symbol")
-            val timestampKey = longPreferencesKey("access_timestamp_$symbol")
-            val count = preferences[key]?.toIntOrNull() ?: 0
-            val timestamp = preferences[timestampKey] ?: 0L
-
-            // 仅统计最近 30 天的访问
-            if (timestamp >= thirtyDaysAgo && count > 0) {
-                symbol to count
-            } else {
-                null
-            }
-        }
-
-        return symbolCounts
-            .sortedByDescending { it.second }
-            .take(limit)
-            .map { it.first }
-    }
-
-    companion object {
-        // 全局查询计数，用于计算命中率
-        private var totalQueries = 0
     }
 
     private fun cacheKey(providerId: String, systemInstruction: String, prompt: String): String {

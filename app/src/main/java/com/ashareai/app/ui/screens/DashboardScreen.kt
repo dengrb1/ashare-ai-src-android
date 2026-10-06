@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,9 +32,11 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
     val quotes by marketViewModel.quotes.collectAsState()
     val session by marketViewModel.marketSession.collectAsState()
     val unread by marketViewModel.unreadCount.collectAsState()
+    val marketState by marketViewModel.state.collectAsState()
 
     LaunchedEffect(Unit) {
         if (assets == null) marketViewModel.loadWorkspace()
+        if (marketViewModel.marketIndices.value.quotes.isEmpty()) marketViewModel.refreshMarketIndices()
         dashboardViewModel.load()
     }
 
@@ -49,6 +52,11 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (marketState is ScreenState.Error) {
+                item {
+                    ErrorBanner((marketState as ScreenState.Error).message) { marketViewModel.retry() }
+                }
+            }
             session?.let { s ->
                 if (s.state?.uppercase() != "OPEN") {
                     item {
@@ -91,6 +99,23 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
 
             item {
                 AppCard {
+                    Text("市场状态", style = MaterialTheme.typography.titleSmall)
+                    val marketState = session?.state?.uppercase() ?: "UNKNOWN"
+                    KeyValueRow("交易状态", when (marketState) {
+                        "OPEN" -> "交易中"
+                        "BREAK" -> "午间休市"
+                        "CLOSED" -> "已收盘"
+                        else -> "未知"
+                    })
+                    if (dashboardState is ScreenState.Content) {
+                        val indices = dashboardState.contentOrNull()?.let { marketViewModel.marketIndices.value.quotes }
+                        KeyValueRow("指数摘要", if (indices.isNullOrEmpty()) "按需加载" else indices.take(3).joinToString(" · ") { quote -> "${quote.name ?: quote.symbol} ${quote.change_percent.fmtPercent()}" })
+                    }
+                }
+            }
+
+            item {
+                AppCard {
                     Text("最近研究运行", style = MaterialTheme.typography.titleSmall)
                     when (val state = dashboardState) {
                         ScreenState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
@@ -105,6 +130,9 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
                                 KeyValueRow("研究日", run.trading_date ?: run.requested_date ?: "--")
                                 run.phase?.let { KeyValueRow("阶段", it) }
                                 run.progress?.let { KeyValueRow("进度", "$it%") }
+                                state.value.latestReport?.let { report ->
+                                    KeyValueRow("最近报告", report.trading_date ?: "已生成")
+                                }
                             }
                         }
                     }
@@ -118,6 +146,22 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
                     quotes = quotes,
                     onClick = { navController.navigate(Routes.ASSETS) },
                 )
+            }
+
+            item {
+                AppCard {
+                    Text("研究工作台", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "确定性评分负责裁决，AI 只解释研究证据。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuickEntry("研究运行", Modifier.weight(1f)) { navController.navigate(Routes.RESEARCH) }
+                        QuickEntry("AI 诊断", Modifier.weight(1f)) { navController.navigate(Routes.AI_CHAT) }
+                    }
+                }
             }
 
             item {
@@ -165,9 +209,17 @@ fun TopAppBarSimple(
     title: String,
     unread: Int = 0,
     onNotifications: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     CompactTopBar(
         title = title,
+        navigation = onBack?.let { back ->
+            {
+                IconButton(onClick = back) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                }
+            }
+        },
         actions = {
             if (onNotifications != null) {
                 BadgedBox(
@@ -203,6 +255,10 @@ private fun PnlSummaryCard(
     }
     val pnl = marketValue - cost
     val pnlPct = if (cost > 0) pnl / cost * 100 else null
+    val riskCount = positions.count { position ->
+        val price = quotes[position.symbol]?.price
+        price != null && price < position.cost * 0.92
+    }
 
     AppCard(modifier = Modifier.clickable(onClick = onClick)) {
         Text("模拟持仓盈亏", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -224,6 +280,12 @@ private fun PnlSummaryCard(
             MiniStat("账户总资金", totalAssets.fmtAmount())
             MiniStat("持仓数", "${positions.size}")
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (riskCount == 0) "风险状态：暂无跌破参考止损线" else "风险状态：${riskCount} 个持仓低于参考止损线",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (riskCount == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+        )
     }
 }
 

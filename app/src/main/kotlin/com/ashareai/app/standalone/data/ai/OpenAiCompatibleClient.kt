@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -33,7 +35,7 @@ sealed interface AiStreamEvent {
     data object FallingBackToChatCompletions : AiStreamEvent
     data class Delta(val text: String) : AiStreamEvent
     data object Completed : AiStreamEvent
-    data class Failed(val message: String) : AiStreamEvent
+    data class Failed(val message: String, val retryable: Boolean = true) : AiStreamEvent
 }
 
 object AiFallbackPolicy {
@@ -44,13 +46,46 @@ class OpenAiCompatibleClient(
     private val providerRepository: AiProviderRepository,
     private val httpClient: OkHttpClient,
     private val cacheManager: AiCacheManager? = null,
+    private val healthTracker: ProviderHealthTracker = ProviderHealthTracker(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
+    fun providerRuntimeStates(): List<AiProviderRuntimeState> = healthTracker.snapshot()
+
+    fun streamCached(request: AiRequest): Flow<AiStreamEvent> = flow {
+        val cached = cacheManager?.get(request.providerId, request.systemInstruction, request.prompt)
+        if (cached == null) {
+            emit(AiStreamEvent.Failed("缓存未命中", retryable = false))
+        } else {
+            emit(AiStreamEvent.Started)
+            emit(AiStreamEvent.Delta(cached))
+            emit(AiStreamEvent.Completed)
+        }
+    }
+
+    fun streamWithFallback(request: AiRequest, fallbackProviderIds: List<String>): Flow<AiStreamEvent> = flow {
+        val candidates = (listOf(request.providerId) + fallbackProviderIds).distinct()
+        for ((index, providerId) in candidates.withIndex()) {
+            var emittedDelta = false
+            var failed = false
+            var retryable = true
+            stream(request.copy(providerId = providerId)).collect { event ->
+                if (event is AiStreamEvent.Delta) emittedDelta = true
+                if (event is AiStreamEvent.Failed) {
+                    failed = true
+                    retryable = event.retryable
+                }
+                emit(event)
+            }
+            if (!failed || emittedDelta || index == candidates.lastIndex || !retryable) return@flow
+        }
+    }
+
     fun stream(request: AiRequest): Flow<AiStreamEvent> = callbackFlow {
         val credential = try {
             providerRepository.credential(request.providerId)
         } catch (error: Exception) {
-            trySend(AiStreamEvent.Failed(error.message ?: "无法读取 AI 凭据"))
+            healthTracker.markFailure(request.providerId)
+            trySend(AiStreamEvent.Failed(error.message ?: "无法读取 AI 凭据", retryable = false))
             close()
             return@callbackFlow
         }
@@ -98,9 +133,12 @@ class OpenAiCompatibleClient(
             if (fullResponse.isNotBlank()) {
                 cacheManager?.put(request.providerId, request.systemInstruction, request.prompt, fullResponse)
             }
+            healthTracker.markSuccess(request.providerId)
             trySend(AiStreamEvent.Completed)
         } catch (error: Exception) {
-            trySend(AiStreamEvent.Failed(error.userSafeMessage()))
+            val retryable = error.isRetryable()
+            healthTracker.markFailure(request.providerId)
+            trySend(AiStreamEvent.Failed(error.userSafeMessage(), retryable))
         } finally {
             close()
         }
@@ -224,6 +262,12 @@ class OpenAiCompatibleClient(
         is java.net.SocketTimeoutException -> "AI 请求超时，未尝试其他端点"
         is java.io.IOException -> "AI 网络请求失败，未尝试其他端点"
         else -> message ?: "AI 请求失败"
+    }
+
+    private fun Exception.isRetryable(): Boolean = when (this) {
+        is EndpointHttpException -> statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
+        is java.net.SocketTimeoutException, is java.io.IOException -> true
+        else -> false
     }
 
     private enum class ResponseFormat {

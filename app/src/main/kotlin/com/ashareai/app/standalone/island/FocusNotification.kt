@@ -244,7 +244,7 @@ object FocusNotification {
     private fun hasConfiguredAppId(context: Context): Boolean = runCatching {
         context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
             .metaData?.getString("com.xiaomi.xms.APP_ID")
-            ?.isNotBlank() == true
+            ?.isNotBlank() == true || com.ashareai.app.BuildConfig.XIAOMI_SUPER_ISLAND_APP_ID.isNotBlank()
     }.getOrDefault(false)
 
     private fun islandSystemProperty(): Boolean = runCatching {

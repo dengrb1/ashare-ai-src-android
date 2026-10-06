@@ -1,8 +1,10 @@
 package com.ashareai.app.standalone.ui
 
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -46,6 +48,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudQueue
@@ -69,6 +72,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -84,6 +88,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -116,6 +121,7 @@ import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
 import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
 import com.ashareai.app.standalone.domain.AlertKind
 import com.ashareai.app.standalone.domain.DailyCandle
+import com.ashareai.app.standalone.domain.Holding
 import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.NotificationPriority
@@ -182,6 +188,8 @@ fun StandaloneAppRoot(
     pendingRoute: StateFlow<String?>,
     onRouteConsumed: () -> Unit,
     onSwitchToConnected: () -> Unit = {},
+    initialRoute: String? = null,
+    onRouteChanged: (String) -> Unit = {},
     permissionState: DevicePermissionState,
     onRequestNotifications: () -> Unit,
     onOpenBatterySettings: () -> Unit,
@@ -193,10 +201,29 @@ fun StandaloneAppRoot(
     val settings by viewModel.settings.collectAsState()
     val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
-    var route by rememberSaveable { mutableStateOf("home") }
+    var route by rememberSaveable { mutableStateOf(initialRoute?.takeIf { it in routes } ?: "home") }
+    var lastNavigationAt by remember { mutableLongStateOf(0L) }
+    fun navigateTo(destination: String) {
+        if (destination !in routes || destination == route) return
+        val now = SystemClock.uptimeMillis()
+        if (now - lastNavigationAt < 180L) return
+        lastNavigationAt = now
+        route = destination
+    }
+    val navigateBack: () -> Unit = {
+        navigateTo(when (route) {
+            "ai_providers" -> "ai_agents"
+            "ai_agents" -> "settings"
+            else -> "home"
+        })
+    }
+    BackHandler(enabled = route !in bottomDestinations.map { it.route }) { navigateBack() }
+    LaunchedEffect(route) {
+        if (route in routes) onRouteChanged(route)
+    }
     LaunchedEffect(incomingRoute) {
         if (incomingRoute in routes) {
-            route = incomingRoute.orEmpty()
+            route = if (incomingRoute == "ai_providers") "ai_agents" else incomingRoute.orEmpty()
             onRouteConsumed()
         }
     }
@@ -208,7 +235,7 @@ fun StandaloneAppRoot(
     }
     Scaffold(
         topBar = {
-            GlassTopBar(route = route)
+            GlassTopBar(route = route, onBack = navigateBack)
         },
         bottomBar = {
             LiquidGlassBottomBar(
@@ -218,7 +245,7 @@ fun StandaloneAppRoot(
                 selectedKey = route,
                 powerSaveMode = isPowerSaveMode,
                 onSelect = { destination ->
-                    route = destination
+                    navigateTo(destination)
                     if (destination == "market") viewModel.loadCatalog()
                 },
             )
@@ -253,15 +280,15 @@ fun StandaloneAppRoot(
                 permissionState = permissionState,
                 onRequestNotifications = onRequestNotifications,
                 onOpenBatterySettings = onOpenBatterySettings,
-                navigate = { route = it },
+                navigate = ::navigateTo,
             )
-            "market" -> MarketScreen(viewModel, Modifier.padding(padding)) { route = it }
+            "market" -> MarketScreen(viewModel, Modifier.padding(padding)) { navigateTo(it) }
             "assets" -> AssetsScreen(viewModel, Modifier.padding(padding))
             "alerts" -> AlertsScreen(viewModel, Modifier.padding(padding))
             "research" -> ResearchScreen(viewModel, Modifier.padding(padding))
             "reports" -> ReportsScreen(viewModel, Modifier.padding(padding)) { symbol ->
                 viewModel.refreshMarketSymbol(symbol)
-                route = "market"
+                navigateTo("market")
             }
             "candidates" -> CandidatesScreen(viewModel, Modifier.padding(padding))
             "portfolio" -> PortfolioScreen(viewModel, Modifier.padding(padding))
@@ -273,20 +300,21 @@ fun StandaloneAppRoot(
                 agents = viewModel.aiAgents.collectAsState().value,
                 onSaveAgent = viewModel::saveAiAgent,
                 onDeleteAgent = viewModel::removeAiAgent,
-                onNavigateToProviders = { route = "ai_providers" },
+                onSaveProvider = { draft -> viewModel.saveAiProviderSuspend(draft) },
+                onDeleteProvider = { id -> viewModel.deleteAiProvider(id) },
+                onTestProvider = { id -> viewModel.testAiProviderSuspend(id) },
                 modifier = Modifier.padding(padding),
             )
-            "ai_providers" -> {
-                val scope = rememberCoroutineScope()
-                AiProviderConfigScreen(
-                    providers = viewModel.aiProviders.collectAsState().value,
-                    onSave = { draft -> viewModel.saveAiProviderSuspend(draft) },
-                    onDelete = { id -> viewModel.deleteAiProvider(id) },
-                    onTest = { id -> viewModel.testAiProviderSuspend(id) },
-                    onNavigateBack = { route = "settings" },
-                    modifier = Modifier.padding(padding),
-                )
-            }
+            "ai_providers" -> AiAgentConfigScreen(
+                providers = viewModel.aiProviders.collectAsState().value,
+                agents = viewModel.aiAgents.collectAsState().value,
+                onSaveAgent = viewModel::saveAiAgent,
+                onDeleteAgent = viewModel::removeAiAgent,
+                onSaveProvider = { draft -> viewModel.saveAiProviderSuspend(draft) },
+                onDeleteProvider = { id -> viewModel.deleteAiProvider(id) },
+                onTestProvider = { id -> viewModel.testAiProviderSuspend(id) },
+                modifier = Modifier.padding(padding),
+            )
             "settings" -> SettingsScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
@@ -295,8 +323,13 @@ fun StandaloneAppRoot(
                 onRequestNotifications = onRequestNotifications,
                 onOpenBatterySettings = onOpenBatterySettings,
                 onOpenAppSettings = onOpenAppSettings,
-                onNavigateToAiAgents = { route = "ai_agents" },
-                navigate = { route = it },
+                onNavigateToAiAgents = { navigateTo("ai_agents") },
+                navigate = ::navigateTo,
+            )
+            "strategy_settings" -> StandaloneStrategySettingsScreen(
+                viewModel = viewModel,
+                modifier = Modifier.padding(padding),
+                onBack = { navigateTo("settings") },
             )
             else -> HomeScreen(
                 viewModel = viewModel,
@@ -304,7 +337,7 @@ fun StandaloneAppRoot(
                 permissionState = permissionState,
                 onRequestNotifications = onRequestNotifications,
                 onOpenBatterySettings = onOpenBatterySettings,
-                navigate = { route = it },
+                navigate = ::navigateTo,
             )
         }
         }
@@ -326,7 +359,7 @@ private val bottomDestinations = listOf(
 )
 
 @Composable
-private fun GlassTopBar(route: String) {
+private fun GlassTopBar(route: String, onBack: () -> Unit) {
     val dark = isSystemInDarkTheme()
     val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -401,6 +434,13 @@ private fun GlassTopBar(route: String) {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (route !in bottomDestinations.map { it.route }) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                }
+            } else {
+                Spacer(Modifier.width(12.dp))
+            }
             Text(
                 text = routeTitle(route),
                 style = MaterialTheme.typography.titleMedium,
@@ -408,12 +448,7 @@ private fun GlassTopBar(route: String) {
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
             )
-            Text(
-                text = "霁衡智研",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
+            Spacer(Modifier.width(116.dp))
         }
     }
 }
@@ -431,6 +466,16 @@ private fun HomeScreen(
     val holdingsWithQuotes by viewModel.holdingsWithQuotes.collectAsState()
     val reports by viewModel.reports.collectAsState()
     val runs by viewModel.researchRuns.collectAsState()
+    val candidates by viewModel.candidates.collectAsState()
+    val providers by viewModel.aiProviders.collectAsState()
+    val agents by viewModel.aiAgents.collectAsState()
+    val aiStatus by viewModel.aiStatus.collectAsState()
+    val market by viewModel.marketState.collectAsState()
+    val batteryLevel by viewModel.batteryLevel.collectAsState()
+    val isCharging by viewModel.isCharging.collectAsState()
+    LaunchedEffect(market.indexQuotes.isEmpty()) {
+        if (market.indexQuotes.isEmpty()) viewModel.loadMarketIndices()
+    }
     ScreenColumn(modifier) {
         if (!permissionState.notificationsGranted || !permissionState.batteryUnrestricted) {
             PermissionCard(
@@ -449,6 +494,60 @@ private fun HomeScreen(
                 OutlinedButton(onClick = { navigate("settings") }) { Text("完成设置引导") }
             }
         }
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("研究工作台", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (market.indexQuotes.isEmpty()) "市场指数按需加载" else "已加载 ${market.indexQuotes.size} 个市场指数",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text("电量 $batteryLevel%${if (isCharging) " · 充电" else ""}", style = MaterialTheme.typography.labelMedium)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeMetric("研究任务", runs.size.toString(), Modifier.weight(1f))
+                    HomeMetric("候选", candidates.size.toString(), Modifier.weight(1f))
+                    HomeMetric("报告", reports.size.toString(), Modifier.weight(1f))
+                }
+                Text(
+                    "AI：${if (providers.isEmpty()) "未配置 Provider" else "${providers.count { it.enabled }} 个 Provider 可用"} · ${agents.size} 个 Agent 配置",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (providers.any { it.enabled }) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("市场状态与指数", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (market.indexQuotes.isEmpty()) {
+                    Text("指数按需加载中，暂无可用快照", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    market.indexQuotes.take(3).forEach { index ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${index.name} · ${index.symbol}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "${index.lastPrice?.let { "%.2f".format(Locale.US, it) } ?: "--"} · ${index.changePercent?.let { "%+.2f%%".format(Locale.US, it) } ?: "--"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if ((index.changePercent ?: 0.0) >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                    Text("数据更新时间：${formatTime(market.indexQuotes.maxOf { it.fetchedAt })}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("AI 状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(aiStatus.capability, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("执行模式：${aiStatus.target} · Provider：${aiStatus.providerName ?: "无"}", style = MaterialTheme.typography.bodySmall)
+                Text(aiStatus.reason, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("缓存：${if (aiStatus.cacheEnabled) "已启用" else "未启用"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         InfoCard(
             title = "持仓监控",
             text = if (settings.monitoringEnabled) {
@@ -465,12 +564,26 @@ private fun HomeScreen(
         if (holdingsWithQuotes.isEmpty()) {
             EmptyState("尚未添加持仓", "添加持仓后才会启动后台行情监控。")
         }
-        holdingsWithQuotes.forEach { (holding, quote) ->
+        holdingsWithQuotes.sortedBy { pair -> pair.second?.changePercent ?: -Double.MAX_VALUE }.forEach { (holding, quote) ->
             ContentCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(holding.name + " · " + holding.symbol, fontWeight = FontWeight.SemiBold)
                     val price = quote?.lastPrice?.toString() ?: "暂无报价"
                     Text("成本 " + holding.averageCost + " · 数量 " + holding.quantity + " · 现价 " + price)
+                    val pnl = quote?.lastPrice?.let { (it - holding.averageCost) * holding.quantity }
+                    val pnlPercent = quote?.lastPrice?.let { (it / holding.averageCost - 1.0) * 100.0 }
+                    Text(
+                        "浮动盈亏 ${pnl?.let { "%+.2f".format(Locale.US, it) } ?: "--"} · ${pnlPercent?.let { "%+.2f%%".format(Locale.US, it) } ?: "--"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if ((pnl ?: 0.0) >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                    val riskText = when {
+                        quote == null -> "风险数据等待行情"
+                        quote.lastPrice != null && quote.lastPrice < holding.averageCost * 0.92 -> "已跌破参考止损线"
+                        quote.lastPrice != null -> "距参考止损线 ${(quote.lastPrice - holding.averageCost * 0.92).let { "%.2f".format(Locale.US, it) }}"
+                        else -> "风险线未触发"
+                    }
+                    Text(riskText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     quote?.let {
                         Text(
                             "来源 " + it.provider + " · " + freshnessLabel(it.freshness) + " · " + formatTime(it.fetchedAt),
@@ -508,10 +621,35 @@ private fun HomeScreen(
         if (runs.isEmpty()) EmptyState("暂无研究任务", "启动研究后可在这里查看最新进度。")
         runs.take(3).forEach {
             Text(it.state.name + " · " + it.completedCount + " / " + it.totalCount + " · " + formatTime(it.updatedAt))
+            LinearProgressIndicator(
+                progress = { if (it.totalCount == 0) 0f else (it.completedCount.toFloat() / it.totalCount).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         if (reports.isNotEmpty()) {
             SectionTitle("最近报告")
             Text(reports.first().title + " · " + formatTime(reports.first().createdAt))
+        }
+        SectionTitle("工作台操作")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { navigate("research") }, modifier = Modifier.weight(1f)) { Text("启动研究") }
+            OutlinedButton(onClick = { navigate("chat") }, modifier = Modifier.weight(1f)) { Text("AI 诊断") }
+            OutlinedButton(onClick = { navigate("settings") }, modifier = Modifier.weight(1f)) { Text("AI 设置") }
+        }
+    }
+}
+
+@Composable
+private fun HomeMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -736,12 +874,17 @@ private fun GlassKlineRangeSelector(
 }
 
 @Composable
-private fun LiquidGlassSegmentedControl(content: @Composable RowScope.() -> Unit) {
+private fun LiquidGlassSegmentedControl(
+    scrollable: Boolean = false,
+    content: @Composable RowScope.() -> Unit,
+) {
     val dark = isSystemInDarkTheme()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.72f else 0.64f),
+        // Keep this control on an opaque surface. Transparent weighted children
+        // can expose a bright strip when composed over the glass layer.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         border = BorderStroke(
             1.dp,
             Brush.verticalGradient(
@@ -754,7 +897,13 @@ private fun LiquidGlassSegmentedControl(content: @Composable RowScope.() -> Unit
         shadowElevation = 8.dp,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(5.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .height(54.dp)
+                .padding(5.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             content = content,
         )
@@ -1152,11 +1301,37 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
                             ResearchScope.WATCHLIST to "自选+持仓",
                             ResearchScope.CUSTOM to "指定股票",
                         ).forEach { (value, label) ->
-                            FilterChip(
-                                selected = draft.scope == value,
-                                onClick = { updateAutomatic(draft.slot) { it.copy(scope = value) } },
-                                label = { Text(label) },
-                            )
+                            val selected = draft.scope == value
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        },
+                                    )
+                                    .selectable(
+                                        selected = selected,
+                                        onClick = { updateAutomatic(draft.slot) { it.copy(scope = value) } },
+                                        role = Role.Tab,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    label,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
                         }
                     }
                     if (draft.scope == ResearchScope.CUSTOM) {
@@ -1336,7 +1511,7 @@ private fun ReportsScreen(
     ScreenColumn(modifier) {
         if (reports.isEmpty()) EmptyState("尚无本地报告", "研究完成后会生成确定性模板报告。")
         if (reports.isNotEmpty()) {
-            LiquidGlassSegmentedControl {
+            LiquidGlassSegmentedControl(scrollable = true) {
                 reports.take(12).forEach { report ->
                     val reportRun = runs.firstOrNull { it.id == report.runId }
                     FilterChip(
@@ -1676,6 +1851,15 @@ private fun SettingsScreen(
             onRequestNotifications = onRequestNotifications,
             onOpenBatterySettings = onOpenBatterySettings,
         )
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("策略与智能训练", fontWeight = FontWeight.SemiBold)
+                Text("确定性策略、自选股模拟训练、买入区间报警集中管理。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { navigate("strategy_settings") }, modifier = Modifier.fillMaxWidth()) {
+                    Text("打开策略设置")
+                }
+            }
+        }
         SectionTitle("通知与后台")
         SwitchRow("持仓监控", settings.monitoringEnabled, onChange = viewModel::setMonitoringEnabled)
         SwitchRow("提醒开关", settings.alertsEnabled, onChange = viewModel::setAlertsEnabled)
@@ -1798,31 +1982,20 @@ private fun SettingsScreen(
             style = MaterialTheme.typography.labelMedium,
         )
 
-        SectionTitle("AI Provider（本机 Keystore 加密）")
+        SectionTitle("AI Agent（Provider 密钥由本机 Keystore 加密）")
 
-        // AI Provider 管理入口 - 新的独立页面
-        OutlinedButton(
-            onClick = { navigate("ai_providers") },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Outlined.CloudQueue, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("AI Provider 供应商配置")
-        }
-
-        // AI Agent 配置入口
         OutlinedButton(
             onClick = onNavigateToAiAgents,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Outlined.SmartToy, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("AI Agent 多模型配置")
+            Text("任务自动适配、模型路由与 Provider 设置")
         }
 
         InfoCard(
             title = "AI 配置说明",
-            text = "先配置 AI Provider 添加供应商，然后在 AI Agent 中为不同任务分配专门的模型。支持多供应商、健康检查、故障转移和自动缓存。",
+            text = "系统会按任务、网络、电量和 Provider 可用性自动选择执行路径；密钥仅保存在本机 Keystore。",
         )
 
         aiTestResult?.let { Text("连接测试：" + it) }
@@ -2133,7 +2306,9 @@ private fun routeTitle(route: String): String = when (route) {
     "notifications" -> "通知中心"
     "chat" -> "AI 问答"
     "ai_agents" -> "AI Agent 配置"
+    "ai_providers" -> "AI 服务商配置"
     "settings" -> "设置与本机档案"
+    "strategy_settings" -> "策略设置与智能训练"
     else -> "本地总览"
 }
 
@@ -2152,6 +2327,7 @@ private val routes = setOf(
     "ai_agents",
     "ai_providers",
     "settings",
+    "strategy_settings",
 )
 
 private fun formatTime(epochMillis: Long): String =

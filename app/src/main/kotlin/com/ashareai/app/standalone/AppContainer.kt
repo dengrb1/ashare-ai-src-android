@@ -57,7 +57,8 @@ class AppContainer(
     )
     val alertEvaluator = AlertEvaluator()
     val aiProviders = AiProviderRepository(local, ApiKeyCipher())
-    val aiClient = OpenAiCompatibleClient(aiProviders, httpClient)
+    val aiCache = com.ashareai.app.standalone.data.ai.AiCacheManager(appContext)
+    val aiClient = OpenAiCompatibleClient(aiProviders, httpClient, cacheManager = aiCache)
     val archive = LocalArchiveService(local)
     val backtest = com.ashareai.app.standalone.backtest.BacktestService(
         engine = com.ashareai.app.standalone.backtest.LocalBacktestEngine(
@@ -77,6 +78,7 @@ class AppContainer(
         market = market,
         engine = DeterministicResearchEngine(),
         aiClient = aiClient,
+        settings = settings,
         notifications = notifications,
         resourceBudget = { DeviceResourcePolicy.from(appContext, ResourceTaskPriority.DEFERRED) },
     )

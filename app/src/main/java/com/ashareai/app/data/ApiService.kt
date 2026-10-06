@@ -43,6 +43,12 @@ interface ApiService : HealthApi {
     @POST("api/v1/strategies/evolution/rollback")
     suspend fun rollbackStrategy(@Body body: StrategyReviewRequest): JsonObject
 
+    @GET("api/v1/strategies/evolution/schedule")
+    suspend fun strategyEvolutionSchedule(): StrategyEvolutionSchedule
+
+    @POST("api/v1/strategies/evolution/schedule")
+    suspend fun setStrategyEvolutionSchedule(@Body body: StrategyEvolutionScheduleRequest): StrategyEvolutionSchedule
+
     // ---- 健康 / 认证 ----
     @GET("api/v1/health")
     override suspend fun health(): HealthResponse

@@ -139,6 +139,9 @@ class ResearchRepository(private val services: ApiServiceProvider) {
     suspend fun rejectStrategy(candidateId: String, note: String? = null) =
         api.rejectStrategy(candidateId, StrategyReviewRequest(note))
     suspend fun rollbackStrategy(note: String? = null) = api.rollbackStrategy(StrategyReviewRequest(note))
+    suspend fun strategyEvolutionSchedule() = api.strategyEvolutionSchedule()
+    suspend fun setStrategyEvolutionSchedule(enabled: Boolean) =
+        api.setStrategyEvolutionSchedule(StrategyEvolutionScheduleRequest(enabled))
 }
 
 class SimulationRepository(private val services: ApiServiceProvider) {

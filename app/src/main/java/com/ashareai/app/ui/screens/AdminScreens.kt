@@ -42,6 +42,7 @@ import com.ashareai.app.data.model.EdgeGatewayDraft
 import com.ashareai.app.data.model.EdgeGatewayLogs
 import com.ashareai.app.data.model.EdgeProxyHost
 import com.ashareai.app.data.model.ModelProfileSettings
+import com.ashareai.app.data.model.ModelProviderSettings
 import com.ashareai.app.data.model.ModelSettings
 import com.ashareai.app.data.model.ModelSettingsDraft
 import com.ashareai.app.data.model.SystemResources
@@ -178,6 +179,10 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
                     model_profiles = result.model_profiles,
                     timeout_seconds = result.timeout_seconds,
                     enabled = result.enabled,
+                    providers = result.providers,
+                    primary_provider_id = result.primary_provider_id,
+                    fallback_provider_ids = result.fallback_provider_ids,
+                    routing = result.routing,
                 )
                 logs = admin.modelProbeLogs()
             }.onFailure { error = it.toUserMessage() }
@@ -189,8 +194,12 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
         draft = draft.copy(model_profiles = draft.model_profiles.mapIndexed { i, item -> if (i == index) profile else item })
     }
 
+    fun updateProvider(index: Int, provider: ModelProviderSettings) {
+        draft = draft.copy(providers = draft.providers.mapIndexed { i, item -> if (i == index) provider else item })
+    }
+
     Column(Modifier.fillMaxSize()) {
-        TopAppBarSimple("AI 模型配置")
+        TopAppBarSimple("AI Agent 设置")
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -249,6 +258,69 @@ fun ModelSettingsScreen(appViewModel: AppViewModel) {
                     }
                     message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                     error?.let { ErrorBanner(it) }
+                }
+            }
+            item {
+                AppCard {
+                    Text("Provider 与自动路由", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "按任务用途自动选择模型；主 Provider 不可用时按备用顺序尝试。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    draft.providers.forEachIndexed { index, provider ->
+                        Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(provider.provider_id, { updateProvider(index, provider.copy(provider_id = it)) }, label = { Text("Provider ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(provider.name, { updateProvider(index, provider.copy(name = it)) }, label = { Text("名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(provider.base_url, { updateProvider(index, provider.copy(base_url = it)) }, label = { Text("Base URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(provider.model, { updateProvider(index, provider.copy(model = it)) }, label = { Text("模型") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(provider.api_key.orEmpty(), { updateProvider(index, provider.copy(api_key = it.ifBlank { null })) }, label = { Text(if (provider.api_key_configured) "API Key（留空保持不变）" else "API Key") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Switch(provider.enabled, { updateProvider(index, provider.copy(enabled = it)) })
+                                Text("启用", style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.weight(1f))
+                                TextButton(onClick = { draft = draft.copy(providers = draft.providers.filterIndexed { i, _ -> i != index }) }) { Text("删除") }
+                            }
+                        }
+                    }
+                    TextButton(onClick = {
+                        val id = "provider-${draft.providers.size + 1}"
+                        draft = draft.copy(
+                            providers = draft.providers + ModelProviderSettings(
+                                provider_id = id,
+                                name = "新 Provider",
+                                base_url = draft.base_url,
+                                model = draft.research_model,
+                            ),
+                            primary_provider_id = draft.primary_provider_id ?: id,
+                        )
+                    }) { Text("添加 Provider") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            draft.primary_provider_id.orEmpty(),
+                            { draft = draft.copy(primary_provider_id = it.ifBlank { null }) },
+                            label = { Text("主 Provider ID") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            draft.fallback_provider_ids.joinToString(","),
+                            { draft = draft.copy(fallback_provider_ids = it.split(",").map(String::trim).filter(String::isNotBlank)) },
+                            label = { Text("备用 Provider（逗号分隔）") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    val purposes = listOf("research", "form_assist", "chat", "strategy", "monitoring")
+                    purposes.forEach { purpose ->
+                        OutlinedTextField(
+                            draft.routing[purpose].orEmpty(),
+                            { draft = draft.copy(routing = draft.routing + (purpose to it)) },
+                            label = { Text("$purpose 模型（可选）") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
             item {

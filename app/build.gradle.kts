@@ -46,6 +46,7 @@ android {
         // BuildConfig 始终启用
         buildConfigField("String", "MIPUSH_APP_ID", "\"${providers.gradleProperty("MIPUSH_APP_ID").orElse("").get()}\"")
         buildConfigField("String", "MIPUSH_APP_KEY", "\"${providers.gradleProperty("MIPUSH_APP_KEY").orElse("").get()}\"")
+        buildConfigField("String", "XIAOMI_SUPER_ISLAND_APP_ID", "\"$xiaomiSuperIslandAppId\"")
     }
 
     signingConfigs {

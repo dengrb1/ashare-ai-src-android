@@ -21,6 +21,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +44,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ashareai.app.workspace.Workspace
+import com.ashareai.app.ui.components.WorkspaceSwitcher
 import com.ashareai.app.performance.AppVisibilityState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -61,10 +69,20 @@ class MainActivity : ComponentActivity() {
         val app = HybridApp.from(this)
 
         setContent {
-            val workspace by app.workspaceStore.currentWorkspace.collectAsState(initial = Workspace.LOCAL)
-            val localFullAnimationsEnabled by app.localContainer.settings.settings
+            val workspaceState by app.workspaceStore.workspaceState.collectAsState(
+                initial = com.ashareai.app.workspace.WorkspaceState(
+                    current = Workspace.LOCAL,
+                    lastLocalRoute = null,
+                    lastFusionRoute = null,
+                    fusionSessionValid = false,
+                ),
+            )
+            val workspace = workspaceState.current
+            val localAnimationsFlow = remember(app.localContainer.settings.settings) {
+                app.localContainer.settings.settings
                 .map { it.fullAnimationsEnabled }
-                .collectAsState(initial = true)
+            }
+            val localFullAnimationsEnabled by localAnimationsFlow.collectAsState(initial = true)
             val fusionFullAnimationsEnabled by app.fusionSettings.fullAnimationsEnabled.collectAsState(initial = true)
             val fullAnimationsEnabled = if (workspace == Workspace.LOCAL) {
                 localFullAnimationsEnabled
@@ -74,26 +92,31 @@ class MainActivity : ComponentActivity() {
             val systemPowerSave = remember {
                 getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
             }
+            var workspaceSwitchInFlight by remember { mutableStateOf(false) }
+            LaunchedEffect(workspace) {
+                workspaceSwitchInFlight = false
+            }
 
-            AnimatedContent(
-                targetState = workspace,
-                transitionSpec = {
-                    if (!fullAnimationsEnabled || systemPowerSave) {
-                        EnterTransition.None togetherWith ExitTransition.None
-                    } else {
-                        (fadeIn(animationSpec = tween(300)) + scaleIn(
-                            initialScale = 0.95f,
-                            animationSpec = tween(300)
-                        )).togetherWith(
-                            fadeOut(animationSpec = tween(300)) + scaleOut(
-                                targetScale = 0.95f,
-                                animationSpec = tween(300)
+            Box(Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = workspace,
+                    transitionSpec = {
+                        if (!fullAnimationsEnabled || systemPowerSave) {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        } else {
+                            (fadeIn(animationSpec = tween(380)) + scaleIn(
+                                initialScale = 0.985f,
+                                animationSpec = tween(380),
+                            )).togetherWith(
+                                fadeOut(animationSpec = tween(260)) + scaleOut(
+                                    targetScale = 0.985f,
+                                    animationSpec = tween(260),
+                                )
                             )
-                        )
-                    }
-                },
-                label = "workspace_transition"
-            ) { targetWorkspace ->
+                        }
+                    },
+                    label = "workspace_transition",
+                ) { targetWorkspace ->
                 when (targetWorkspace) {
                     Workspace.LOCAL -> {
                     // 本地工作区：复用原 standalone MainActivity 逻辑
@@ -108,6 +131,11 @@ class MainActivity : ComponentActivity() {
                     }
                     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                         permissionState = readPermissionState()
+                    }
+                    DisposableEffect(viewModel) {
+                        onDispose {
+                            com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
+                        }
                     }
                     val requestNotifications = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -137,6 +165,12 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             pendingRoute = pendingRoute,
                             onRouteConsumed = { pendingRoute.value = null },
+                            initialRoute = workspaceState.lastLocalRoute,
+                            onRouteChanged = { route ->
+                                lifecycleScope.launch {
+                                    app.workspaceStore.saveLastRoute(Workspace.LOCAL, route)
+                                }
+                            },
                             onSwitchToConnected = {
                                 lifecycleScope.launch {
                                     com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
@@ -197,6 +231,9 @@ class MainActivity : ComponentActivity() {
                         owner.lifecycle.addObserver(observer)
                         onDispose {
                             owner.lifecycle.removeObserver(observer)
+                            appViewModel.onBackground()
+                            marketViewModel.bindSession(isSignedIn = false, isForeground = false)
+                            com.ashareai.app.island.MonitorService.stop(this@MainActivity)
                             appViewModel.detachHostContext(owner)
                         }
                     }
@@ -239,6 +276,12 @@ class MainActivity : ComponentActivity() {
                                 appViewModel = appViewModel,
                                 pendingRoute = pendingRoute,
                                 onRouteConsumed = { pendingRoute.value = null },
+                                initialRoute = workspaceState.lastFusionRoute,
+                                onRouteChanged = { route ->
+                                    lifecycleScope.launch {
+                                        app.workspaceStore.saveLastRoute(Workspace.FUSION, route)
+                                    }
+                                },
                                 onSwitchToLocal = {
                                     lifecycleScope.launch {
                                         com.ashareai.app.island.MonitorService.stop(this@MainActivity)
@@ -249,7 +292,27 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-            }
+                }
+                }
+                WorkspaceSwitcher(
+                    workspace = workspace,
+                    onWorkspaceSelected = { selected ->
+                        if (selected == workspace || workspaceSwitchInFlight) return@WorkspaceSwitcher
+                        workspaceSwitchInFlight = true
+                        lifecycleScope.launch {
+                            if (selected == Workspace.LOCAL) {
+                                com.ashareai.app.island.MonitorService.stop(this@MainActivity)
+                            } else {
+                                com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
+                            }
+                            app.workspaceStore.setWorkspace(selected)
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 6.dp, end = 12.dp),
+                )
             }
         }
     }

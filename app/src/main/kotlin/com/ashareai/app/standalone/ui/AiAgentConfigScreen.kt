@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiAgentConfig
 import com.ashareai.app.standalone.data.ai.AiAgentRole
+import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.AiCacheManager
 import com.ashareai.app.standalone.data.ai.AiSchedulingPolicy
 import com.ashareai.app.standalone.data.ai.LocalInferenceDetector
@@ -61,7 +62,10 @@ fun AiAgentConfigScreen(
     agents: List<AiAgentConfig>,
     onSaveAgent: (AiAgentConfig) -> Unit,
     onDeleteAgent: (String) -> Unit,
-    onNavigateToProviders: () -> Unit,
+    onNavigateToProviders: () -> Unit = {},
+    onSaveProvider: suspend (AiProviderDraft) -> Result<Unit> = { Result.failure(UnsupportedOperationException("Provider 配置不可用")) },
+    onDeleteProvider: suspend (String) -> Unit = {},
+    onTestProvider: suspend (String) -> String = { "未配置 Provider 测试器" },
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -72,6 +76,13 @@ fun AiAgentConfigScreen(
     var maxRetries by rememberSaveable { mutableStateOf("2") }
     var timeoutSeconds by rememberSaveable { mutableStateOf("60") }
     var showTemplates by rememberSaveable { mutableStateOf(false) }
+
+    fun applyRoleDefaults(role: AiAgentRole) {
+        selectedRole = role
+        maxRetries = role.recommendedRetries.toString()
+        timeoutSeconds = role.recommendedTimeoutSeconds.toString()
+        enableCache = role.recommendedCache
+    }
 
     // AI 能效状态
     var localInferenceAvailable by remember { mutableStateOf(false) }
@@ -140,7 +151,7 @@ fun AiAgentConfigScreen(
                     Text("请先添加至少一个 AI Provider，然后再配置 Agent。", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = onNavigateToProviders, modifier = Modifier.fillMaxWidth()) {
-                        Text("前往配置 Provider")
+                        Text("添加 Provider")
                     }
                     if (!showTemplates) {
                         Spacer(Modifier.height(8.dp))
@@ -186,9 +197,13 @@ fun AiAgentConfigScreen(
         }
 
         // Agent配置表单
-        Text("新建 Agent", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("任务适配档案", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "系统会按任务、设备状态和 Provider 可用性自动适配；只有需要固定供应商时才手动指定。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-        Text("Agent 角色", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             AiAgentRole.entries.forEach { role ->
                 Card(
@@ -205,30 +220,44 @@ fun AiAgentConfigScreen(
                         1.dp,
                         if (selectedRole == role) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                     ),
-                    onClick = { selectedRole = role },
+                    onClick = { applyRoleDefaults(role) },
                 ) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(role.displayName, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(role.displayName, fontWeight = FontWeight.SemiBold)
+                            if (selectedRole == role) {
+                                Text("已选择", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                         Text(
-                            role.systemPrompt.lines().first().take(60) + "...",
+                            role.taskSummary,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (role.preferredModels.isNotEmpty()) {
-                            Text(
-                                "推荐模型: ${role.preferredModels.take(2).joinToString(", ")}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        Text("输出：${role.outputHint}", style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            "建议：重试 ${role.recommendedRetries} 次 · 超时 ${role.recommendedTimeoutSeconds} 秒 · 缓存 ${if (role.recommendedCache) "开启" else "关闭"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
         }
 
-        Text("选择 Provider", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "推荐模型参考：${selectedRole.preferredModels.joinToString("、")}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Text("固定 Provider（可选）", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (providers.isEmpty()) {
-            Text("请先添加 Provider", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text("未配置 Provider 时将使用缓存或确定性结果", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 providers.filter { it.enabled }.forEach { provider ->
@@ -242,7 +271,7 @@ fun AiAgentConfigScreen(
             }
         }
 
-        Text("高级选项", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("运行参数（可调整）", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -257,6 +286,7 @@ fun AiAgentConfigScreen(
             value = maxRetries,
             onValueChange = { maxRetries = it.filter { c -> c.isDigit() }.take(1) },
             label = { Text("失败重试次数（0-3）") },
+            supportingText = { Text("网络失败时自动重试，摘要和对话通常 1 次即可") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -264,38 +294,35 @@ fun AiAgentConfigScreen(
         OutlinedTextField(
             value = timeoutSeconds,
             onValueChange = { timeoutSeconds = it.filter { c -> c.isDigit() }.take(3) },
-            label = { Text("超时时间（秒）") },
+            label = { Text("单次请求超时（10-300 秒）") },
+            supportingText = { Text("复杂研究任务建议 90 秒，快速对话建议 45 秒") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
 
         Button(
             onClick = {
-                selectedProviderId?.let { providerId ->
-                    onSaveAgent(
-                        AiAgentConfig(
-                            id = "${selectedRole.name}_${System.currentTimeMillis()}",
-                            role = selectedRole,
-                            providerId = providerId,
-                            enabled = true,
-                            maxRetries = maxRetries.toIntOrNull()?.coerceIn(0, 3) ?: 2,
-                            timeoutSeconds = timeoutSeconds.toIntOrNull()?.coerceIn(10, 300) ?: 60,
-                            enableCache = enableCache,
-                        ),
-                    )
-                    // 重置表单
-                    selectedProviderId = null
-                    enableCache = true
-                    maxRetries = "2"
-                    timeoutSeconds = "60"
-                }
+                onSaveAgent(
+                    AiAgentConfig(
+                        id = "${selectedRole.name}_${System.currentTimeMillis()}",
+                        role = selectedRole,
+                        providerId = selectedProviderId,
+                        enabled = true,
+                        maxRetries = maxRetries.toIntOrNull()?.coerceIn(0, 3) ?: 2,
+                        timeoutSeconds = timeoutSeconds.toIntOrNull()?.coerceIn(10, 300) ?: 60,
+                        enableCache = enableCache,
+                    ),
+                )
+                selectedProviderId = null
+                enableCache = true
+                maxRetries = "2"
+                timeoutSeconds = "60"
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = selectedProviderId != null,
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("保存 Agent")
+            Text("保存适配档案")
         }
 
         // 已配置的Agent列表
@@ -438,6 +465,21 @@ fun AiAgentConfigScreen(
                 } ?: Text("加载中...", style = MaterialTheme.typography.bodySmall)
             }
         }
+
+        Text("Provider 与连接", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Provider 会根据任务、网络、电量和可用性自动选择；需要时可在这里调整连接信息。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AiProviderConfigScreen(
+            providers = providers,
+            onSave = onSaveProvider,
+            onDelete = onDeleteProvider,
+            onTest = onTestProvider,
+            embedded = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         // Agent 分配策略
         Card(

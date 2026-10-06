@@ -682,6 +682,18 @@ data class ModelProfileSettings(
 )
 
 @Serializable
+data class ModelProviderSettings(
+    val provider_id: String = "",
+    val name: String = "",
+    val base_url: String = "",
+    val model: String = "",
+    val api_key: String? = null,
+    val api_key_configured: Boolean = false,
+    val enabled: Boolean = true,
+    val priority: Int = 0,
+)
+
+@Serializable
 data class ModelSettingsDraft(
     val base_url: String,
     val api_key: String? = null,
@@ -692,6 +704,10 @@ data class ModelSettingsDraft(
     val model_profiles: List<ModelProfileSettings> = emptyList(),
     val timeout_seconds: Double = 90.0,
     val enabled: Boolean = true,
+    val providers: List<ModelProviderSettings> = emptyList(),
+    val primary_provider_id: String? = null,
+    val fallback_provider_ids: List<String> = emptyList(),
+    val routing: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -717,6 +733,10 @@ data class ModelSettings(
     val checked_at: String? = null,
     val structured_output_supported: Boolean = false,
     val streaming_supported: Boolean = false,
+    val providers: List<ModelProviderSettings> = emptyList(),
+    val primary_provider_id: String? = null,
+    val fallback_provider_ids: List<String> = emptyList(),
+    val routing: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -1245,6 +1265,21 @@ data class StrategyCandidatesResponse(
     val versions: List<JsonObject> = emptyList(),
     val count: Int = 0,
 )
+
+@Serializable
+data class StrategyEvolutionSchedule(
+    val enabled: Boolean = false,
+    val weekday: Int = 5,
+    val hour: Int = 20,
+    val minimum_samples: Int = 60,
+    val maximum_drawdown: Double = 0.2,
+    val maximum_turnover: Double = 20.0,
+    val minimum_improvement: Double = 0.0,
+    val maximum_candidates: Int = 8,
+)
+
+@Serializable
+data class StrategyEvolutionScheduleRequest(val enabled: Boolean)
 
 // ---------- Bootstrap ----------
 

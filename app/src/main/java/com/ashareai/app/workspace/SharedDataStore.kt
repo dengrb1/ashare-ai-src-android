@@ -1,14 +1,17 @@
 package com.ashareai.app.workspace
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+
+// DataStore instances must be process singletons. Keeping the delegate at file
+// scope prevents the settings screen and WorkspaceStore from opening the same
+// preferences file through separate storage connections.
+private val Context.workspaceSharedDataStore by preferencesDataStore(name = "workspace_shared_prefs")
 
 /**
  * 工作区间共享数据管理：可选择性地在连接版和独立版之间同步设置。
@@ -27,7 +30,7 @@ import kotlinx.coroutines.flow.map
  * - 登录凭证
  */
 class SharedDataStore(private val context: Context) {
-    private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "workspace_shared_prefs")
+    private val appContext = context.applicationContext
 
     companion object {
         // 共享开关：控制每个设置项是否在工作区间同步
@@ -78,7 +81,7 @@ class SharedDataStore(private val context: Context) {
     /**
      * 获取共享开关配置
      */
-    val sharedSettings: Flow<SharedSettings> = context.dataStore.data.map { prefs ->
+    val sharedSettings: Flow<SharedSettings> = appContext.workspaceSharedDataStore.data.map { prefs ->
         SharedSettings(
             shareTheme = prefs[SHARE_THEME] ?: true,
             shareIsland = prefs[SHARE_ISLAND] ?: true,
@@ -93,7 +96,7 @@ class SharedDataStore(private val context: Context) {
     /**
      * 获取共享数据值
      */
-    val sharedValues: Flow<SharedValues> = context.dataStore.data.map { prefs ->
+    val sharedValues: Flow<SharedValues> = appContext.workspaceSharedDataStore.data.map { prefs ->
         SharedValues(
             themeMode = prefs[THEME_MODE] ?: "system",
             islandEnabled = prefs[ISLAND_ENABLED] ?: false,
@@ -109,7 +112,7 @@ class SharedDataStore(private val context: Context) {
      * 更新共享开关配置
      */
     suspend fun updateSharedSettings(settings: SharedSettings) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             prefs[SHARE_THEME] = settings.shareTheme
             prefs[SHARE_ISLAND] = settings.shareIsland
             prefs[SHARE_AI_CONFIG] = settings.shareAiConfig
@@ -124,7 +127,7 @@ class SharedDataStore(private val context: Context) {
      * 更新共享数据值
      */
     suspend fun updateSharedValues(values: SharedValues) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             prefs[THEME_MODE] = values.themeMode
             prefs[ISLAND_ENABLED] = values.islandEnabled
             values.aiProvider?.let { prefs[AI_PROVIDER] = it }
@@ -139,7 +142,7 @@ class SharedDataStore(private val context: Context) {
      * 同步特定设置项到共享存储
      */
     suspend fun syncThemeMode(mode: String) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_THEME] != false) {
                 prefs[THEME_MODE] = mode
             }
@@ -147,7 +150,7 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun syncIslandEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_ISLAND] != false) {
                 prefs[ISLAND_ENABLED] = enabled
             }
@@ -155,7 +158,7 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun syncAiConfig(provider: String, model: String) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_AI_CONFIG] == true) {
                 prefs[AI_PROVIDER] = provider
                 prefs[AI_MODEL] = model
@@ -164,7 +167,7 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun syncNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_NOTIFICATIONS] != false) {
                 prefs[NOTIFICATIONS_ENABLED] = enabled
             }
@@ -172,7 +175,7 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun syncGlassEffectEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_GLASS_EFFECT] != false) {
                 prefs[GLASS_EFFECT_ENABLED] = enabled
             }
@@ -180,7 +183,7 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun syncFullAnimationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_FULL_ANIMATIONS] != false) {
                 prefs[FULL_ANIMATIONS_ENABLED] = enabled
             }
@@ -188,13 +191,13 @@ class SharedDataStore(private val context: Context) {
     }
 
     suspend fun setAutoOptimizeInPowerSaver(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             prefs[AUTO_OPTIMIZE_IN_POWER_SAVER] = enabled
         }
     }
 
     suspend fun syncAppearance(glassEnabled: Boolean, fullAnimationsEnabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_GLASS_EFFECT] != false) prefs[GLASS_EFFECT_ENABLED] = glassEnabled
             if (prefs[SHARE_FULL_ANIMATIONS] != false) prefs[FULL_ANIMATIONS_ENABLED] = fullAnimationsEnabled
         }

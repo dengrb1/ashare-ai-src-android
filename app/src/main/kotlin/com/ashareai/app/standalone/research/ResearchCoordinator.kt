@@ -6,9 +6,13 @@ import com.ashareai.app.performance.ResourceBudget
 import com.ashareai.app.standalone.data.LocalRepository
 import com.ashareai.app.standalone.data.ai.AiRequest
 import com.ashareai.app.standalone.data.ai.AiStreamEvent
+import com.ashareai.app.standalone.data.ai.AiAgentRouter
+import com.ashareai.app.standalone.data.ai.AiTaskType
+import com.ashareai.app.standalone.data.ai.LocalInferenceDetector
 import com.ashareai.app.standalone.data.ai.OpenAiCompatibleClient
 import com.ashareai.app.standalone.data.market.MarketRepository
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
+import com.ashareai.app.standalone.data.settings.SettingsStore
 import com.ashareai.app.standalone.domain.ResearchCandidate
 import com.ashareai.app.standalone.domain.ResearchReport
 import com.ashareai.app.standalone.domain.ResearchRequest
@@ -22,6 +26,7 @@ import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
 import java.util.UUID
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -36,6 +41,7 @@ class ResearchCoordinator(
     private val market: MarketRepository,
     private val engine: ResearchEngine,
     private val aiClient: OpenAiCompatibleClient,
+    private val settings: SettingsStore,
     private val notifications: NotificationRepository,
     private val resourceBudget: () -> ResourceBudget = { DeviceResourcePolicy.from(context) },
     private val clock: () -> Long = System::currentTimeMillis,
@@ -337,7 +343,19 @@ class ResearchCoordinator(
         ranked: List<AnalysedSecurity>,
         marketContext: MarketIndexContext,
     ): String? {
-        val providerId = run.aiProviderId ?: return null
+        val providers = local.aiProviders.first()
+        val routing = AiAgentRouter.route(
+            runtime = LocalInferenceDetector.runtimeSnapshot(context, AiTaskType.RESEARCH_EXPLANATION),
+            agents = settings.aiAgents.first(),
+            providers = providers,
+            providerStates = aiClient.providerRuntimeStates(),
+            explicitProviderId = run.aiProviderId,
+        )
+        val providerId = routing.provider?.id ?: return null
+        if (routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.LOCAL ||
+            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.CACHE ||
+            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.DETERMINISTIC
+        ) return null
         val output = StringBuilder()
         var failure: String? = null
         val context = buildString {
@@ -354,12 +372,13 @@ class ResearchCoordinator(
                 append("用户已授权本次研究使用持仓信息，但本次自动研究未附带成本与数量。\n")
             }
         }
-        aiClient.stream(
+        aiClient.streamWithFallback(
             AiRequest(
                 providerId = providerId,
                 systemInstruction = "你是 A 股本地研究的解释助手。只解释已有确定性数据。",
                 prompt = context,
             ),
+            routing.fallbackProviders.map { it.id },
         ).collect { event ->
             when (event) {
                 is AiStreamEvent.Delta -> output.append(event.text)

@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.ashareai.app.AShareApp
+import com.ashareai.app.BuildConfig
 import com.ashareai.app.MainActivity
 import com.ashareai.app.R
 import com.xzakota.hyper.notification.focus.FocusNotification as HyperFocusNotification
@@ -75,7 +76,7 @@ object FocusNotification {
         }.getOrDefault(0)
         return FocusCapabilities(
             protocolVersion = protocol,
-            islandSupported = protocol >= 3 || islandSystemProperty(),
+            islandSupported = protocol >= 3 || islandSystemProperty() || isHyperOS(),
             focusPermissionGranted = hasFocusPermission(context),
             appIdConfigured = hasConfiguredAppId(context),
             hyperOSVersion = detectHyperOSVersion(),
@@ -254,7 +255,15 @@ object FocusNotification {
     private fun hasConfiguredAppId(context: Context): Boolean = runCatching {
         context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
             .metaData?.getString("com.xiaomi.xms.APP_ID")
-            ?.isNotBlank() == true
+            ?.isNotBlank() == true || BuildConfig.XIAOMI_SUPER_ISLAND_APP_ID.isNotBlank()
+    }.getOrDefault(false)
+
+    private fun isHyperOS(): Boolean = runCatching {
+        val systemProperties = Class.forName("android.os.SystemProperties")
+        val get = systemProperties.getDeclaredMethod("get", String::class.java, String::class.java)
+        val osName = get.invoke(null, "ro.miui.ui.version.name", "") as? String ?: ""
+        val version = get.invoke(null, "ro.mi.os.version.incremental", "") as? String ?: ""
+        osName.contains("HYPER", ignoreCase = true) || version.startsWith("OS")
     }.getOrDefault(false)
 
     private fun islandSystemProperty(): Boolean = runCatching {

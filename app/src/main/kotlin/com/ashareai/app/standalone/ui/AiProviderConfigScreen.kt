@@ -68,8 +68,8 @@ fun AiProviderConfigScreen(
     onSave: suspend (AiProviderDraft) -> Result<Unit>,
     onDelete: suspend (String) -> Unit,
     onTest: suspend (String) -> String,
-    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    embedded: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     var showEditor by rememberSaveable { mutableStateOf(false) }
@@ -81,7 +81,7 @@ fun AiProviderConfigScreen(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .then(if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState()))
             .padding(horizontal = 16.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -244,13 +244,6 @@ fun AiProviderConfigScreen(
                 )
             }
         }
-        // 返回按钮
-        OutlinedButton(
-            onClick = onNavigateBack,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("返回")
-        }
     }
 
     // Provider 编辑器对话框
@@ -283,9 +276,12 @@ fun AiProviderConfigScreen(
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        onDelete(providerId)
+                        val result = runCatching { onDelete(providerId) }
                         deleteConfirm = null
-                        testResult = "Provider 已删除"
+                        testResult = result.fold(
+                            onSuccess = { "Provider 已删除" },
+                            onFailure = { it.message ?: "Provider 删除失败" },
+                        )
                     }
                 }) {
                     Text("删除", color = MaterialTheme.colorScheme.error)
