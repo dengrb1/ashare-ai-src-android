@@ -2,6 +2,7 @@ package com.ashareai.app.standalone.data.ai
 
 import com.ashareai.app.standalone.domain.AiProvider
 import kotlinx.serialization.Serializable
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * AI Agent角色定义
@@ -109,6 +110,7 @@ data class AiAgentConfig(
     val timeoutSeconds: Int = 60,
     val temperature: Double? = null, // null则使用默认
     val enableCache: Boolean = true,
+    val enableWebSearch: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -172,6 +174,18 @@ object AiAgentRouter {
             usableProviders.sortedBy { it.createdAt }.forEach(::add)
         }.distinctBy { it.id }.filterNot { it.id == selectedProvider?.id }
 
+        if (selectedProvider != null && AiProviderEndpointPolicy.isLoopbackHttp(selectedProvider.baseUrl)) {
+            return AiRoutingDecision(
+                task = runtime.task,
+                role = role,
+                agent = configuredAgent,
+                provider = selectedProvider,
+                target = AiExecutionTarget.DEVICE_ENDPOINT,
+                reason = "调用用户配置的本机 OpenAI 兼容端侧服务",
+                fallbackProviders = fallbackProviders,
+            )
+        }
+
         if (runtime.localInferenceAvailable && runtime.memoryAvailableMb >= 512 && runtime.batteryPercent >= 20 && runtime.thermalStatus < 3 &&
             runtime.network in setOf(
                 LocalInferenceDetector.NetworkType.NONE,
@@ -228,6 +242,7 @@ enum class AiTaskType {
 
 enum class AiExecutionTarget {
     LOCAL,
+    DEVICE_ENDPOINT,
     CLOUD,
     CACHE,
     DETERMINISTIC,
@@ -271,10 +286,26 @@ enum class ProviderCapability {
     LONG_CONTEXT // 长上下文
 }
 
+object AiProviderEndpointPolicy {
+    fun isLoopbackHttp(value: String): Boolean {
+        val url = value.trim().toHttpUrlOrNull() ?: return false
+        return url.scheme == "http" && url.host in setOf("127.0.0.1", "localhost", "10.0.2.2", "::1")
+    }
+}
+
 /**
  * Provider模板
  */
 object ProviderTemplates {
+    val XIAOMI_LOCAL_COMPATIBLE = AiProviderDraft(
+        name = "小米端侧 AI（本机兼容服务）",
+        baseUrl = "http://127.0.0.1:1234/v1",
+        apiKey = "",
+        model = "填写设备端服务模型",
+        organization = null,
+        project = null,
+    )
+
     val OPENAI = AiProviderDraft(
         name = "OpenAI",
         baseUrl = "https://api.openai.com",
@@ -320,5 +351,5 @@ object ProviderTemplates {
         project = null
     )
 
-    fun all() = listOf(OPENAI, ANTHROPIC, DEEPSEEK, MOONSHOT, ZHIPU)
+    fun all() = listOf(XIAOMI_LOCAL_COMPATIBLE, OPENAI, ANTHROPIC, DEEPSEEK, MOONSHOT, ZHIPU)
 }

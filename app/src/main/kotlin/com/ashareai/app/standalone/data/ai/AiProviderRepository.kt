@@ -32,15 +32,17 @@ class AiProviderRepository(
     suspend fun save(draft: AiProviderDraft): AiProvider {
         val id = draft.id ?: UUID.randomUUID().toString()
         val existing = local.aiProvider(id)
+        val baseUrl = normalizeBaseUrl(draft.baseUrl)
         val apiKey = when {
             draft.apiKey.isNotBlank() -> cipher.encrypt(draft.apiKey.trim())
             existing != null -> existing.encryptedApiKey
+            AiProviderEndpointPolicy.isLoopbackHttp(baseUrl) -> cipher.encrypt(LOCAL_NO_AUTH_KEY)
             else -> throw IllegalArgumentException("新 Provider 必须填写 API Key")
         }
         val provider = AiProviderEntity(
             id = id,
             name = draft.name.trim().ifBlank { "未命名 Provider" },
-            baseUrl = normalizeBaseUrl(draft.baseUrl),
+            baseUrl = baseUrl,
             encryptedApiKey = apiKey,
             model = draft.model.trim().ifBlank { throw IllegalArgumentException("模型不能为空") },
             organization = draft.organization?.trim()?.takeIf(String::isNotBlank),
@@ -75,7 +77,7 @@ class AiProviderRepository(
                 enabled = entity.enabled,
                 createdAt = entity.createdAt,
             ),
-            apiKey = cipher.decrypt(entity.encryptedApiKey),
+            apiKey = cipher.decrypt(entity.encryptedApiKey).takeUnless { it == LOCAL_NO_AUTH_KEY }.orEmpty(),
         )
     }
 
@@ -84,9 +86,14 @@ class AiProviderRepository(
     private fun normalizeBaseUrl(value: String): String {
         val normalized = value.trim().removeSuffix("/")
         val url = normalized.toHttpUrlOrNull() ?: throw IllegalArgumentException("Base URL 无效")
-        require(url.scheme == "https" || url.host == "10.0.2.2") {
-            "AI Provider 必须使用 HTTPS（模拟器本机调试除外）"
+        require(url.scheme == "https" || AiProviderEndpointPolicy.isLoopbackHttp(url.toString())) {
+            "AI Provider 必须使用 HTTPS；HTTP 仅允许本机端侧服务"
         }
         return normalized
+    }
+
+    companion object {
+        private const val LOCAL_NO_AUTH_KEY = "__local_endpoint_without_auth__"
+        fun isLocalEndpoint(value: String): Boolean = AiProviderEndpointPolicy.isLoopbackHttp(value)
     }
 }

@@ -158,6 +158,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.markdown.material3)
     implementation(libs.focus.api)
+    implementation(libs.jsoup)
     ksp(libs.androidx.room.compiler)
 
     // Fusion 工作区依赖（始终包含）

@@ -103,4 +103,25 @@ class AiAgentRouterTest {
         now = 151L
         assertEquals(emptyList<AiProviderRuntimeState>(), tracker.snapshot())
     }
+
+    @Test
+    fun loopbackCompatibleProviderUsesDeviceEndpoint() {
+        val localProvider = provider.copy(baseUrl = "http://127.0.0.1:1234/v1")
+        val decision = AiAgentRouter.route(
+            runtime = AiRuntimeSnapshot(task = AiTaskType.RESEARCH_EXPLANATION),
+            agents = emptyList(),
+            providers = listOf(localProvider),
+        )
+
+        assertEquals(AiExecutionTarget.DEVICE_ENDPOINT, decision.target)
+        assertEquals(localProvider.id, decision.provider?.id)
+    }
+
+    @Test
+    fun onlyLoopbackPlainHttpIsAllowedForDeviceEndpoints() {
+        assertEquals(true, AiProviderEndpointPolicy.isLoopbackHttp("http://localhost:1234/v1"))
+        assertEquals(true, AiProviderEndpointPolicy.isLoopbackHttp("http://10.0.2.2:1234/v1"))
+        assertEquals(false, AiProviderEndpointPolicy.isLoopbackHttp("http://192.168.1.8:1234/v1"))
+        assertEquals(false, AiProviderEndpointPolicy.isLoopbackHttp("https://example.com/v1"))
+    }
 }

@@ -18,7 +18,6 @@ import kotlinx.coroutines.launch
 
 data class ReportsContent(
     val report: Report,
-    val body: String? = null,
     val symbols: List<ReportSymbol> = emptyList(),
     val tradePlans: List<TradePlan> = emptyList(),
 )
@@ -39,14 +38,9 @@ class ReportsViewModel(application: Application) : AndroidViewModel(application)
             if (report.report_id == null) return@runCatching null
             val reportId = report.report_id
             coroutineScope {
-                val body = async {
-                    runCatching {
-                        research.reportContent(reportId).let { it.content ?: it.body }
-                    }.getOrNull()
-                }
                 val symbols = async { runCatching { research.reportSymbols(reportId) }.getOrDefault(emptyList()) }
                 val plans = async { runCatching { simulation.tradePlans(reportId) }.getOrDefault(emptyList()) }
-                ReportsContent(report, body.await(), symbols.await(), plans.await())
+                ReportsContent(report, symbols.await(), plans.await())
             }
         }.onSuccess { content ->
             _state.value = if (content == null) ScreenState.Empty else ScreenState.Content(content)

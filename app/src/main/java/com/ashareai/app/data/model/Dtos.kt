@@ -597,15 +597,12 @@ data class Report(
     val run_id: String? = null,
     val trading_date: String? = null,
     val report_type: String? = null,
+    // Reports are persisted as structured data. The server no longer exposes
+    // an HTML/content endpoint for the report body.
+    val result: JsonObject = JsonObject(emptyMap()),
     val created_at: String? = null,
     val status: String? = null,
     val market_index_snapshot: MarketIndexSnapshot? = null,
-)
-
-@Serializable
-data class ReportContent(
-    val content: String? = null,
-    val body: String? = null,
 )
 
 @Serializable

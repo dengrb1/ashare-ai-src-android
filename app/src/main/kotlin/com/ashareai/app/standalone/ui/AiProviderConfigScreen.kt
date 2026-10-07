@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
 import com.ashareai.app.standalone.data.ai.ProviderTemplates
+import com.ashareai.app.standalone.data.ai.AiProviderRepository
 import com.ashareai.app.standalone.domain.AiProvider
 import kotlinx.coroutines.launch
 
@@ -164,6 +165,13 @@ fun AiProviderConfigScreen(
                                 Text(template.name, fontWeight = FontWeight.SemiBold)
                                 Text("Base URL: ${template.baseUrl}", style = MaterialTheme.typography.bodySmall)
                                 Text("默认模型: ${template.model}", style = MaterialTheme.typography.bodySmall)
+                                if (template.name.startsWith("小米端侧")) {
+                                    Text(
+                                        "需在设备上运行 OpenAI 兼容服务并填写实际端点与模型；这不是原生 MiAI SDK 直连。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                                 if (template.organization != null) {
                                     Text("Organization: ${template.organization}", style = MaterialTheme.typography.bodySmall)
                                 }
@@ -395,6 +403,17 @@ fun ProviderEditorDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                TextButton(
+                    onClick = {
+                        name = ProviderTemplates.XIAOMI_LOCAL_COMPATIBLE.name
+                        baseUrl = ProviderTemplates.XIAOMI_LOCAL_COMPATIBLE.baseUrl
+                        model = ""
+                        apiKey = ""
+                    },
+                ) {
+                    Text("填写小米本机兼容服务模板")
+                }
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -412,12 +431,19 @@ fun ProviderEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                if (AiProviderRepository.isLocalEndpoint(baseUrl)) {
+                    Text(
+                        "本机兼容服务须提供 /v1/chat/completions。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text(if (provider == null) "API Key" else "API Key（留空保持不变）") },
-                    placeholder = { Text("sk-...") },
+                    label = { Text(if (provider == null) "API Key（本机端点可留空）" else "API Key（留空保持不变）") },
+                    placeholder = { Text(if (AiProviderRepository.isLocalEndpoint(baseUrl)) "无鉴权时留空" else "sk-...") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showApiKey) {
@@ -485,7 +511,8 @@ fun ProviderEditorDialog(
                         ),
                     )
                 },
-                enabled = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank() && (provider != null || apiKey.isNotBlank()),
+                enabled = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank() &&
+                    (provider != null || apiKey.isNotBlank() || AiProviderRepository.isLocalEndpoint(baseUrl)),
             ) {
                 Text("保存")
             }

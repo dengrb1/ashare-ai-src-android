@@ -73,6 +73,7 @@ fun AiAgentConfigScreen(
     var selectedRole by rememberSaveable { mutableStateOf(AiAgentRole.CHAT_ASSISTANT) }
     var selectedProviderId by rememberSaveable { mutableStateOf<String?>(null) }
     var enableCache by rememberSaveable { mutableStateOf(true) }
+    var enableWebSearch by rememberSaveable { mutableStateOf(true) }
     var maxRetries by rememberSaveable { mutableStateOf("2") }
     var timeoutSeconds by rememberSaveable { mutableStateOf("60") }
     var showTemplates by rememberSaveable { mutableStateOf(false) }
@@ -82,6 +83,7 @@ fun AiAgentConfigScreen(
         maxRetries = role.recommendedRetries.toString()
         timeoutSeconds = role.recommendedTimeoutSeconds.toString()
         enableCache = role.recommendedCache
+        enableWebSearch = true
     }
 
     // AI 能效状态
@@ -282,6 +284,20 @@ fun AiAgentConfigScreen(
             Switch(checked = enableCache, onCheckedChange = { enableCache = it })
         }
 
+        if (selectedRole == AiAgentRole.RESEARCH_ANALYST) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("研究报告联网搜索")
+                    Text("最多检索 3 条来源，仅作报告参考，不参与评分", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = enableWebSearch, onCheckedChange = { enableWebSearch = it })
+            }
+        }
+
         OutlinedTextField(
             value = maxRetries,
             onValueChange = { maxRetries = it.filter { c -> c.isDigit() }.take(1) },
@@ -311,10 +327,12 @@ fun AiAgentConfigScreen(
                         maxRetries = maxRetries.toIntOrNull()?.coerceIn(0, 3) ?: 2,
                         timeoutSeconds = timeoutSeconds.toIntOrNull()?.coerceIn(10, 300) ?: 60,
                         enableCache = enableCache,
+                        enableWebSearch = enableWebSearch,
                     ),
                 )
                 selectedProviderId = null
                 enableCache = true
+                enableWebSearch = true
                 maxRetries = "2"
                 timeoutSeconds = "60"
             },

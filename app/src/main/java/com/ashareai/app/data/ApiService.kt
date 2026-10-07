@@ -248,9 +248,6 @@ interface ApiService : HealthApi {
         @Query("run_id") runId: String? = null,
     ): Report
 
-    @GET("api/v1/reports/{reportId}/content")
-    suspend fun reportContent(@Path("reportId") reportId: String): ReportContent
-
     @GET("api/v1/reports/{reportId}/symbols")
     suspend fun reportSymbols(@Path("reportId") reportId: String): List<ReportSymbol>
 

@@ -154,10 +154,10 @@ class OpenAiCompatibleClient(
     ) = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(endpoint(credential.provider.baseUrl, path))
-            .header("Authorization", "Bearer " + credential.apiKey)
             .header("Accept", "text/event-stream")
             .header("Content-Type", "application/json")
             .apply {
+                credential.apiKey.takeIf(String::isNotBlank)?.let { header("Authorization", "Bearer $it") }
                 credential.provider.organization?.let { header("OpenAI-Organization", it) }
                 credential.provider.project?.let { header("OpenAI-Project", it) }
             }

@@ -72,6 +72,9 @@ class AppContainer(
         market = market,
         httpClient = httpClient,
     )
+    val webSearch = com.ashareai.app.standalone.search.WebSearchRepository(
+        httpClient = com.ashareai.app.standalone.search.WebSearchRepository.boundedClient(httpClient),
+    )
     val research = ResearchCoordinator(
         context = appContext,
         local = local,
@@ -81,6 +84,7 @@ class AppContainer(
         settings = settings,
         notifications = notifications,
         resourceBudget = { DeviceResourcePolicy.from(appContext, ResourceTaskPriority.DEFERRED) },
+        webSearch = webSearch,
     )
     val monitoring = MarketMonitoringCoordinator(
         local = local,

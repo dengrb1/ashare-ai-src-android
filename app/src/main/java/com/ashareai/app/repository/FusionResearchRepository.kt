@@ -51,13 +51,12 @@ class FusionResearchRepository(private val services: ApiServiceProvider) : Resea
 
     override suspend fun getReport(date: String, runId: String?): ResearchReport {
         val report = api.report(date, runId)
-        val id = report.report_id ?: throw IllegalStateException("report id missing")
-        val body = api.reportContent(id)
+        report.report_id ?: throw IllegalStateException("report id missing")
         val candidates = api.candidates(date, runId)
         return ResearchReport(
             runId = report.run_id ?: runId.orEmpty(),
             date = report.trading_date ?: date,
-            summary = body.content ?: body.body.orEmpty(),
+            summary = report.result.toString(),
             marketContext = report.market_index_snapshot?.regime.orEmpty(),
             candidateCount = candidates.size,
             generatedAt = parseTime(report.created_at),

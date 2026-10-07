@@ -25,6 +25,7 @@ import java.time.ZoneId
 import java.util.UUID
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /** A connected snapshot plus the server capabilities that affect a merge. */
 data class ConnectedSnapshotResult(
@@ -151,12 +152,6 @@ class ConnectedSyncAdapter(
         runs.take(50).forEach { run ->
             val date = run.trading_date ?: run.requested_date ?: return@forEach
             run.report_id?.let { reportId ->
-                val body = runCatching { researchRepository.reportContent(reportId) }
-                    .onFailure { error ->
-                        incompleteScopes += ArchiveScope.REPORTS
-                        warnings += "连接版报告 $reportId 暂不可用：${error.message ?: "读取失败"}"
-                    }
-                    .getOrNull()?.let { content -> content.content ?: content.body.orEmpty() }
                 val report = runCatching { researchRepository.report(date, run.run_id) }
                     .onFailure { error ->
                         incompleteScopes += ArchiveScope.REPORTS
@@ -167,7 +162,9 @@ class ConnectedSyncAdapter(
                     id = reportId,
                     runId = run.run_id,
                     title = "${date} 研究报告",
-                    deterministicBody = body.orEmpty(),
+                    deterministicBody = report?.result?.let { result ->
+                        json.encodeToString(JsonObject.serializer(), result)
+                    }.orEmpty(),
                     aiExplanation = null,
                     createdAt = epoch(report?.created_at ?: run.created_at, now),
                 )

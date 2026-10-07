@@ -124,7 +124,6 @@ class ResearchRepository(private val services: ApiServiceProvider) {
     suspend fun candidates(date: String, runId: String? = null) = api.candidates(date, runId)
     suspend fun score(date: String, symbol: String, runId: String? = null) = api.score(date, symbol, runId)
     suspend fun report(date: String, runId: String? = null) = api.report(date, runId)
-    suspend fun reportContent(reportId: String) = api.reportContent(reportId)
     suspend fun reportSymbols(reportId: String) = api.reportSymbols(reportId)
     suspend fun activity(cursor: String? = null, type: String? = null, status: String? = null, limit: Int = 20) =
         api.runsActivity(cursor, type, status, limit)

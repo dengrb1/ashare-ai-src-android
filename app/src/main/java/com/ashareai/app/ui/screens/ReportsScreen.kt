@@ -1,13 +1,12 @@
 package com.ashareai.app.ui.screens
 
-import android.annotation.SuppressLint
-import android.webkit.WebView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -27,8 +25,13 @@ import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
-/** 研究报告页：日报正文（WebView 沙箱）+ 逐股详情 + 生成模拟方案。 */
+/** 研究报告页：结构化日报 + 逐股详情 + 生成模拟方案。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
@@ -54,7 +57,6 @@ fun ReportsScreen(
         ScreenState.Loading, ScreenState.Empty -> null
     }
     val report = reportContent?.report
-    val content = reportContent?.body
     val symbols = reportContent?.symbols.orEmpty()
     val tradePlans = reportContent?.tradePlans.orEmpty()
     val loading = reportsState is ScreenState.Loading
@@ -110,7 +112,7 @@ fun ReportsScreen(
                 MarketIndexSnapshotSummary(snapshot, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             }
             when (selectedTab) {
-                0 -> ReportContentView(content)
+                0 -> StructuredReportView(report.result, symbols)
                 1 -> SymbolListView(
                     symbols = symbols,
                     tradePlans = tradePlans,
@@ -118,7 +120,7 @@ fun ReportsScreen(
                     onSortOptionChange = { sortOptionName = it.name },
                     onSelect = { selectedSymbol = it },
                     onSubmitPlan = { symbol ->
-                        report.report_id?.let { reportId ->
+                        report.report_id.let { reportId ->
                             reportsViewModel.submitTradePlan(reportId, symbol) { message -> error = message }
                         }
                     },
@@ -132,28 +134,82 @@ fun ReportsScreen(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun ReportContentView(html: String?) {
-    if (html.isNullOrBlank()) {
-        EmptyPlaceholder("报告正文为空")
-        return
+private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>) {
+    val status = result.stringValue("run_status")
+    val decisionAt = result.stringValue("decision_at")
+    val buyDate = result.stringValue("buy_execution_date")
+    val sellDate = result.stringValue("t1_earliest_sell_date")
+    val risks = result.arrayValue("risks")
+    val eligible = result.arrayValue("formal_eligible_symbols")
+    val quality = result.objectValue("quality_summary")
+    val reason = result.stringValue("risk_reason_message")
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (result.isEmpty()) {
+            EmptyPlaceholder(
+                if (symbols.isEmpty()) "该报告没有可展示的结构化内容" else "报告摘要暂不可用，请切换到研究个股查看结果",
+            )
+            return@Column
+        }
+        Text("研究结论", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        KeyValueRow("运行状态", reportStatusLabel(status))
+        KeyValueRow("决策时间", formatReportValue(decisionAt))
+        KeyValueRow("买入执行日", formatReportValue(buyDate))
+        KeyValueRow("最早 T+1 卖出日", formatReportValue(sellDate))
+        KeyValueRow("正式候选", "${eligible.size} 只")
+        KeyValueRow("研究个股", "${symbols.size} 只")
+        reason?.takeIf(String::isNotBlank)?.let {
+            Text("风险说明", style = MaterialTheme.typography.titleSmall)
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        }
+        if (risks.isNotEmpty()) {
+            Text("风险提示", style = MaterialTheme.typography.titleSmall)
+            risks.forEach { value -> Text("• ${value.displayValue()}", style = MaterialTheme.typography.bodySmall) }
+        }
+        if (quality.isNotEmpty()) {
+            Text("数据质量", style = MaterialTheme.typography.titleSmall)
+            quality.forEach { (key, value) -> KeyValueRow(reportFieldLabel(key), value.displayValue()) }
+        }
+        Text(
+            "报告采用后端冻结的结构化研究结果；逐股票摘要和门禁原因请切换到“研究个股”。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
-    // 与 Web 端 sandbox iframe 等价的隔离：禁 JS、禁文件访问、只渲染静态 HTML
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = false
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
-                settings.blockNetworkLoads = false
-            }
-        },
-        update = { webView ->
-            webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
-        },
-        modifier = Modifier.fillMaxSize(),
-    )
+}
+
+private fun JsonObject.stringValue(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+private fun JsonObject.arrayValue(key: String): JsonArray = this[key] as? JsonArray ?: JsonArray(emptyList())
+private fun JsonObject.objectValue(key: String): JsonObject = this[key] as? JsonObject ?: JsonObject(emptyMap())
+
+private fun JsonElement.displayValue(): String = when (this) {
+    is JsonPrimitive -> contentOrNull ?: toString()
+    is JsonArray -> joinToString(", ") { it.displayValue() }
+    is JsonObject -> entries.joinToString(" · ") { "${reportFieldLabel(it.key)}: ${it.value.displayValue()}" }
+}
+
+private fun formatReportValue(value: String?): String = value?.takeIf(String::isNotBlank) ?: "--"
+
+private fun reportStatusLabel(value: String?): String = when (value) {
+    "SUCCEEDED" -> "已完成"
+    "FUSED" -> "融合观察"
+    "OBSERVE_ONLY" -> "仅观察"
+    else -> formatReportValue(value)
+}
+
+private fun reportFieldLabel(key: String): String = when (key) {
+    "symbol_count" -> "样本数"
+    "fundamental_placeholder_count" -> "基本面占位"
+    "sentiment_placeholder_count" -> "情绪占位"
+    "industry_placeholder_count" -> "行业占位"
+    else -> key
 }
 
 @Composable

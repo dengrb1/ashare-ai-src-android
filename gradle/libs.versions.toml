@@ -21,6 +21,7 @@ androidxTestExt = "1.2.1"
 espresso = "3.6.1"
 markdown = "0.32.0"
 focusApi = "1.4"
+jsoup = "1.18.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +55,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 markdown-material3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdown" }
 focus-api = { module = "com.xzakota.hyper.notification:focus-api", version.ref = "focusApi" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }
