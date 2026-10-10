@@ -77,6 +77,20 @@ class NotificationCenter(
         _state.value = _state.value.copy(error = null)
     }
 
+    /** Apply an SSE notification immediately; REST refresh remains the recovery path. */
+    fun receive(notification: Notification) {
+        val current = _state.value
+        if (current.unreadOnly && notification.read_at != null) return
+        val merged = (listOf(notification) + current.items)
+            .distinctBy { it.notification_id }
+            .sortedWith(compareByDescending<Notification> { it.created_at.orEmpty() }.thenByDescending { it.notification_id })
+        _state.value = current.copy(items = merged)
+        if (notification.read_at == null) {
+            onUnreadChanged(current.items.count { it.read_at == null } +
+                if (current.items.none { it.notification_id == notification.notification_id }) 1 else 0)
+        }
+    }
+
     private suspend fun load(reset: Boolean) {
         val current = _state.value
         if (current.loading || current.loadingMore) return

@@ -70,3 +70,9 @@ fun normalizeSymbol(input: String): String? {
     }
     return null
 }
+
+/** Compares securities across the six-digit and exchange-suffixed wire formats. */
+fun comparableSymbol(input: String): String? = normalizeSymbol(input)?.substringBefore('.')
+
+fun sameSymbol(left: String?, right: String?): Boolean =
+    left != null && right != null && comparableSymbol(left) == comparableSymbol(right)

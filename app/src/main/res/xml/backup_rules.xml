@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="file" path="datastore" />
+    <exclude domain="file" path="no_backup" />
+    <exclude domain="file" path="cache" />
+    <exclude domain="file" path="code_cache" />
+</full-backup-content>

@@ -1,6 +1,5 @@
 package com.ashareai.app.standalone.ui
 
-import android.os.Build
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,6 +52,7 @@ import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CandlestickChart
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
@@ -61,6 +61,8 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -101,9 +103,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.BlurEffect
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -116,7 +115,9 @@ import com.ashareai.app.ui.components.LiquidGlassBottomBar
 import com.ashareai.app.ui.components.LiquidGlassTab
 import com.ashareai.app.ui.theme.LocalGlassEnabled
 import com.ashareai.app.ui.theme.LocalPowerSaveMode
+import com.ashareai.app.ui.theme.LiquidGlassBackground
 import com.ashareai.app.workspace.SharedDataStore
+import com.ashareai.app.data.sameSymbol
 import com.ashareai.app.standalone.data.archive.ArchiveMergePreview
 import com.ashareai.app.standalone.data.archive.ArchiveMergeResolution
 import com.ashareai.app.standalone.domain.AlertKind
@@ -212,6 +213,7 @@ fun StandaloneAppRoot(
     }
     val navigateBack: () -> Unit = {
         navigateTo(when (route) {
+            "market_detail" -> "market"
             "ai_providers" -> "ai_agents"
             "ai_agents" -> "settings"
             else -> "home"
@@ -233,6 +235,11 @@ fun StandaloneAppRoot(
             viewModel.dismissMessage()
         }
     }
+    // 全局液体玻璃动画背景
+    LiquidGlassBackground(
+        modifier = Modifier.fillMaxSize(),
+        intensity = 0.18f,
+    ) {
     Scaffold(
         topBar = {
             GlassTopBar(route = route, onBack = navigateBack)
@@ -251,7 +258,7 @@ fun StandaloneAppRoot(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHost) },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         AnimatedContent(
@@ -283,17 +290,22 @@ fun StandaloneAppRoot(
                 navigate = ::navigateTo,
             )
             "market" -> MarketScreen(viewModel, Modifier.padding(padding)) { navigateTo(it) }
+            "market_detail" -> MarketDetailScreen(viewModel, Modifier.padding(padding), onBack = navigateBack)
             "assets" -> AssetsScreen(viewModel, Modifier.padding(padding))
             "alerts" -> AlertsScreen(viewModel, Modifier.padding(padding))
             "research" -> ResearchScreen(viewModel, Modifier.padding(padding))
             "reports" -> ReportsScreen(viewModel, Modifier.padding(padding)) { symbol ->
                 viewModel.refreshMarketSymbol(symbol)
-                navigateTo("market")
+                navigateTo("market_detail")
             }
             "candidates" -> CandidatesScreen(viewModel, Modifier.padding(padding))
             "portfolio" -> PortfolioScreen(viewModel, Modifier.padding(padding))
             "exit" -> ExitResearchScreen(viewModel, Modifier.padding(padding))
-            "notifications" -> NotificationsScreen(viewModel, Modifier.padding(padding))
+            "notifications" -> NotificationsScreen(
+                viewModel,
+                Modifier.padding(padding),
+                onNavigate = ::navigateTo,
+            )
             "chat" -> ChatScreen(viewModel, Modifier.padding(padding))
             "ai_agents" -> AiAgentConfigScreen(
                 providers = viewModel.aiProviders.collectAsState().value,
@@ -342,6 +354,7 @@ fun StandaloneAppRoot(
         }
         }
     }
+    }
 }
 
 private data class BottomDestination(
@@ -378,23 +391,14 @@ private fun GlassTopBar(route: String, onBack: () -> Unit) {
                         Modifier.background(
                             Brush.horizontalGradient(
                                 listOf(
-                                    MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.88f else 0.85f),
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.16f else 0.22f),
-                                    MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.85f else 0.82f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.70f else 0.68f),
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.22f else 0.28f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.68f else 0.64f),
                                 ),
                             ),
                         )
                     } else {
                         Modifier.background(MaterialTheme.colorScheme.surface)
-                    }
-                )
-                .then(
-                    if (glassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        Modifier.graphicsLayer {
-                            renderEffect = BlurEffect(18f, 18f, TileMode.Clamp)
-                        }
-                    } else {
-                        Modifier
                     }
                 )
                 .drawWithContent {
@@ -477,6 +481,53 @@ private fun HomeScreen(
         if (market.indexQuotes.isEmpty()) viewModel.loadMarketIndices()
     }
     ScreenColumn(modifier) {
+        // Portfolio status is the primary home-screen signal and stays above
+        // onboarding, market and research summaries.
+        InfoCard(
+            title = "持仓监控",
+            text = if (settings.monitoringEnabled) {
+                "交易时段每 " + settings.monitoringIntervalSeconds + " 秒检查实际持仓；非交易时段无网络轮询。"
+            } else {
+                "已关闭。"
+            },
+        ) {
+            Button(onClick = viewModel::refreshHoldingQuotes) { Text("手动刷新持仓") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { navigate("assets") }) { Text("编辑持仓") }
+        }
+        SectionTitle("持仓与缓存报价")
+        if (holdingsWithQuotes.isEmpty()) {
+            EmptyState("尚未添加持仓", "添加持仓后才会启动后台行情监控。")
+        }
+        holdingsWithQuotes.sortedBy { pair -> pair.second?.changePercent ?: -Double.MAX_VALUE }.forEach { (holding, quote) ->
+            ContentCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(holding.name + " · " + holding.symbol, fontWeight = FontWeight.SemiBold)
+                    val price = quote?.lastPrice?.toString() ?: "暂无报价"
+                    Text("成本 " + holding.averageCost + " · 数量 " + holding.quantity + " · 现价 " + price)
+                    val pnl = quote?.lastPrice?.let { (it - holding.averageCost) * holding.quantity }
+                    val pnlPercent = quote?.lastPrice?.let { (it / holding.averageCost - 1.0) * 100.0 }
+                    Text(
+                        "浮动盈亏 ${pnl?.let { "%+.2f".format(Locale.US, it) } ?: "--"} · ${pnlPercent?.let { "%+.2f%%".format(Locale.US, it) } ?: "--"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if ((pnl ?: 0.0) >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                    val riskText = when {
+                        quote == null -> "风险数据等待行情"
+                        quote.lastPrice != null && quote.lastPrice < holding.averageCost * 0.92 -> "已跌破参考止损线"
+                        quote.lastPrice != null -> "距参考止损线 ${(quote.lastPrice - holding.averageCost * 0.92).let { "%.2f".format(Locale.US, it) }}"
+                        else -> "风险线未触发"
+                    }
+                    Text(riskText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    quote?.let {
+                        Text(
+                            "来源 " + it.provider + " · " + freshnessLabel(it.freshness) + " · " + formatTime(it.fetchedAt),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
         if (!permissionState.notificationsGranted || !permissionState.batteryUnrestricted) {
             PermissionCard(
                 state = permissionState,
@@ -548,51 +599,6 @@ private fun HomeScreen(
                 Text("缓存：${if (aiStatus.cacheEnabled) "已启用" else "未启用"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        InfoCard(
-            title = "持仓监控",
-            text = if (settings.monitoringEnabled) {
-                "交易时段每 " + settings.monitoringIntervalSeconds + " 秒检查实际持仓；非交易时段无网络轮询。"
-            } else {
-                "已关闭。"
-            },
-        ) {
-            Button(onClick = viewModel::refreshHoldingQuotes) { Text("手动刷新持仓") }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { navigate("assets") }) { Text("编辑持仓") }
-        }
-        SectionTitle("持仓与缓存报价")
-        if (holdingsWithQuotes.isEmpty()) {
-            EmptyState("尚未添加持仓", "添加持仓后才会启动后台行情监控。")
-        }
-        holdingsWithQuotes.sortedBy { pair -> pair.second?.changePercent ?: -Double.MAX_VALUE }.forEach { (holding, quote) ->
-            ContentCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(holding.name + " · " + holding.symbol, fontWeight = FontWeight.SemiBold)
-                    val price = quote?.lastPrice?.toString() ?: "暂无报价"
-                    Text("成本 " + holding.averageCost + " · 数量 " + holding.quantity + " · 现价 " + price)
-                    val pnl = quote?.lastPrice?.let { (it - holding.averageCost) * holding.quantity }
-                    val pnlPercent = quote?.lastPrice?.let { (it / holding.averageCost - 1.0) * 100.0 }
-                    Text(
-                        "浮动盈亏 ${pnl?.let { "%+.2f".format(Locale.US, it) } ?: "--"} · ${pnlPercent?.let { "%+.2f%%".format(Locale.US, it) } ?: "--"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if ((pnl ?: 0.0) >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    )
-                    val riskText = when {
-                        quote == null -> "风险数据等待行情"
-                        quote.lastPrice != null && quote.lastPrice < holding.averageCost * 0.92 -> "已跌破参考止损线"
-                        quote.lastPrice != null -> "距参考止损线 ${(quote.lastPrice - holding.averageCost * 0.92).let { "%.2f".format(Locale.US, it) }}"
-                        else -> "风险线未触发"
-                    }
-                    Text(riskText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    quote?.let {
-                        Text(
-                            "来源 " + it.provider + " · " + freshnessLabel(it.freshness) + " · " + formatTime(it.fetchedAt),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-            }
-        }
         SectionTitle("快速入口")
         listOf(
             "行情" to "market",
@@ -661,20 +667,9 @@ private fun MarketScreen(
     navigate: (String) -> Unit,
 ) {
     val state by viewModel.marketState.collectAsState()
-    val holdings by viewModel.holdings.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
-    var subChart by rememberSaveable { mutableStateOf(StandaloneSubChart.VOLUME) }
-    var range by rememberSaveable { mutableStateOf(StandaloneKlineRange.MONTH_3) }
-    val displayedCandles = remember(state.candles, range) { selectKlineRange(state.candles, range) }
-    val personalSecurities = remember(holdings, watchlist) {
-        (holdings.map { it.symbol to it.name } + watchlist.map { it.symbol to it.name }).distinctBy { it.first }
-    }
-    val searchResults = remember(state.catalog, state.query) {
-        val query = state.query.trim()
-        state.catalog.filter {
-            query.isBlank() || it.symbol.contains(query) || it.name.contains(query, ignoreCase = true)
-        }.take(16)
-    }
+    var viewMode by rememberSaveable { mutableStateOf("watchlist") }
+    val searchResults = state.suggestions
     LaunchedEffect(Unit) {
         if (state.quote == null) viewModel.refreshMarketSymbol()
         if (state.indexQuotes.isEmpty()) viewModel.loadMarketIndices()
@@ -683,8 +678,8 @@ private fun MarketScreen(
     ScreenColumn(modifier) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Row(
@@ -695,7 +690,7 @@ private fun MarketScreen(
                 value = state.query,
                 onValueChange = viewModel::updateMarketQuery,
                 label = { Text("搜索股票") },
-                placeholder = { Text("代码或名称") },
+                placeholder = { Text("输入中文名称或 6 位代码") },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
@@ -718,23 +713,42 @@ private fun MarketScreen(
                 }
             }
         }
-        if (personalSecurities.isNotEmpty()) {
-            Text("我的股票", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                personalSecurities.forEach { (symbol, name) ->
-                    FilterChip(
-                        selected = state.quote?.symbol == symbol,
-                        onClick = { viewModel.refreshMarketSymbol(symbol) },
-                        label = { Text("$name $symbol", maxLines = 1) },
+        LiquidGlassSegmentedControl {
+            listOf("watchlist" to "自选", "market" to "全市场").forEach { (value, label) ->
+                val selected = viewMode == value
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                        .selectable(selected = selected, onClick = { viewMode = value }, role = Role.Tab),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (viewMode == "watchlist") {
+            Text("自选股票", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            if (watchlist.isEmpty()) {
+                EmptyState("暂无自选股票", "搜索股票后点击星标即可加入自选。")
+            } else {
+                watchlist.forEach { item ->
+                    val selected = state.quote?.symbol == item.symbol
+                    MarketCatalogRow(
+                        name = item.name,
+                        symbol = item.symbol,
+                        exchange = "自选",
+                        selected = selected,
+                        onClick = { viewModel.refreshMarketSymbol(item.symbol) },
+                        onRemove = { viewModel.removeWatchlist(item.symbol) },
                     )
                 }
             }
         }
-        if (state.query.isNotBlank() && searchResults.none { it.symbol == state.quote?.symbol }) {
-            Text("搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (viewMode == "market" && state.query.trim().length >= 2 && state.quote?.symbol != state.query.trim() && !state.loading) {
+            Text("匹配股票", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             searchResults.take(6).forEach { security ->
                 MarketCatalogRow(
                     name = security.name,
@@ -743,6 +757,15 @@ private fun MarketScreen(
                     selected = false,
                     onClick = { viewModel.refreshMarketSymbol(security.symbol) },
                 )
+            }
+            if (state.suggestionsLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("正在搜索...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else if (searchResults.isEmpty()) {
+                Text("没有找到匹配的股票，请尝试输入完整名称或代码", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         MarketIndexStrip(
@@ -767,50 +790,16 @@ private fun MarketScreen(
             MarketQuotePanel(
                 quote = quote,
                 latestCandle = state.candles.lastOrNull(),
-                onAddWatchlist = { viewModel.addWatchlist(quote.symbol, quote.name) },
+                inWatchlist = watchlist.any { sameSymbol(it.symbol, quote.symbol) },
+                watchlistSaving = state.watchlistSaving,
+                watchlistError = state.watchlistError,
+                onToggleWatchlist = { viewModel.toggleWatchlist(quote.symbol, quote.name) },
                 onAddHolding = { navigate("assets") },
+                onOpenDetail = { navigate("market_detail") },
             )
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Text("日 K 线", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("前复权 · ${range.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                if (displayedCandles.isEmpty()) "无数据" else "${displayedCandles.size} 根",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        GlassKlineRangeSelector(selected = range, onSelected = { range = it })
-        GlassSubChartSelector(selected = subChart, onSelected = { subChart = it })
-        Surface(
-            modifier = Modifier.fillMaxWidth().height(370.dp),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            StandaloneCandlestickChart(
-                candles = displayedCandles,
-                subChart = subChart,
-                modifier = Modifier.fillMaxSize().padding(12.dp),
-            )
-        }
-        Text(
-            if (displayedCandles.isEmpty()) {
-                "尚无 K 线缓存"
-            } else {
-                "双指缩放或拖动查看历史；长按显示十字光标 · ${displayedCandles.first().tradingDate} 至 ${displayedCandles.last().tradingDate}"
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (state.query.isBlank()) SectionTitle("证券目录")
+        Text("点击股票进入完整 K 线与研究", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (viewMode == "market" && state.query.isBlank()) SectionTitle("证券目录")
         if (state.catalog.isEmpty()) {
             EmptyState(
                 title = "证券目录尚未加载",
@@ -820,8 +809,8 @@ private fun MarketScreen(
                 Text("加载目录")
             }
         }
-        if (state.query.isBlank()) {
-            searchResults.forEach { security ->
+        if (viewMode == "market" && state.query.isBlank()) {
+            state.catalog.take(16).forEach { security ->
                 MarketCatalogRow(
                     name = security.name,
                     symbol = security.symbol,
@@ -884,7 +873,7 @@ private fun LiquidGlassSegmentedControl(
         shape = RoundedCornerShape(22.dp),
         // Keep this control on an opaque surface. Transparent weighted children
         // can expose a bright strip when composed over the glass layer.
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (dark) 0.72f else 0.78f),
         border = BorderStroke(
             1.dp,
             Brush.verticalGradient(
@@ -901,7 +890,7 @@ private fun LiquidGlassSegmentedControl(
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
                 .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (dark) 0.72f else 0.78f))
                 .height(54.dp)
                 .padding(5.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -914,8 +903,12 @@ private fun LiquidGlassSegmentedControl(
 private fun MarketQuotePanel(
     quote: MarketQuote,
     latestCandle: DailyCandle?,
-    onAddWatchlist: () -> Unit,
+    inWatchlist: Boolean,
+    watchlistSaving: Boolean,
+    watchlistError: String?,
+    onToggleWatchlist: () -> Unit,
     onAddHolding: () -> Unit,
+    onOpenDetail: () -> Unit,
 ) {
     val change = if (quote.lastPrice != null && quote.previousClose != null) {
         quote.lastPrice - quote.previousClose
@@ -990,10 +983,110 @@ private fun MarketQuotePanel(
                 MarketDetailStat("K线日期", latestCandle?.tradingDate?.toString() ?: "--")
                 MarketDetailStat("采集时间", formatTime(quote.fetchedAt))
             }
+            watchlistError?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
             AdaptiveActionRow {
-                Button(onClick = onAddWatchlist) { Text("加入自选") }
+                OutlinedButton(onClick = onOpenDetail) { Text("查看完整 K 线") }
+                Button(onClick = onToggleWatchlist, enabled = !watchlistSaving) {
+                    Icon(
+                        if (inWatchlist) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (inWatchlist) "取消自选" else "加入自选")
+                }
                 OutlinedButton(onClick = onAddHolding) { Text("添加为持仓") }
             }
+        }
+    }
+}
+
+@Composable
+private fun MarketDetailScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    onBack: () -> Unit,
+) {
+    val state by viewModel.marketState.collectAsState()
+    val reports by viewModel.reports.collectAsState()
+    val candidates by viewModel.candidates.collectAsState()
+    var subChart by rememberSaveable { mutableStateOf(StandaloneSubChart.VOLUME) }
+    var range by rememberSaveable { mutableStateOf(StandaloneKlineRange.MONTH_3) }
+    val candles = remember(state.candles, range) { selectKlineRange(state.candles, range) }
+    val quote = state.quote
+    ScreenColumn(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回行情") }
+            Column(Modifier.weight(1f)) {
+                Text(quote?.name ?: "行情详情", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(quote?.symbol ?: "选择一只股票查看详情", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            quote?.let { Text(it.lastPrice?.formatMarketNumber() ?: "--", style = MaterialTheme.typography.titleMedium, color = stockChangeColor(it.changePercent)) }
+        }
+        if (quote == null) {
+            EmptyState("尚未选择股票", "返回行情页，从自选或搜索结果中选择一只股票。")
+            return@ScreenColumn
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(quote.lastPrice?.formatMarketNumber() ?: "--", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = stockChangeColor(quote.changePercent))
+                    Spacer(Modifier.width(10.dp))
+                    Text(quote.changePercent?.let { signedMarketNumber(it) + "%" } ?: "--", color = stockChangeColor(quote.changePercent), fontWeight = FontWeight.SemiBold)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    MarketDetailStat("今开", candles.lastOrNull()?.open?.formatMarketNumber() ?: "--")
+                    MarketDetailStat("最高", candles.maxOfOrNull { it.high }?.formatMarketNumber() ?: "--")
+                    MarketDetailStat("最低", candles.minOfOrNull { it.low }?.formatMarketNumber() ?: "--")
+                    MarketDetailStat("成交量", formatMarketVolume(quote.volume))
+                }
+            }
+        }
+        SectionTitle("K 线走势")
+        GlassKlineRangeSelector(selected = range, onSelected = { range = it })
+        GlassSubChartSelector(selected = subChart, onSelected = { subChart = it })
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(470.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            StandaloneCandlestickChart(candles = candles, subChart = subChart, modifier = Modifier.fillMaxSize().padding(12.dp))
+        }
+        Text(
+            if (candles.isEmpty()) "暂无 K 线缓存，刷新行情后重试" else "${candles.size} 根 · ${candles.first().tradingDate} 至 ${candles.last().tradingDate} · 支持缩放、拖动和长按定位",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SectionTitle("关联研究")
+        val relatedCandidate = candidates.firstOrNull { sameSymbol(it.symbol, quote.symbol) }
+        if (relatedCandidate != null) {
+            InfoCard(title = "候选评分 ${"%.1f".format(Locale.US, relatedCandidate.score)}", text = relatedCandidate.reason)
+        }
+        val relatedReport = reports.firstOrNull { report ->
+            report.deterministicBody.contains(quote.symbol) || report.title.contains(quote.name)
+        }
+        if (relatedReport != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(relatedReport.title, fontWeight = FontWeight.SemiBold)
+                    Text(relatedReport.deterministicBody.take(420), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("报告结论只作研究参考，评分和门槛来自确定性引擎。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            EmptyState("暂无关联报告", "在研究页运行这只股票后，报告摘要会显示在这里。")
         }
     }
 }
@@ -1055,6 +1148,7 @@ private fun MarketCatalogRow(
     exchange: String,
     selected: Boolean,
     onClick: () -> Unit,
+    onRemove: (() -> Unit)? = null,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -1071,6 +1165,11 @@ private fun MarketCatalogRow(
                 Text(symbol, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(exchange, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            onRemove?.let { remove ->
+                IconButton(onClick = remove) {
+                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "移除自选")
+                }
+            }
         }
     }
 }
@@ -1122,25 +1221,113 @@ private fun ListItemSurface(
 private fun AssetsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     val holdings by viewModel.holdings.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
+    val marketState by viewModel.marketState.collectAsState()
+    var mode by rememberSaveable { mutableStateOf("holding") }
     var symbol by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
     var quantity by rememberSaveable { mutableStateOf("") }
     var cost by rememberSaveable { mutableStateOf("") }
-    var watchSymbol by rememberSaveable { mutableStateOf("") }
-    var watchName by rememberSaveable { mutableStateOf("") }
+    var search by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(Unit) { if (marketState.catalog.isEmpty()) viewModel.loadCatalog(500) }
+    val catalogMatches = remember(search, marketState.catalog) {
+        marketState.catalog.filter {
+            search.isNotBlank() && (it.symbol.contains(search.trim(), ignoreCase = true) || it.name.contains(search.trim(), ignoreCase = true))
+        }.take(8)
+    }
+    fun selectSecurity(selectedSymbol: String, selectedName: String) {
+        symbol = selectedSymbol
+        name = selectedName
+        search = selectedName
+    }
     ScreenColumn(modifier) {
-        SectionTitle("新增/更新持仓")
-        OutlinedTextField(symbol, { symbol = it }, label = { Text("证券代码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(name, { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(quantity, { quantity = it }, label = { Text("数量") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(cost, { cost = it }, label = { Text("平均成本") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(
-            onClick = {
-                viewModel.saveHolding(symbol.trim(), name.trim(), quantity.toDoubleOrNull() ?: 0.0, cost.toDoubleOrNull() ?: 0.0)
-                symbol = ""; name = ""; quantity = ""; cost = ""
-            },
+        LiquidGlassSegmentedControl {
+            listOf("holding" to "新增持仓", "watchlist" to "新增自选").forEach { (value, label) ->
+                val selected = mode == value
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp))
+                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                        .selectable(selected = selected, onClick = { mode = value }, role = Role.Tab),
+                    contentAlignment = Alignment.Center,
+                ) { Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        SectionTitle(if (mode == "holding") "选择证券并填写持仓" else "选择要关注的证券")
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            label = { Text("搜索名称或 6 位代码") },
+            placeholder = { Text("先从自选快捷选择，也可搜索全市场") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存持仓并生成 ATR 止损线") }
+            singleLine = true,
+        )
+        if (watchlist.isNotEmpty()) {
+            Text("我的自选", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                watchlist.forEach { item ->
+                    FilterChip(
+                        selected = symbol == item.symbol,
+                        onClick = { selectSecurity(item.symbol, item.name) },
+                        label = { Text("${item.name} ${item.symbol}", maxLines = 1) },
+                    )
+                }
+            }
+        }
+        if (catalogMatches.isNotEmpty()) {
+            Text("匹配结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            catalogMatches.forEach { item ->
+                MarketCatalogRow(
+                    name = item.name,
+                    symbol = item.symbol,
+                    exchange = item.exchange,
+                    selected = symbol == item.symbol,
+                    onClick = { selectSecurity(item.symbol, item.name) },
+                )
+            }
+        }
+        if (search.trim().length == 6 && search.trim().all(Char::isDigit) && symbol != search.trim()) {
+            TextButton(onClick = { selectSecurity(search.trim(), search.trim()) }) {
+                Text("使用代码 ${search.trim()}（名称稍后可在行情页补全）")
+            }
+        }
+        if (symbol.isNotBlank()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(name.ifBlank { "未命名证券" }, fontWeight = FontWeight.SemiBold)
+                        Text(symbol, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { symbol = ""; name = "" }) { Text("清除") }
+                }
+            }
+        }
+        if (mode == "holding") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(quantity, { quantity = it }, label = { Text("数量") }, modifier = Modifier.weight(1f), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(cost, { cost = it }, label = { Text("平均成本") }, modifier = Modifier.weight(1f), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            }
+            Button(
+                onClick = {
+                    viewModel.saveHolding(symbol.trim(), name.trim(), quantity.toDoubleOrNull() ?: 0.0, cost.toDoubleOrNull() ?: 0.0)
+                    symbol = ""; name = ""; search = ""; quantity = ""; cost = ""
+                },
+                enabled = symbol.length == 6 && quantity.toDoubleOrNull() != null && cost.toDoubleOrNull() != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("保存持仓") }
+        } else {
+            Button(
+                onClick = {
+                    viewModel.addWatchlist(symbol.trim(), name.trim())
+                    symbol = ""; name = ""; search = ""
+                },
+                enabled = symbol.length == 6,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("加入自选") }
+        }
         SectionTitle("当前持仓")
         if (holdings.isEmpty()) EmptyState("暂无持仓", "填写证券代码、数量和成本后保存。")
         holdings.forEach {
@@ -1156,16 +1343,7 @@ private fun AssetsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
                 TextButton(onClick = { viewModel.removeHolding(it.symbol) }) { Text("移除") }
             }
         }
-        SectionTitle("新增自选")
-        OutlinedTextField(watchSymbol, { watchSymbol = it }, label = { Text("证券代码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(watchName, { watchName = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Button(
-            onClick = {
-                viewModel.addWatchlist(watchSymbol.trim(), watchName.trim())
-                watchSymbol = ""; watchName = ""
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存自选") }
+        SectionTitle("当前自选")
         if (watchlist.isEmpty()) EmptyState("暂无自选", "添加证券后可在行情页快速查看。")
         watchlist.forEach {
             ListItemSurface {
@@ -1668,7 +1846,11 @@ private fun ExitResearchScreen(viewModel: StandaloneViewModel, modifier: Modifie
 }
 
 @Composable
-private fun NotificationsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
+private fun NotificationsScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    onNavigate: (String) -> Unit,
+) {
     val notifications by viewModel.notifications.collectAsState()
     ScreenColumn(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1681,7 +1863,10 @@ private fun NotificationsScreen(viewModel: StandaloneViewModel, modifier: Modifi
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                    .clickable { viewModel.markNotificationRead(it.id) },
+                    .clickable {
+                        viewModel.markNotificationRead(it.id)
+                        if (it.deepLink != "notifications") onNavigate(it.deepLink)
+                    },
                 colors = CardDefaults.cardColors(
                     containerColor = if (it.isRead) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer,
                 ),
@@ -2296,6 +2481,7 @@ private fun SwitchRow(
 private fun routeTitle(route: String): String = when (route) {
     "home" -> "本地总览"
     "market" -> "行情与 K 线"
+    "market_detail" -> "行情详情与研究"
     "assets" -> "持仓与自选"
     "alerts" -> "提醒规则"
     "research" -> "本地研究"
@@ -2315,6 +2501,7 @@ private fun routeTitle(route: String): String = when (route) {
 private val routes = setOf(
     "home",
     "market",
+    "market_detail",
     "assets",
     "alerts",
     "research",

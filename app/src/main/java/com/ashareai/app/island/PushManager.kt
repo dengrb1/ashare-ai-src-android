@@ -108,6 +108,7 @@ object PushManager {
         if (clicked) {
             context.startActivity(Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_WORKSPACE, "FUSION")
                 putExtra(MainActivity.EXTRA_ROUTE, NotificationNavigation.forNotification(notice))
                 putExtra(MainActivity.EXTRA_NOTIFICATION_ID, notificationId)
             })
@@ -148,6 +149,7 @@ object PushManager {
             notice.notification_id.hashCode(),
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_WORKSPACE, "FUSION")
                 putExtra(MainActivity.EXTRA_ROUTE, route)
                 putExtra(MainActivity.EXTRA_NOTIFICATION_ID, notice.notification_id)
             },

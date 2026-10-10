@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,6 +78,15 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             }
 
             item {
+                PnlSummaryCard(
+                    positions = assets?.positions ?: emptyList(),
+                    totalAssets = assets?.total_assets,
+                    quotes = quotes,
+                    onClick = { navController.navigate(Routes.ASSETS) },
+                )
+            }
+
+            item {
                 val connection by appViewModel.connection.collectAsState()
                 connection?.let { probe ->
                     AppCard {
@@ -140,15 +150,6 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             }
 
             item {
-                PnlSummaryCard(
-                    positions = assets?.positions ?: emptyList(),
-                    totalAssets = assets?.total_assets,
-                    quotes = quotes,
-                    onClick = { navController.navigate(Routes.ASSETS) },
-                )
-            }
-
-            item {
                 AppCard {
                     Text("研究工作台", style = MaterialTheme.typography.titleSmall)
                     Text(
@@ -176,9 +177,11 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
             } else {
                 items(watchSymbols) { symbol ->
                     val quote = quotes[symbol]
-                    QuoteRow(symbol = symbol, quote = quote) {
-                        navController.navigate(Routes.stockDetail(symbol))
-                    }
+                    QuoteRow(
+                        symbol = symbol,
+                        quote = quote,
+                        onClick = { navController.navigate(Routes.stockDetail(symbol)) },
+                    )
                 }
             }
 
@@ -299,7 +302,12 @@ private fun MiniStat(label: String, value: String) {
 }
 
 @Composable
-fun QuoteRow(symbol: String, quote: Quote?, onClick: () -> Unit) {
+fun QuoteRow(
+    symbol: String,
+    quote: Quote?,
+    onClick: () -> Unit,
+    onWatchlistToggle: (() -> Unit)? = null,
+) {
     AppCard(modifier = Modifier.clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -323,6 +331,11 @@ fun QuoteRow(symbol: String, quote: Quote?, onClick: () -> Unit) {
                     text = quote?.change_percent.fmtPercent(),
                     style = MaterialTheme.typography.labelMedium,
                 )
+            }
+            onWatchlistToggle?.let { toggle ->
+                IconButton(onClick = toggle) {
+                    Icon(Icons.Outlined.Star, contentDescription = "取消自选", tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }

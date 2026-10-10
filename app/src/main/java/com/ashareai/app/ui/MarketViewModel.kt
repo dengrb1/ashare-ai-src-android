@@ -114,14 +114,34 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private fun startNotificationStream() {
         if (notificationStreamJob?.isActive == true) return
         notificationStreamJob = viewModelScope.launch {
-            NotificationStreamClient.stream(settings).collect { event ->
-                when (event) {
-                    is NotificationStreamEvent.NotificationEvent,
-                    is NotificationStreamEvent.Status -> notificationCenter.refresh()
-                    else -> Unit
+            var since: String? = null
+            while (signedIn && foreground) {
+                runCatching {
+                    NotificationStreamClient.stream(settings, since = since).collect { event ->
+                        when (event) {
+                            is NotificationStreamEvent.NotificationEvent -> {
+                                since = event.notification.created_at ?: since
+                                notificationCenter.receive(event.notification)
+                                notificationCenter.refresh()
+                            }
+                            is NotificationStreamEvent.Status -> notificationCenter.refresh()
+                            is NotificationStreamEvent.Failure,
+                            NotificationStreamEvent.Closed -> Unit
+                        }
+                    }
+                }
+                if (signedIn && foreground) {
+                    // Recover the tail before reconnecting so a short outage does
+                    // not leave the badge or notification center stale.
+                    notificationCenter.refresh()
+                    delay(NOTIFICATION_RECONNECT_DELAY_MS)
                 }
             }
         }
+    }
+
+    private companion object {
+        const val NOTIFICATION_RECONNECT_DELAY_MS = 2_000L
     }
 
     fun refreshAll() = viewModelScope.launch { refreshAllInternal() }

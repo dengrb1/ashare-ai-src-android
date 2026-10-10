@@ -12,6 +12,19 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
+internal fun parseEastMoneySuggestions(payload: String, json: Json, limit: Int): List<Security> {
+    val data = json.parseToJsonElement(payload).jsonObject["QuotationCodeTable"]
+        ?.jsonObject?.get("Data") as? JsonArray ?: return emptyList()
+    return data.mapNotNull { value ->
+        val item = value as? JsonObject ?: return@mapNotNull null
+        val symbol = item.string("Code")?.takeIf { it.length == 6 && it.all(Char::isDigit) }
+            ?: return@mapNotNull null
+        val name = item.string("Name") ?: symbol
+        val exchange = if (item.string("MktNum") == "1") "SH" else "SZ"
+        Security(symbol, name, exchange)
+    }.distinctBy(Security::symbol).take(limit.coerceIn(1, 24))
+}
+
 internal fun parseEastMoneyCatalog(payload: String, json: Json): List<Security> =
     eastMoneyDiff(payload, json).mapNotNull { item ->
         val symbol = item.string("f12") ?: return@mapNotNull null

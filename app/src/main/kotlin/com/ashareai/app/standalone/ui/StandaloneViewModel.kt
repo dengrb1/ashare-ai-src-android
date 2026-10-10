@@ -25,6 +25,7 @@ import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.ResearchRequest
 import com.ashareai.app.standalone.domain.ResearchScope
 import com.ashareai.app.standalone.domain.WatchlistItem
+import com.ashareai.app.data.comparableSymbol
 import com.ashareai.app.standalone.monitor.MarketMonitorService
 import com.ashareai.app.standalone.research.DeterministicResearchEngine
 import com.ashareai.app.standalone.research.ExitResearch
@@ -40,18 +41,25 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 
 data class MarketUiState(
     val query: String = "600519",
     val catalog: List<com.ashareai.app.standalone.domain.Security> = emptyList(),
+    val suggestions: List<com.ashareai.app.standalone.domain.Security> = emptyList(),
+    val suggestionsLoading: Boolean = false,
     val quote: MarketQuote? = null,
+    val selectedSymbol: String? = null,
     val candles: List<com.ashareai.app.standalone.domain.DailyCandle> = emptyList(),
     val indexQuotes: List<MarketQuote> = emptyList(),
     val indicesLoading: Boolean = false,
     val loading: Boolean = false,
     val message: String? = null,
+    val watchlistSaving: Boolean = false,
+    val watchlistError: String? = null,
 )
 
 data class AiStatusUiState(
@@ -75,6 +83,7 @@ class StandaloneViewModel(
     private val exitEngine = ExitResearchEngine(alertEvaluator)
     private val researchSubmitMutex = Mutex()
     private val catalogLoadMutex = Mutex()
+    private var lookupJob: Job? = null
 
     // 省电模式管理器
     private val powerSaverManager = com.ashareai.app.ui.PowerSaverManager(appContext)
@@ -171,7 +180,27 @@ class StandaloneViewModel(
     }
 
     fun updateMarketQuery(query: String) {
-        _marketState.update { it.copy(query = query.take(30), message = null) }
+        val next = query.take(30)
+        _marketState.update {
+            it.copy(
+                query = next,
+                suggestions = emptyList(),
+                suggestionsLoading = next.trim().length >= 2,
+                message = null,
+            )
+        }
+        lookupJob?.cancel()
+        if (next.trim().length < 2) return
+        lookupJob = viewModelScope.launch {
+            delay(220)
+            val needle = next.trim()
+            val localMatches = marketState.value.catalog.asSequence()
+                .filter { it.symbol.contains(needle, ignoreCase = true) || it.name.contains(needle, ignoreCase = true) }
+                .take(12)
+                .toList()
+            val matches = if (localMatches.isNotEmpty()) localMatches else market.searchSecurities(needle, 12)
+            _marketState.update { it.copy(suggestions = matches, suggestionsLoading = false) }
+        }
     }
 
     fun refreshMarketSymbol(symbol: String = marketState.value.query) {
@@ -184,17 +213,43 @@ class StandaloneViewModel(
             _marketState.update { it.copy(message = "请输入 6 位证券代码，或从搜索结果选择股票") }
             return
         }
+        lookupJob?.cancel()
         viewModelScope.launch {
-            _marketState.update { it.copy(query = normalized, loading = true, message = null) }
-            val quote = market.refreshQuote(normalized)
-            val candles = market.dailyCandles(normalized, 365, forceRefresh = true)
             _marketState.update {
-                it.copy(
-                    quote = quote,
-                    candles = candles,
-                    loading = false,
-                    message = if (quote.lastPrice == null) "行情源不可用，未使用虚构数据" else null,
-                )
+                it.copy(query = normalized, selectedSymbol = normalized, suggestions = emptyList(), suggestionsLoading = false, loading = true, message = null, watchlistError = null)
+            }
+            runCatching {
+                val quote = market.refreshQuote(normalized)
+                val candles = market.dailyCandles(normalized, 365, forceRefresh = false)
+                _marketState.update {
+                    it.copy(
+                        quote = quote,
+                        candles = candles,
+                        loading = false,
+                        message = if (quote.lastPrice == null) "行情源暂不可用，已保留缓存结果" else null,
+                    )
+                }
+            }.onFailure { error ->
+                _marketState.update {
+                    it.copy(loading = false, message = error.message ?: "行情加载失败，请稍后重试")
+                }
+            }
+        }
+    }
+
+    fun toggleWatchlist(symbol: String, name: String) {
+        val normalized = symbol.trim().takeIf { it.length == 6 && it.all(Char::isDigit) } ?: return
+        val current = watchlist.value
+        val exists = current.any { comparableSymbol(it.symbol) == normalized }
+        _marketState.update { it.copy(watchlistSaving = true, watchlistError = null) }
+        viewModelScope.launch {
+            runCatching {
+                if (exists) local.removeWatchlist(normalized)
+                else local.saveWatchlist(WatchlistItem(normalized, name.ifBlank { normalized }, System.currentTimeMillis()))
+            }.onSuccess {
+                _marketState.update { it.copy(watchlistSaving = false) }
+            }.onFailure { error ->
+                _marketState.update { it.copy(watchlistSaving = false, watchlistError = error.message ?: "自选状态保存失败") }
             }
         }
     }

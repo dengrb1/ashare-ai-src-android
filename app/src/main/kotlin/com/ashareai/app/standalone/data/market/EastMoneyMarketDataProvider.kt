@@ -43,6 +43,18 @@ class EastMoneyMarketDataProvider(
         return parseEastMoneyCatalog(get(url), json)
     }
 
+    override suspend fun searchSecurities(query: String, limit: Int): List<Security> {
+        val input = query.trim().take(32)
+        if (input.isBlank()) return emptyList()
+        val url = "https://searchapi.eastmoney.com/api/suggest/get".toHttpUrl().newBuilder()
+            .addQueryParameter("input", input)
+            .addQueryParameter("type", "14")
+            .addQueryParameter("token", "11111111")
+            .addQueryParameter("count", limit.coerceIn(1, 24).toString())
+            .build()
+        return parseEastMoneySuggestions(get(url), json, limit)
+    }
+
     override suspend fun quotes(symbols: List<String>): List<MarketQuote> {
         if (symbols.isEmpty()) return emptyList()
         return symbols.distinct().chunked(50).flatMap { chunk ->

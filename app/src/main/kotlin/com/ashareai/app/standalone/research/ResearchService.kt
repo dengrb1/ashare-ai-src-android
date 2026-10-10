@@ -6,6 +6,8 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.ashareai.app.HybridApp
+import com.ashareai.app.performance.AutomaticTrainingPolicy
+import com.ashareai.app.performance.DeviceResourcePolicy
 import com.ashareai.app.standalone.notifications.NotificationRepository
 import com.ashareai.app.standalone.work.ResearchFallbackWorker
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +34,24 @@ class ResearchService : Service() {
         runJob = serviceScope.launch {
             val queuedRun = app.localContainer.local.researchRun(runId)
             val notificationTitle = queuedRun?.automaticReportSlot?.let { "自动研究报告 $it" } ?: "本地研究"
+            if (queuedRun?.triggerSource == com.ashareai.app.standalone.domain.ResearchTriggerSource.AUTO) {
+                val eligibility = AutomaticTrainingPolicy.evaluate(
+                    DeviceResourcePolicy.snapshot(this@ResearchService, appForeground = false),
+                )
+                if (!eligibility.allowed) {
+                    app.localContainer.notifications.publish(
+                        title = "自动研究已延后",
+                        body = eligibility.reason ?: "设备资源暂不可用",
+                        priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
+                        deepLink = "research",
+                        systemNotificationId = NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
+                    )
+                    app.localContainer.dailyResearchScheduler.schedule()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf(startId)
+                    return@launch
+                }
+            }
             app.localContainer.notifications.showResearchProgress(notificationTitle, "正在准备研究任务")
             app.localContainer.research.run(runId) { run ->
                 val body = "已完成 " + run.completedCount + " / " + run.totalCount + " 只股票"

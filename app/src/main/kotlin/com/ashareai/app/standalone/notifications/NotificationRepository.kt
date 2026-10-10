@@ -153,6 +153,7 @@ class NotificationRepository(
         stableId(route),
         Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_WORKSPACE, "LOCAL")
             putExtra(MainActivity.EXTRA_ROUTE, route)
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

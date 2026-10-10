@@ -78,7 +78,9 @@ object FocusNotification {
         }.getOrDefault(0)
         return FocusCapabilities(
             protocolVersion = protocol,
-            islandSupported = protocol >= 3 || islandSystemProperty() || isHyperOS4(),
+            // HyperOS 1/2 devices can consume the v3 payload even when the
+            // settings provider does not expose notification_focus_protocol.
+            islandSupported = protocol >= 3 || islandSystemProperty() || isHyperOS(),
             focusPermissionGranted = hasFocusPermission(context),
             appIdConfigured = hasConfiguredAppId(context),
             hyperOSVersion = detectHyperOSVersion(),
@@ -149,8 +151,9 @@ object FocusNotification {
             .setContentText("测试通知")
             .setContentIntent(openApp)
             .setOnlyAlertOnce(true)
+            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         context.getSystemService(NotificationManager::class.java).notify(
             TEST_NOTIFICATION_ID,
@@ -253,25 +256,11 @@ object FocusNotification {
         getBoolean.invoke(null, "persist.sys.feature.island", false) as? Boolean ?: false
     }.getOrDefault(false)
 
-    /**
-     * 检测 HyperOS 4 系统
-     * HyperOS 4 基于 Android 15，且系统版本号通常为 2.x 或更高
-     */
-    private fun isHyperOS4(): Boolean = runCatching {
+    private fun isHyperOS(): Boolean = runCatching {
         val systemProperties = Class.forName("android.os.SystemProperties")
-        val get = systemProperties.getDeclaredMethod("get", String::class.java)
-
-        // 检查是否为 HyperOS
-        val osName = get.invoke(null, "ro.miui.ui.version.name") as? String ?: ""
-        val isHyperOS = osName.startsWith("HYPER", ignoreCase = true)
-
-        if (!isHyperOS) return@runCatching false
-
-        // 检查 HyperOS 版本号 (ro.mi.os.version.incremental)
-        val hyperVersion = get.invoke(null, "ro.mi.os.version.incremental") as? String ?: ""
-        val versionNumber = hyperVersion.split(".").firstOrNull()?.toIntOrNull() ?: 0
-
-        // HyperOS 4.x 及以上支持增强超级岛
-        versionNumber >= 4 || android.os.Build.VERSION.SDK_INT >= 35
+        val get = systemProperties.getDeclaredMethod("get", String::class.java, String::class.java)
+        val osName = get.invoke(null, "ro.miui.ui.version.name", "") as? String ?: ""
+        val incremental = get.invoke(null, "ro.mi.os.version.incremental", "") as? String ?: ""
+        osName.contains("HYPER", ignoreCase = true) || incremental.startsWith("OS", ignoreCase = true)
     }.getOrDefault(false)
 }

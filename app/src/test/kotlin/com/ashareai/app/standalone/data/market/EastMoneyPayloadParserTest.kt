@@ -39,4 +39,20 @@ class EastMoneyPayloadParserTest {
         assertEquals(1, candles.size)
         assertEquals(10.5, candles.single().close, 0.001)
     }
+
+    @Test
+    fun parsesChineseNameSuggestionsWithExchange() {
+        val payload = """
+            {"QuotationCodeTable":{"Data":[
+              {"Code":"600519","Name":"贵州茅台","MktNum":"1"},
+              {"Code":"000001","Name":"平安银行","MktNum":"0"}
+            ]}}
+        """.trimIndent()
+
+        val suggestions = parseEastMoneySuggestions(payload, json, 8)
+
+        assertEquals(listOf("600519", "000001"), suggestions.map { it.symbol })
+        assertEquals("贵州茅台", suggestions.first().name)
+        assertEquals("SH", suggestions.first().exchange)
+    }
 }

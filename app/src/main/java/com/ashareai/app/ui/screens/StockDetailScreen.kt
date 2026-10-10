@@ -23,6 +23,7 @@ import com.ashareai.app.data.KlinePeriod
 import com.ashareai.app.data.KlineRange
 import com.ashareai.app.data.model.AssetStateRequest
 import com.ashareai.app.data.model.Quote
+import com.ashareai.app.data.sameSymbol
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.theme.changeColor
@@ -45,6 +46,8 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
     var subChart by remember { mutableStateOf(SubChart.VOLUME) }
     var showPeriodSheet by remember { mutableStateOf(false) }
     var showRangeSheet by remember { mutableStateOf(false) }
+    var savingWatchlist by remember(symbol) { mutableStateOf(false) }
+    var watchlistError by remember(symbol) { mutableStateOf<String?>(null) }
 
     val klineContent = when (val state = klineState) {
         is ScreenState.Content -> state.value
@@ -55,7 +58,7 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
     val loading = klineState is ScreenState.Loading
     val error = (klineState as? ScreenState.Error)?.message
 
-    val inWatchlist = symbol in (assets?.watchlist ?: emptyList())
+    val inWatchlist = (assets?.watchlist ?: emptyList()).any { sameSymbol(it, symbol) }
 
     LaunchedEffect(symbol, period, range) { klineViewModel.load(symbol, period, range) }
 
@@ -75,7 +78,9 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
             actions = {
                 IconButton(onClick = {
                     val current = assets ?: return@IconButton
-                    val newList = if (inWatchlist) current.watchlist - symbol else current.watchlist + symbol
+                    val newList = if (inWatchlist) current.watchlist.filterNot { sameSymbol(it, symbol) } else current.watchlist + symbol
+                    savingWatchlist = true
+                    watchlistError = null
                     marketViewModel.saveAssets(
                         AssetStateRequest(
                             watchlist = newList,
@@ -87,8 +92,11 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
                             buy_monitor_enabled = current.buy_monitor_enabled,
                             market_refresh_interval_seconds = current.market_refresh_interval_seconds,
                         )
-                    ) { }
-                }) {
+                    ) { errorMessage ->
+                        savingWatchlist = false
+                        watchlistError = errorMessage
+                    }
+                }, enabled = !savingWatchlist) {
                     Icon(
                         if (inWatchlist) Icons.Outlined.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (inWatchlist) "取消自选" else "加入自选",
@@ -107,6 +115,10 @@ fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostControll
         ) {
             // 报价头
             AppCard {
+                watchlistError?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(6.dp))
+                }
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         quote?.price.fmt2(),

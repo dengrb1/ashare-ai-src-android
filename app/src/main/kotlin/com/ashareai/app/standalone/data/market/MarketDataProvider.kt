@@ -9,6 +9,9 @@ interface MarketDataProvider {
 
     suspend fun catalog(limit: Int): List<Security>
 
+    /** Fast name/code suggestions. Providers may return an empty list when unsupported. */
+    suspend fun searchSecurities(query: String, limit: Int): List<Security> = emptyList()
+
     suspend fun quotes(symbols: List<String>): List<MarketQuote>
 
     suspend fun quote(symbol: String): MarketQuote = quotes(listOf(symbol)).firstOrNull {

@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -22,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.ashareai.app.ui.AppViewModel
 import com.ashareai.app.ui.components.LiquidGlassBottomBar
 import com.ashareai.app.ui.components.LiquidGlassTab
+import com.ashareai.app.ui.theme.LiquidGlassBackground
 import com.ashareai.app.ui.screens.*
 import com.ashareai.app.island.NotificationNavigation
 import kotlinx.coroutines.flow.StateFlow
@@ -131,6 +133,11 @@ private fun MainScaffold(
 
     val showBottomBar = currentRoute in bottomTabs.map { it.route }
 
+    // 全局液体玻璃动画背景
+    LiquidGlassBackground(
+        modifier = Modifier.fillMaxSize(),
+        intensity = 0.18f,
+    ) {
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
@@ -148,6 +155,7 @@ private fun MainScaffold(
                 )
             }
         },
+        containerColor = Color.Transparent,
     ) { padding ->
         NavHost(
             navController = navController,
@@ -207,6 +215,7 @@ private fun MainScaffold(
                 )
             }
         }
+    }
     }
 }
 

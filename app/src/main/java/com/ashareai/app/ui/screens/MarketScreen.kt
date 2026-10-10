@@ -12,9 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.ashareai.app.data.model.AssetStateRequest
 import com.ashareai.app.data.model.MarketIndicesResponse
 import com.ashareai.app.data.normalizeSymbol
+import com.ashareai.app.data.sameSymbol
 import com.ashareai.app.ui.AppViewModel
 import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.SecurityResolveViewModel
@@ -34,6 +36,7 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
     val marketIndices by marketViewModel.marketIndices.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var marketTab by rememberSaveable { mutableStateOf("watchlist") }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -49,8 +52,31 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
 
         MarketIndicesStrip(marketIndices)
 
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf("watchlist" to "自选", "search" to "搜索股票").forEach { (value, label) ->
+                FilterChip(
+                    selected = marketTab == value,
+                    onClick = { marketTab = value },
+                    label = { Text(label) },
+                )
+            }
+        }
+
         val watchlist = assets?.watchlist ?: emptyList()
-        if (watchlist.isEmpty()) {
+        if (marketTab == "search") {
+            EmptyPlaceholder("搜索并选择股票\n支持六位代码或证券名称，选择后进入报价与 K 线详情。")
+            OutlinedButton(
+                onClick = { showAddDialog = true },
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Search, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("打开股票搜索")
+            }
+        } else if (watchlist.isEmpty()) {
             EmptyPlaceholder("暂无自选股\n点击右下角添加")
         } else {
             LazyColumn(
@@ -59,9 +85,27 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(watchlist, key = { it }) { symbol ->
-                    QuoteRow(symbol = symbol, quote = quotes[symbol]) {
-                        navController.navigate(Routes.stockDetail(symbol))
-                    }
+                    QuoteRow(
+                        symbol = symbol,
+                        quote = quotes[symbol],
+                        onClick = { navController.navigate(Routes.stockDetail(symbol)) },
+                        onWatchlistToggle = {
+                            assets?.let { current ->
+                                marketViewModel.saveAssets(
+                                    AssetStateRequest(
+                                        watchlist = current.watchlist - symbol,
+                                        positions = current.positions,
+                                        total_assets = current.total_assets,
+                                        exit_monitor_enabled = current.exit_monitor_enabled,
+                                        default_profit_trigger = current.default_profit_trigger,
+                                        stop_loss_monitor_enabled = current.stop_loss_monitor_enabled,
+                                        buy_monitor_enabled = current.buy_monitor_enabled,
+                                        market_refresh_interval_seconds = current.market_refresh_interval_seconds,
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -85,7 +129,10 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
             onAdd = { symbol ->
                 showAddDialog = false
                 val current = assets ?: return@AddSymbolDialog
-                if (symbol in current.watchlist) return@AddSymbolDialog
+                if (current.watchlist.any { sameSymbol(it, symbol) }) {
+                    navController.navigate(Routes.stockDetail(symbol))
+                    return@AddSymbolDialog
+                }
                 if (current.watchlist.size >= 100) {
                     error = "自选股最多 100 只"
                     return@AddSymbolDialog
@@ -101,7 +148,14 @@ fun MarketScreen(appViewModel: AppViewModel, navController: NavHostController) {
                         buy_monitor_enabled = current.buy_monitor_enabled,
                         market_refresh_interval_seconds = current.market_refresh_interval_seconds,
                     )
-                ) { msg -> if (msg != null) error = msg else marketViewModel.refreshAll() }
+                ) { msg ->
+                    if (msg != null) {
+                        error = msg
+                    } else {
+                        marketViewModel.refreshAll()
+                        navController.navigate(Routes.stockDetail(symbol))
+                    }
+                }
             },
         )
     }

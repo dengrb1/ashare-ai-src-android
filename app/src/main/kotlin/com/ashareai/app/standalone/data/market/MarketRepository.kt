@@ -5,16 +5,56 @@ import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
 import com.ashareai.app.standalone.domain.Security
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class MarketRepository(
     private val local: LocalRepository,
     private val provider: MarketDataProvider,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun catalog(limit: Int): List<Security> = try {
-        provider.catalog(limit.coerceIn(1, 500))
-    } catch (_: Exception) {
-        fallbackCatalog.take(limit.coerceIn(1, fallbackCatalog.size))
+    private val catalogMutex = Mutex()
+    private var catalogCache: List<Security> = emptyList()
+    private var catalogFetchedAt: Long = 0L
+
+    suspend fun catalog(limit: Int): List<Security> {
+        val requested = limit.coerceIn(1, 500)
+        val values = catalogMutex.withLock {
+            val now = clock()
+            if (catalogCache.isEmpty() || now - catalogFetchedAt > CATALOG_CACHE_TTL_MILLIS) {
+                catalogCache = runCatching { provider.catalog(500) }
+                    .getOrDefault(fallbackCatalog)
+                    .distinctBy(Security::symbol)
+                    .take(500)
+                catalogFetchedAt = now
+            }
+            catalogCache.ifEmpty { fallbackCatalog }
+        }
+        return values.take(requested)
+    }
+
+    /**
+     * Resolves a security by code or Chinese display name. The query is deliberately bounded:
+     * it is used by the UI as a suggestion source and must never turn into an unbounded catalog
+     * fetch or an unbounded in-memory result set.
+     */
+    suspend fun searchSecurities(query: String, limit: Int = 12): List<Security> {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return emptyList()
+        val cachedMatches = (catalog(500) + fallbackCatalog)
+            .asSequence()
+            .filter { security ->
+                security.symbol.contains(normalized, ignoreCase = true) ||
+                    security.name.contains(normalized, ignoreCase = true)
+            }
+            .distinctBy(Security::symbol)
+            .take(limit.coerceIn(1, 24))
+            .toList()
+        if (cachedMatches.isNotEmpty()) return cachedMatches
+        return runCatching { provider.searchSecurities(normalized, limit) }
+            .getOrDefault(emptyList())
+            .distinctBy(Security::symbol)
+            .take(limit.coerceIn(1, 24))
     }
 
     suspend fun refreshQuotes(symbols: Collection<String>): List<MarketQuote> {
@@ -54,6 +94,7 @@ class MarketRepository(
     private companion object {
         const val QUOTE_STALE_AFTER_MILLIS = 90_000L
         const val CANDLE_CACHE_TTL_MILLIS = 6 * 60 * 60 * 1000L
+        const val CATALOG_CACHE_TTL_MILLIS = 30 * 60 * 1000L
 
         val fallbackCatalog = listOf(
             Security("600519", "贵州茅台", "SH"),

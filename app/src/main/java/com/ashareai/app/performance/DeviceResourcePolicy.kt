@@ -111,7 +111,12 @@ object DeviceResourcePolicy {
         context: Context,
         priority: ResourceTaskPriority = ResourceTaskPriority.DEFERRED,
         appForeground: Boolean = AppVisibilityState.isForeground,
-    ): ResourceBudget {
+    ): ResourceBudget = budget(snapshot(context, appForeground), priority)
+
+    fun snapshot(
+        context: Context,
+        appForeground: Boolean = AppVisibilityState.isForeground,
+    ): ResourceSnapshot {
         val activityManager = context.getSystemService(ActivityManager::class.java)
         val memory = ActivityManager.MemoryInfo().also { activityManager?.getMemoryInfo(it) }
         val power = context.getSystemService(PowerManager::class.java)
@@ -131,19 +136,16 @@ object DeviceResourcePolicy {
                         hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR))
             }
         } == true
-        return budget(
-            ResourceSnapshot(
-                availableMemoryBytes = memory.availMem,
-                lowMemory = memory.lowMemory,
-                powerSave = power?.isPowerSaveMode == true,
-                thermalStatus = thermal,
-                batteryPercent = batteryPercent,
-                charging = charging,
-                appForeground = appForeground,
-                screenInteractive = power?.isInteractive != false,
-                networkAvailable = networkAvailable,
-            ),
-            priority,
+        return ResourceSnapshot(
+            availableMemoryBytes = memory.availMem,
+            lowMemory = memory.lowMemory,
+            powerSave = power?.isPowerSaveMode == true,
+            thermalStatus = thermal,
+            batteryPercent = batteryPercent,
+            charging = charging,
+            appForeground = appForeground,
+            screenInteractive = power?.isInteractive != false,
+            networkAvailable = networkAvailable,
         )
     }
 }

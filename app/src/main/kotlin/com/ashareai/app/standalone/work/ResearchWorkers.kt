@@ -12,6 +12,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.ashareai.app.HybridApp
+import com.ashareai.app.performance.AutomaticTrainingPolicy
+import com.ashareai.app.performance.DeviceResourcePolicy
 import com.ashareai.app.standalone.data.settings.SettingsStore
 import java.time.Duration
 import java.time.ZonedDateTime
@@ -61,6 +63,18 @@ class DailyResearchWorker(
     override suspend fun doWork(): Result {
         val app = applicationContext as HybridApp
         val local = app.localContainer
+        val eligibility = AutomaticTrainingPolicy.evaluate(DeviceResourcePolicy.snapshot(applicationContext, appForeground = false))
+        if (!eligibility.allowed) {
+            local.notifications.publish(
+                title = "自动研究已延后",
+                body = eligibility.reason ?: "设备资源暂不可用",
+                priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
+                deepLink = "research",
+                systemNotificationId = com.ashareai.app.standalone.notifications.NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
+            )
+            local.dailyResearchScheduler.schedule()
+            return Result.success()
+        }
         val calendar = local.calendar
         if (calendar.isTradingDay(java.time.LocalDate.now(ShanghaiTradingCalendar.ZONE))) {
             local.settings.settings.first().automaticReports
@@ -109,6 +123,21 @@ class ResearchFallbackWorker(
     override suspend fun doWork(): Result {
         val runId = inputData.getString(INPUT_RUN_ID) ?: return Result.failure()
         val app = applicationContext as HybridApp
+        val run = app.localContainer.local.researchRun(runId) ?: return Result.failure()
+        if (run.triggerSource == com.ashareai.app.standalone.domain.ResearchTriggerSource.AUTO) {
+            val eligibility = AutomaticTrainingPolicy.evaluate(DeviceResourcePolicy.snapshot(applicationContext, appForeground = false))
+            if (!eligibility.allowed) {
+                app.localContainer.notifications.publish(
+                    title = "自动研究已延后",
+                    body = eligibility.reason ?: "设备资源暂不可用",
+                    priority = com.ashareai.app.standalone.domain.NotificationPriority.WARNING,
+                    deepLink = "research",
+                    systemNotificationId = com.ashareai.app.standalone.notifications.NotificationRepository.RESEARCH_ACTIVITY_NOTIFICATION_ID,
+                )
+                app.localContainer.dailyResearchScheduler.schedule()
+                return Result.success()
+            }
+        }
         app.localContainer.research.run(runId)
         return Result.success()
     }

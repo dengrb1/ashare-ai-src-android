@@ -18,8 +18,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -104,14 +102,8 @@ class MainActivity : ComponentActivity() {
                         if (!fullAnimationsEnabled || systemPowerSave) {
                             EnterTransition.None togetherWith ExitTransition.None
                         } else {
-                            (fadeIn(animationSpec = tween(380)) + scaleIn(
-                                initialScale = 0.985f,
-                                animationSpec = tween(380),
-                            )).togetherWith(
-                                fadeOut(animationSpec = tween(260)) + scaleOut(
-                                    targetScale = 0.985f,
-                                    animationSpec = tween(260),
-                                )
+                            fadeIn(animationSpec = tween(220)).togetherWith(
+                                fadeOut(animationSpec = tween(160))
                             )
                         }
                     },

@@ -1,6 +1,8 @@
 package com.ashareai.app.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -139,6 +141,8 @@ fun AssetsScreen(appViewModel: AppViewModel, navController: NavHostController) {
     if (showAddPosition || editing != null) {
         PositionEditDialog(
             initial = editing,
+            watchlist = assets?.watchlist.orEmpty(),
+            quoteNames = quotes,
             onDismiss = { showAddPosition = false; editing = null },
             onSave = { position ->
                 val positions = assets?.positions ?: emptyList()
@@ -412,6 +416,8 @@ private fun PosStat(label: String, value: String) {
 @Composable
 private fun PositionEditDialog(
     initial: PaperPosition?,
+    watchlist: List<String>,
+    quoteNames: Map<String, Quote>,
     onDismiss: () -> Unit,
     onSave: (PaperPosition) -> Unit,
 ) {
@@ -429,6 +435,24 @@ private fun PositionEditDialog(
         title = { Text(if (initial == null) "新增持仓" else "编辑持仓") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (initial == null && watchlist.isNotEmpty()) {
+                    Text("从自选选择", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        watchlist.forEach { selectedSymbol ->
+                            FilterChip(
+                                selected = symbol == selectedSymbol,
+                                onClick = {
+                                    symbol = selectedSymbol
+                                    name = quoteNames[selectedSymbol]?.name.orEmpty()
+                                },
+                                label = { Text(quoteNames[selectedSymbol]?.name ?: selectedSymbol) },
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = symbol,
                     onValueChange = { symbol = it },
