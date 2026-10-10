@@ -34,7 +34,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         runCatching {
             val runs = repository.runs(limit = 20, mine = true)
             val settings = if (loadSettings) {
-                runCatching { repository.settings() }.getOrNull()
+                runCatching { repository.settings() }.getOrNull()?.migrateLegacyDefaults()
             } else {
                 previous?.settings
             }
@@ -86,4 +86,23 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     fun retry() = load(loadSettings = false)
 
     private fun content(): ResearchWorkspaceContent? = (_state.value as? ScreenState.Content)?.value
+}
+
+private fun ResearchSettings.migrateLegacyDefaults(): ResearchSettings {
+    fun migrate(value: Double, legacy: Double, current: Double): Double =
+        if (value == legacy) current else value
+    return copy(
+        automatic_total_budget = migrate(automatic_total_budget, 1_000_000.0, 100_000.0),
+        automatic_per_symbol_budget = migrate(automatic_per_symbol_budget, 80_000.0, 10_000.0),
+        automatic_reports = automatic_reports.map { report ->
+            if (report.config_version <= 1) {
+                report.copy(
+                    total_budget = migrate(report.total_budget, 1_000_000.0, 100_000.0),
+                    per_symbol_budget = migrate(report.per_symbol_budget, 80_000.0, 10_000.0),
+                )
+            } else {
+                report
+            }
+        },
+    )
 }

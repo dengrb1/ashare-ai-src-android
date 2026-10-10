@@ -135,7 +135,10 @@ class DeterministicResearchEngine : ResearchEngine {
             rsi,
             volumeRatio,
         ).count { it != null }
-        val factorQuality = 100.0 * qualityPresent / 17.0
+        // Missing fundamental/sentiment/event feeds are neutral evidence, not a score penalty.
+        // Keep completeness visible through `unavailable`, while the quality factor stays in
+        // the neutral-to-complete range so a price-only local run is not forced below 50.
+        val factorQuality = (50.0 + 50.0 * qualityPresent / 5.0).coerceIn(50.0, 100.0)
         val factorEvidence = FactorEvidence(
             fundamental = 50.0,
             technical = factorTechnical,

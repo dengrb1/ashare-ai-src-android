@@ -407,8 +407,8 @@ class ConnectedSyncAdapter(
         includePortfolioDataForAi = false,
         triggerSource = trigger_source ?: "CONNECTED",
         automaticReportSlot = automatic_report_slot,
-        totalBudget = total_budget ?: 1_000_000.0,
-        perSymbolBudget = per_symbol_budget ?: 80_000.0,
+        totalBudget = total_budget ?: 100_000.0,
+        perSymbolBudget = per_symbol_budget ?: 10_000.0,
         configVersion = 1,
     )
 

@@ -1,6 +1,7 @@
 package com.ashareai.app.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,8 +73,8 @@ fun CandidatesScreen(appViewModel: AppViewModel, navController: NavHostControlle
                 ) {
                     items(sortedCandidates, key = { it.symbol }) { c ->
                     AppCard(
-                        modifier = Modifier.let { m ->
-                            m
+                        modifier = Modifier.clickable {
+                            navController.navigate(com.ashareai.app.ui.navigation.Routes.stockDetail(c.symbol))
                         },
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

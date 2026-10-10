@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -141,7 +142,30 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
                                 run.phase?.let { KeyValueRow("阶段", it) }
                                 run.progress?.let { KeyValueRow("进度", "$it%") }
                                 state.value.latestReport?.let { report ->
-                                    KeyValueRow("最近报告", report.trading_date ?: "已生成")
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                navController.navigate(
+                                                    Routes.reportDetail(
+                                                        report.trading_date ?: todayTradingDate(),
+                                                        report.run_id,
+                                                    ),
+                                                )
+                                            },
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        shape = MaterialTheme.shapes.small,
+                                    ) {
+                                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.AutoMirrored.Outlined.Article, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(Modifier.width(8.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text("最近报告", style = MaterialTheme.typography.labelMedium)
+                                                Text(report.trading_date ?: "已生成", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            Text("打开", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -160,6 +184,7 @@ fun DashboardScreen(appViewModel: AppViewModel, navController: NavHostController
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         QuickEntry("研究运行", Modifier.weight(1f)) { navController.navigate(Routes.RESEARCH) }
+                        QuickEntry("研究报告", Modifier.weight(1f)) { navController.navigate(Routes.REPORTS) }
                         QuickEntry("AI 诊断", Modifier.weight(1f)) { navController.navigate(Routes.AI_CHAT) }
                     }
                 }

@@ -43,6 +43,7 @@ class ResearchEngineTest {
         )
 
         assertTrue(result.score.total in 0.0..100.0)
+        assertTrue("neutral missing evidence must not force a sub-50 score", result.score.total >= 50.0)
         assertTrue(result.score.unavailable.any { it.startsWith("基本面") })
         assertTrue(result.score.unavailable.any { it.startsWith("事件数据") })
         assertTrue(result.score.factorDecision != null)

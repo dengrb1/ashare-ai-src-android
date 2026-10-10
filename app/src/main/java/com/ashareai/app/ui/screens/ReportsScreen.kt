@@ -23,6 +23,7 @@ import androidx.navigation.NavHostController
 import com.ashareai.app.data.model.*
 import com.ashareai.app.ui.*
 import com.ashareai.app.ui.components.*
+import com.ashareai.app.ui.navigation.Routes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonArray
@@ -62,7 +63,11 @@ fun ReportsScreen(
     val loading = reportsState is ScreenState.Loading
     val serverError = (reportsState as? ScreenState.Error)?.message
 
-    LaunchedEffect(date) { reportsViewModel.load(date, runId) }
+    LaunchedEffect(initialDate, initialRunId) {
+        if (initialDate != null) date = initialDate
+        runId = initialRunId
+    }
+    LaunchedEffect(date, runId) { reportsViewModel.load(date, runId) }
 
     // 有生成中的方案时轮询
     val hasActiveTradePlan = tradePlans.any { isActiveStatus(it.status) }
@@ -119,6 +124,7 @@ fun ReportsScreen(
                     sortOption = sortOption,
                     onSortOptionChange = { sortOptionName = it.name },
                     onSelect = { selectedSymbol = it },
+                    onOpenKline = { symbol -> navController.navigate(Routes.stockDetail(symbol)) },
                     onSubmitPlan = { symbol ->
                         report.report_id.let { reportId ->
                             reportsViewModel.submitTradePlan(reportId, symbol) { message -> error = message }
@@ -219,6 +225,7 @@ private fun SymbolListView(
     sortOption: StockSortOption,
     onSortOptionChange: (StockSortOption) -> Unit,
     onSelect: (ReportSymbol) -> Unit,
+    onOpenKline: (String) -> Unit,
     onSubmitPlan: (String) -> Unit,
 ) {
     if (symbols.isEmpty()) {
@@ -287,6 +294,13 @@ private fun SymbolListView(
                             onClick = { onSubmitPlan(sym.symbol) },
                             contentPadding = PaddingValues(horizontal = 8.dp),
                         ) { Text("生成模拟方案") }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { onOpenKline(sym.symbol) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text("打开 K 线")
                     }
                 }
             }

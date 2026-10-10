@@ -49,9 +49,12 @@ data class AutomaticResearchReportConfig(
 )
 
 fun defaultAutomaticReports(): List<AutomaticResearchReportConfig> = listOf(
-    AutomaticResearchReportConfig("A", true, ResearchScope.MARKET, emptyList(), 1_000_000.0, 80_000.0, null, 100),
-    AutomaticResearchReportConfig("B", false, ResearchScope.MARKET, emptyList(), 1_000_000.0, 80_000.0, null, 100),
+    AutomaticResearchReportConfig("A", true, ResearchScope.MARKET, emptyList(), 100_000.0, 10_000.0, null, 100),
+    AutomaticResearchReportConfig("B", false, ResearchScope.MARKET, emptyList(), 100_000.0, 10_000.0, null, 100),
 )
+
+internal fun migrateLegacyBudget(stored: Double?, legacy: Double, currentDefault: Double): Double =
+    if (stored == legacy) currentDefault else stored ?: currentDefault
 
 class SettingsStore(
     private val context: Context,
@@ -191,6 +194,11 @@ class SettingsStore(
             ?.let { value -> runCatching { ResearchScope.valueOf(value) }.getOrNull() }
             ?.takeIf { it in setOf(ResearchScope.MARKET, ResearchScope.WATCHLIST, ResearchScope.CUSTOM) }
             ?: defaults.scope
+        val storedTotal = preferences[reportTotalBudgetKey(slot)]
+        val storedPerSymbol = preferences[reportPerSymbolBudgetKey(slot)]
+        // Migrate only untouched legacy defaults; preserve user-entered budgets.
+        val migratedTotal = migrateLegacyBudget(storedTotal, 1_000_000.0, defaults.totalBudget)
+        val migratedPerSymbol = migrateLegacyBudget(storedPerSymbol, 80_000.0, defaults.perSymbolBudget)
         return defaults.copy(
             enabled = enabled,
             scope = scope,
@@ -199,8 +207,8 @@ class SettingsStore(
                 .map(String::trim)
                 .filter { it.length == 6 && it.all(Char::isDigit) }
                 .distinct(),
-            totalBudget = (preferences[reportTotalBudgetKey(slot)] ?: defaults.totalBudget).coerceAtLeast(1.0),
-            perSymbolBudget = (preferences[reportPerSymbolBudgetKey(slot)] ?: defaults.perSymbolBudget).coerceAtLeast(1.0),
+            totalBudget = migratedTotal.coerceAtLeast(1.0),
+            perSymbolBudget = migratedPerSymbol.coerceAtLeast(1.0),
             maxStockPrice = preferences[reportMaxPriceKey(slot)]?.toDoubleOrNull()?.takeIf { it > 0.0 },
             marketLimit = (preferences[reportMarketLimitKey(slot)] ?: defaults.marketLimit).coerceIn(1, 500),
             configVersion = (preferences[reportConfigVersionKey(slot)] ?: defaults.configVersion).coerceAtLeast(1),

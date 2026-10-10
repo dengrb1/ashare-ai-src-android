@@ -49,6 +49,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BatterySaver
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CandlestickChart
@@ -298,8 +299,14 @@ fun StandaloneAppRoot(
                 viewModel.refreshMarketSymbol(symbol)
                 navigateTo("market_detail")
             }
-            "candidates" -> CandidatesScreen(viewModel, Modifier.padding(padding))
-            "portfolio" -> PortfolioScreen(viewModel, Modifier.padding(padding))
+            "candidates" -> CandidatesScreen(viewModel, Modifier.padding(padding), onOpenKline = { symbol ->
+                viewModel.refreshMarketSymbol(symbol)
+                navigateTo("market_detail")
+            })
+            "portfolio" -> PortfolioScreen(viewModel, Modifier.padding(padding), onOpenKline = { symbol ->
+                viewModel.refreshMarketSymbol(symbol)
+                navigateTo("market_detail")
+            })
             "exit" -> ExitResearchScreen(viewModel, Modifier.padding(padding))
             "notifications" -> NotificationsScreen(
                 viewModel,
@@ -367,6 +374,7 @@ private val bottomDestinations = listOf(
     BottomDestination("home", "主页", Icons.Outlined.Home),
     BottomDestination("market", "行情", Icons.Outlined.CandlestickChart),
     BottomDestination("research", "研究", Icons.Outlined.QueryStats),
+    BottomDestination("reports", "报告", Icons.AutoMirrored.Outlined.Article),
     BottomDestination("notifications", "通知", Icons.Outlined.Notifications),
     BottomDestination("settings", "设置", Icons.Outlined.Settings),
 )
@@ -634,7 +642,14 @@ private fun HomeScreen(
         }
         if (reports.isNotEmpty()) {
             SectionTitle("最近报告")
-            Text(reports.first().title + " · " + formatTime(reports.first().createdAt))
+            ContentCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { navigate("reports") },
+            ) {
+                Text(reports.first().title + " · " + formatTime(reports.first().createdAt))
+                Text("点击查看完整报告、候选和模拟组合", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         SectionTitle("工作台操作")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -741,7 +756,10 @@ private fun MarketScreen(
                         symbol = item.symbol,
                         exchange = "自选",
                         selected = selected,
-                        onClick = { viewModel.refreshMarketSymbol(item.symbol) },
+                        onClick = {
+                            viewModel.refreshMarketSymbol(item.symbol)
+                            navigate("market_detail")
+                        },
                         onRemove = { viewModel.removeWatchlist(item.symbol) },
                     )
                 }
@@ -755,7 +773,10 @@ private fun MarketScreen(
                     symbol = security.symbol,
                     exchange = security.exchange,
                     selected = false,
-                    onClick = { viewModel.refreshMarketSymbol(security.symbol) },
+                    onClick = {
+                        viewModel.refreshMarketSymbol(security.symbol)
+                        navigate("market_detail")
+                    },
                 )
             }
             if (state.suggestionsLoading) {
@@ -816,7 +837,10 @@ private fun MarketScreen(
                     symbol = security.symbol,
                     exchange = security.exchange,
                     selected = state.quote?.symbol == security.symbol,
-                    onClick = { viewModel.refreshMarketSymbol(security.symbol) },
+                    onClick = {
+                        viewModel.refreshMarketSymbol(security.symbol)
+                        navigate("market_detail")
+                    },
                 )
             }
         }
@@ -1200,10 +1224,13 @@ private fun EmptyState(title: String, description: String) {
 @Composable
 private fun ListItemSurface(
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().let { base ->
+            if (onClick != null) base.clickable(onClick = onClick) else base
+        },
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -1425,8 +1452,8 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
     var scope by rememberSaveable { mutableStateOf(ResearchScope.HOLDINGS) }
     var customSymbols by rememberSaveable { mutableStateOf("") }
     var marketLimit by rememberSaveable { mutableStateOf(settings.marketScanLimit.toString()) }
-    var totalBudget by rememberSaveable { mutableStateOf("1000000") }
-    var perSymbolBudget by rememberSaveable { mutableStateOf("80000") }
+    var totalBudget by rememberSaveable { mutableStateOf("100000") }
+    var perSymbolBudget by rememberSaveable { mutableStateOf("10000") }
     var maxStockPrice by rememberSaveable { mutableStateOf("") }
     var providerId by rememberSaveable { mutableStateOf<String?>(null) }
     var includePortfolio by rememberSaveable { mutableStateOf(false) }
@@ -1749,7 +1776,11 @@ private fun ReportsScreen(
 }
 
 @Composable
-private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
+private fun CandidatesScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    onOpenKline: (String) -> Unit,
+) {
     val candidates by viewModel.candidates.collectAsState()
     val reports by viewModel.reports.collectAsState()
     val latestRunId = reports.firstOrNull()?.runId
@@ -1758,7 +1789,7 @@ private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier)
         Text("候选完全按本地确定性评分排序，不代表交易指令。")
         if (visible.isEmpty()) EmptyState("暂无候选", "完成一次研究后会在这里显示评分结果。")
         visible.forEachIndexed { index, candidate ->
-            ListItemSurface {
+            ListItemSurface(onClick = { onOpenKline(candidate.symbol) }) {
                 Column(Modifier.weight(1f)) {
                     Text((index + 1).toString() + ". " + candidate.name + " · " + candidate.symbol, fontWeight = FontWeight.SemiBold)
                     Text(candidate.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1773,7 +1804,11 @@ private fun CandidatesScreen(viewModel: StandaloneViewModel, modifier: Modifier)
 }
 
 @Composable
-private fun PortfolioScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
+private fun PortfolioScreen(
+    viewModel: StandaloneViewModel,
+    modifier: Modifier,
+    onOpenKline: (String) -> Unit,
+) {
     val portfolios by viewModel.portfolios.collectAsState()
     val runs by viewModel.researchRuns.collectAsState()
     val portfolio = portfolios.firstOrNull()
@@ -1798,7 +1833,7 @@ private fun PortfolioScreen(viewModel: StandaloneViewModel, modifier: Modifier) 
                 }
             }
             positions.forEach { position ->
-                ListItemSurface {
+                ListItemSurface(onClick = { position["symbol"]?.let(onOpenKline) }) {
                     Column(Modifier.weight(1f)) {
                         Text("${position["name"]} · ${position["symbol"]}", fontWeight = FontWeight.SemiBold)
                         Text(

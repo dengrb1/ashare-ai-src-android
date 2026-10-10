@@ -54,8 +54,8 @@ fun ResearchScreen(appViewModel: AppViewModel, navController: NavHostController)
     var customSymbols by remember { mutableStateOf("") }
     var assetSearch by remember { mutableStateOf("") }
     var excludedSymbols by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var totalBudget by remember { mutableStateOf("1000000") }
-    var perSymbolBudget by remember { mutableStateOf("80000") }
+    var totalBudget by remember { mutableStateOf("100000") }
+    var perSymbolBudget by remember { mutableStateOf("10000") }
     var maxStockPrice by remember { mutableStateOf("") }
     var supremeMode by remember { mutableStateOf(false) }
 

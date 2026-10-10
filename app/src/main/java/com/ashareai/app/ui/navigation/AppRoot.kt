@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Science
@@ -65,6 +66,7 @@ private data class BottomTab(val route: String, val label: String, val icon: Ima
 private val bottomTabs = listOf(
     BottomTab(Routes.HOME, "监控", Icons.Outlined.Home),
     BottomTab(Routes.RESEARCH_HUB, "研究 / 回测", Icons.Outlined.Science),
+    BottomTab(Routes.REPORTS, "报告", Icons.AutoMirrored.Outlined.Article),
     BottomTab(Routes.AI_CHAT, "AI 诊断", Icons.AutoMirrored.Outlined.Chat),
     BottomTab(Routes.PROFILE, "设置", Icons.Outlined.AccountCircle),
 )
@@ -113,13 +115,14 @@ private fun MainScaffold(
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val currentRootRoute = currentRoute?.substringBefore("?")
     val requestedRoute by pendingRoute.collectAsState()
 
     // 省电模式状态
     val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
 
-    LaunchedEffect(currentRoute) {
-        currentRoute?.takeIf { it in bottomTabs.map(BottomTab::route) }?.let(onRouteChanged)
+    LaunchedEffect(currentRootRoute) {
+        currentRootRoute?.takeIf { it in bottomTabs.map(BottomTab::route) }?.let(onRouteChanged)
     }
 
     LaunchedEffect(requestedRoute) {
@@ -131,7 +134,7 @@ private fun MainScaffold(
         }
     }
 
-    val showBottomBar = currentRoute in bottomTabs.map { it.route }
+    val showBottomBar = currentRootRoute in bottomTabs.map { it.route }
 
     // 全局液体玻璃动画背景
     LiquidGlassBackground(
@@ -143,7 +146,7 @@ private fun MainScaffold(
             if (showBottomBar) {
                 LiquidGlassBottomBar(
                     tabs = bottomTabs.map { LiquidGlassTab(it.route, it.label, it.icon) },
-                    selectedKey = currentRoute ?: Routes.HOME,
+                    selectedKey = currentRootRoute ?: Routes.HOME,
                     powerSaveMode = isPowerSaveMode,
                     onSelect = { route ->
                         navController.navigate(route) {

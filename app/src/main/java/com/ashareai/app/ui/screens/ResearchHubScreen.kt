@@ -76,6 +76,25 @@ fun ResearchHubScreen(appViewModel: AppViewModel, navController: NavHostControll
             }
             item { SectionTitle("研究产出") }
             item { HubGroup(primaryResearchEntries, navController) }
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { navController.navigate(Routes.REPORTS) },
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.AutoMirrored.Outlined.Article, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("最新报告与历史报告", style = MaterialTheme.typography.titleSmall)
+                            Text("直接查看研究正文、评分、候选和模拟组合", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+                    }
+                }
+            }
             item { SectionTitle("分析工具") }
             item { HubGroup(toolEntries, navController) }
         }

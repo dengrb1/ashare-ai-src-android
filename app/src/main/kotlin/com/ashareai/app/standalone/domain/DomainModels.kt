@@ -124,8 +124,8 @@ data class ResearchRequest(
     val aiProviderId: String?,
     val triggerSource: ResearchTriggerSource = ResearchTriggerSource.MANUAL,
     val automaticReportSlot: String? = null,
-    val totalBudget: Double = 1_000_000.0,
-    val perSymbolBudget: Double = 80_000.0,
+    val totalBudget: Double = 100_000.0,
+    val perSymbolBudget: Double = 10_000.0,
     val maxStockPrice: Double? = null,
     val configVersion: Int = 1,
 )
@@ -150,8 +150,8 @@ data class ResearchRun(
     val aiProviderId: String? = null,
     val triggerSource: ResearchTriggerSource = ResearchTriggerSource.MANUAL,
     val automaticReportSlot: String? = null,
-    val totalBudget: Double = 1_000_000.0,
-    val perSymbolBudget: Double = 80_000.0,
+    val totalBudget: Double = 100_000.0,
+    val perSymbolBudget: Double = 10_000.0,
     val maxStockPrice: Double? = null,
     val configVersion: Int = 1,
 )
