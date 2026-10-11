@@ -43,6 +43,7 @@ class SharedDataStore(private val context: Context) {
 
         // 共享数据值
         private val THEME_MODE = stringPreferencesKey("theme_mode")
+        private val ACCENT_COLOR = stringPreferencesKey("accent_color")
         private val ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
         private val AI_PROVIDER = stringPreferencesKey("ai_provider")
         private val AI_MODEL = stringPreferencesKey("ai_model")
@@ -70,6 +71,7 @@ class SharedDataStore(private val context: Context) {
      */
     data class SharedValues(
         val themeMode: String = "system",
+        val accentColor: String = "#006B5F",
         val islandEnabled: Boolean = false,
         val aiProvider: String? = null,
         val aiModel: String? = null,
@@ -99,6 +101,7 @@ class SharedDataStore(private val context: Context) {
     val sharedValues: Flow<SharedValues> = appContext.workspaceSharedDataStore.data.map { prefs ->
         SharedValues(
             themeMode = prefs[THEME_MODE] ?: "system",
+            accentColor = prefs[ACCENT_COLOR] ?: "#006B5F",
             islandEnabled = prefs[ISLAND_ENABLED] ?: false,
             aiProvider = prefs[AI_PROVIDER],
             aiModel = prefs[AI_MODEL],
@@ -129,6 +132,7 @@ class SharedDataStore(private val context: Context) {
     suspend fun updateSharedValues(values: SharedValues) {
         appContext.workspaceSharedDataStore.edit { prefs ->
             prefs[THEME_MODE] = values.themeMode
+            prefs[ACCENT_COLOR] = values.accentColor
             prefs[ISLAND_ENABLED] = values.islandEnabled
             values.aiProvider?.let { prefs[AI_PROVIDER] = it }
             values.aiModel?.let { prefs[AI_MODEL] = it }
@@ -145,6 +149,14 @@ class SharedDataStore(private val context: Context) {
         appContext.workspaceSharedDataStore.edit { prefs ->
             if (prefs[SHARE_THEME] != false) {
                 prefs[THEME_MODE] = mode
+            }
+        }
+    }
+
+    suspend fun syncAccentColor(hex: String) {
+        appContext.workspaceSharedDataStore.edit { prefs ->
+            if (prefs[SHARE_THEME] != false && hex.matches(Regex("#[0-9A-Fa-f]{6}"))) {
+                prefs[ACCENT_COLOR] = hex.uppercase()
             }
         }
     }

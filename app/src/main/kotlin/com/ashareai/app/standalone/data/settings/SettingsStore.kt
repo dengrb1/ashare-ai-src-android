@@ -30,6 +30,7 @@ data class LocalSettings(
     val marketScanLimit: Int = 100,
     val portfolioDataAllowedForAi: Boolean = false,
     val darkMode: String = "system",
+    val accentColor: String = "#006B5F",
     val glassEnabled: Boolean = true,
     val fullAnimationsEnabled: Boolean = true,
     val lastDailyScheduleAt: Long = 0,
@@ -86,6 +87,7 @@ class SettingsStore(
             marketScanLimit = (preferences[MARKET_SCAN_LIMIT] ?: 100).coerceIn(1, 500),
             portfolioDataAllowedForAi = preferences[PORTFOLIO_DATA_ALLOWED_FOR_AI] ?: false,
             darkMode = preferences[DARK_MODE] ?: "system",
+            accentColor = preferences[ACCENT_COLOR] ?: "#006B5F",
             glassEnabled = preferences[GLASS_ENABLED] ?: true,
             fullAnimationsEnabled = preferences[FULL_ANIMATIONS_ENABLED] ?: true,
             lastDailyScheduleAt = preferences[LAST_DAILY_SCHEDULE_AT] ?: 0,
@@ -168,6 +170,11 @@ class SettingsStore(
         context.standaloneDataStore.edit { it[DARK_MODE] = mode }
     }
 
+    suspend fun setAccentColor(hex: String) {
+        require(hex.matches(Regex("#[0-9A-Fa-f]{6}")))
+        context.standaloneDataStore.edit { it[ACCENT_COLOR] = hex.uppercase() }
+    }
+
     suspend fun setGlassEnabled(enabled: Boolean) = setBoolean(GLASS_ENABLED, enabled)
 
     suspend fun setFullAnimationsEnabled(enabled: Boolean) = setBoolean(FULL_ANIMATIONS_ENABLED, enabled)
@@ -243,6 +250,7 @@ class SettingsStore(
         val MARKET_SCAN_LIMIT = intPreferencesKey("market_scan_limit")
         val PORTFOLIO_DATA_ALLOWED_FOR_AI = booleanPreferencesKey("portfolio_data_allowed_for_ai")
         val DARK_MODE = stringPreferencesKey("dark_mode")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val GLASS_ENABLED = booleanPreferencesKey("glass_enabled")
         val FULL_ANIMATIONS_ENABLED = booleanPreferencesKey("full_animations_enabled")
         val LAST_DAILY_SCHEDULE_AT = longPreferencesKey("last_daily_schedule_at")

@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -49,6 +50,7 @@ fun ReportsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(0) }
     var selectedSymbol by remember { mutableStateOf<ReportSymbol?>(null) }
+    var selectedSummaryField by remember { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(StockSortOption.SCORE_DESC.name) }
     val sortOption = StockSortOption.valueOf(sortOptionName)
 
@@ -97,7 +99,7 @@ fun ReportsScreen(
         DateSelectorField(
             value = date,
             onValueChange = { date = it; runId = null },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("reports.date"),
         )
 
         (serverError ?: error)?.let { message ->
@@ -110,14 +112,18 @@ fun ReportsScreen(
             EmptyPlaceholder("该交易日暂无报告")
         } else {
             TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("日报正文") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("研究个股(${symbols.size})") })
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, modifier = Modifier.testTag("reports.tab.summary"), text = { Text("日报正文") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, modifier = Modifier.testTag("reports.tab.symbols"), text = { Text("研究个股(${symbols.size})") })
             }
             report.market_index_snapshot?.let { snapshot ->
-                MarketIndexSnapshotSummary(snapshot, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                MarketIndexSnapshotSummary(
+                    snapshot,
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    onClick = { selectedSummaryField = "冻结大盘指数环境：${marketRegimeLabel(snapshot.regime)}" },
+                )
             }
             when (selectedTab) {
-                0 -> StructuredReportView(report.result, symbols)
+                0 -> StructuredReportView(report.result, symbols) { field -> selectedSummaryField = field }
                 1 -> SymbolListView(
                     symbols = symbols,
                     tradePlans = tradePlans,
@@ -138,10 +144,27 @@ fun ReportsScreen(
     selectedSymbol?.let { sym ->
         SymbolDetailSheet(symbol = sym, onDismiss = { selectedSymbol = null })
     }
+    selectedSummaryField?.let { field ->
+        ModalBottomSheet(onDismissRequest = { selectedSummaryField = null }) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("报告字段详情", style = MaterialTheme.typography.titleLarge)
+                Text(field, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "该字段来自本次研究冻结快照。打开个股详情可查看指标、风险和数据完整度。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = { selectedSummaryField = null }, modifier = Modifier.fillMaxWidth()) { Text("完成") }
+            }
+        }
+    }
 }
 
 @Composable
-private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>) {
+private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>, onFieldClick: (String) -> Unit) {
     val status = result.stringValue("run_status")
     val decisionAt = result.stringValue("decision_at")
     val buyDate = result.stringValue("buy_execution_date")
@@ -165,12 +188,12 @@ private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>
             return@Column
         }
         Text("研究结论", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        KeyValueRow("运行状态", reportStatusLabel(status))
-        KeyValueRow("决策时间", formatReportValue(decisionAt))
-        KeyValueRow("买入执行日", formatReportValue(buyDate))
-        KeyValueRow("最早 T+1 卖出日", formatReportValue(sellDate))
-        KeyValueRow("正式候选", "${eligible.size} 只")
-        KeyValueRow("研究个股", "${symbols.size} 只")
+        KeyValueRow("运行状态", reportStatusLabel(status), onClick = { onFieldClick("运行状态：${reportStatusLabel(status)}") })
+        KeyValueRow("决策时间", formatReportValue(decisionAt), onClick = { onFieldClick("决策时间：${formatReportValue(decisionAt)}") })
+        KeyValueRow("买入执行日", formatReportValue(buyDate), onClick = { onFieldClick("买入执行日：${formatReportValue(buyDate)}") })
+        KeyValueRow("最早 T+1 卖出日", formatReportValue(sellDate), onClick = { onFieldClick("最早 T+1 卖出日：${formatReportValue(sellDate)}") })
+        KeyValueRow("正式候选", "${eligible.size} 只", onClick = { onFieldClick("正式候选：${eligible.size} 只") })
+        KeyValueRow("研究个股", "${symbols.size} 只", onClick = { onFieldClick("研究个股：${symbols.size} 只") })
         reason?.takeIf(String::isNotBlank)?.let {
             Text("风险说明", style = MaterialTheme.typography.titleSmall)
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -181,7 +204,13 @@ private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>
         }
         if (quality.isNotEmpty()) {
             Text("数据质量", style = MaterialTheme.typography.titleSmall)
-            quality.forEach { (key, value) -> KeyValueRow(reportFieldLabel(key), value.displayValue()) }
+            quality.forEach { (key, value) ->
+                KeyValueRow(
+                    reportFieldLabel(key),
+                    value.displayValue(),
+                    onClick = { onFieldClick("${reportFieldLabel(key)}：${value.displayValue()}") },
+                )
+            }
         }
         Text(
             "报告采用后端冻结的结构化研究结果；逐股票摘要和门禁原因请切换到“研究个股”。",
@@ -252,7 +281,7 @@ private fun SymbolListView(
         ) {
             items(sortedSymbols, key = { it.symbol }) { sym ->
             val plan = tradePlans.firstOrNull { sym.symbol in it.symbols }
-            AppCard(modifier = Modifier.clickable { onSelect(sym) }) {
+            AppCard(modifier = Modifier.clickable { onSelect(sym) }.testTag("reports.symbol.${sym.symbol}")) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("${sym.name ?: sym.symbol}", style = MaterialTheme.typography.titleSmall)
@@ -293,13 +322,14 @@ private fun SymbolListView(
                         TextButton(
                             onClick = { onSubmitPlan(sym.symbol) },
                             contentPadding = PaddingValues(horizontal = 8.dp),
+                            modifier = Modifier.testTag("reports.plan.${sym.symbol}"),
                         ) { Text("生成模拟方案") }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Row {
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { onOpenKline(sym.symbol) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    TextButton(onClick = { onOpenKline(sym.symbol) }, contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.testTag("reports.kline.${sym.symbol}")) {
                         Text("打开 K 线")
                     }
                 }
@@ -365,8 +395,12 @@ private fun SymbolDetailSheet(symbol: ReportSymbol, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun MarketIndexSnapshotSummary(snapshot: MarketIndexSnapshot, modifier: Modifier = Modifier) {
-    AppCard(modifier) {
+private fun MarketIndexSnapshotSummary(
+    snapshot: MarketIndexSnapshot,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    AppCard(modifier = modifier.clickable(enabled = onClick != null) { onClick?.invoke() }) {
         Text("冻结大盘指数环境", style = MaterialTheme.typography.titleSmall)
         Text(
             "${marketRegimeLabel(snapshot.regime)} · 综合5日 ${snapshot.composite_return_5d?.times(100).fmt2()}% · 调整 ${signedFmt(snapshot.score_adjustment)}",

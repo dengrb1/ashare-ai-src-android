@@ -10,6 +10,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import androidx.core.content.ContextCompat
 
 class MarketMonitorService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -54,10 +55,8 @@ class MarketMonitorService : Service() {
         private const val NOTIFICATION_ID = 4401
 
         fun start(context: Context) {
-            // Android is push-only for market monitoring. The server-side
-            // minute monitor delivers high-severity alerts; starting a local
-            // foreground loop would create an unwanted battery-heavy quote poll.
-            stop(context)
+            val intent = Intent(context, MarketMonitorService::class.java)
+            ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {

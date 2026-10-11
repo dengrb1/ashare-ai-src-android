@@ -15,6 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CandleEntity::class,
         AlertRuleEntity::class,
         LocalNotificationEntity::class,
+        MonitoringEventEntity::class,
         ResearchRunEntity::class,
         ResearchReportEntity::class,
         ResearchCandidateEntity::class,
@@ -28,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SyncTombstoneEntity::class,
         SyncBaselineEntity::class,
     ],
-    version = 6,
+    version = 8,
     exportSchema = true,
 )
 abstract class LocalDatabase : RoomDatabase() {
@@ -128,6 +129,25 @@ abstract class LocalDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE research_reports ADD COLUMN engineVersion TEXT NOT NULL DEFAULT 'research-v2'")
+                db.execSQL("ALTER TABLE research_reports ADD COLUMN signalSummaryJson TEXT")
+                db.execSQL("ALTER TABLE research_reports ADD COLUMN monitoringEventCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE research_candidates ADD COLUMN trendPhase TEXT NOT NULL DEFAULT 'UNKNOWN'")
+                db.execSQL("ALTER TABLE research_candidates ADD COLUMN trendSignal TEXT NOT NULL DEFAULT 'UNKNOWN'")
+                db.execSQL("ALTER TABLE research_candidates ADD COLUMN volumePriceSignal TEXT NOT NULL DEFAULT 'UNKNOWN'")
+                db.execSQL("ALTER TABLE research_candidates ADD COLUMN capitalActivityProxy REAL")
+                db.execSQL("ALTER TABLE research_candidates ADD COLUMN freshness TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS monitoring_events (id TEXT NOT NULL PRIMARY KEY, symbol TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL, occurredAt INTEGER NOT NULL, severity TEXT NOT NULL, reportId TEXT, payloadJson TEXT NOT NULL, isRead INTEGER NOT NULL)")
+            }
+        }
+
         fun create(context: Context): LocalDatabase = Room.databaseBuilder(
             context.applicationContext,
             LocalDatabase::class.java,
@@ -138,6 +158,8 @@ abstract class LocalDatabase : RoomDatabase() {
             MIGRATION_3_4,
             MIGRATION_4_5,
             MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
         ).enableMultiInstanceInvalidation()
             .build()
 
@@ -149,9 +171,10 @@ abstract class LocalDatabase : RoomDatabase() {
                 "CREATE TABLE IF NOT EXISTS candles (symbol TEXT NOT NULL, tradingDate TEXT NOT NULL, open REAL NOT NULL, close REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, volume REAL, provider TEXT NOT NULL, fetchedAt INTEGER NOT NULL, PRIMARY KEY(symbol, tradingDate))",
                 "CREATE TABLE IF NOT EXISTS alerts (id TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, lowerBound REAL, upperBound REAL, enabled INTEGER NOT NULL, expiresAt INTEGER, cooldownMinutes INTEGER NOT NULL, lastTriggeredAt INTEGER, configJson TEXT NOT NULL, PRIMARY KEY(id))",
                 "CREATE TABLE IF NOT EXISTS local_notifications (id TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL, deepLink TEXT NOT NULL, createdAt INTEGER NOT NULL, isRead INTEGER NOT NULL, payloadJson TEXT NOT NULL, PRIMARY KEY(id))",
+                "CREATE TABLE IF NOT EXISTS monitoring_events (id TEXT NOT NULL PRIMARY KEY, symbol TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL, occurredAt INTEGER NOT NULL, severity TEXT NOT NULL, reportId TEXT, payloadJson TEXT NOT NULL, isRead INTEGER NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS research_runs (id TEXT NOT NULL, scope TEXT NOT NULL, symbolsJson TEXT NOT NULL, state TEXT NOT NULL, totalCount INTEGER NOT NULL, completedCount INTEGER NOT NULL, startedAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, cancellationRequested INTEGER NOT NULL, errorMessage TEXT, includePortfolioDataForAi INTEGER NOT NULL, aiProviderId TEXT, PRIMARY KEY(id))",
-                "CREATE TABLE IF NOT EXISTS research_reports (id TEXT NOT NULL, runId TEXT NOT NULL, title TEXT NOT NULL, deterministicBody TEXT NOT NULL, aiExplanation TEXT, createdAt INTEGER NOT NULL, PRIMARY KEY(id))",
-                "CREATE TABLE IF NOT EXISTS research_candidates (id TEXT NOT NULL, runId TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL, score REAL NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))",
+                "CREATE TABLE IF NOT EXISTS research_reports (id TEXT NOT NULL, runId TEXT NOT NULL, title TEXT NOT NULL, deterministicBody TEXT NOT NULL, aiExplanation TEXT, createdAt INTEGER NOT NULL, engineVersion TEXT NOT NULL DEFAULT 'research-v2', signalSummaryJson TEXT, monitoringEventCount INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))",
+                "CREATE TABLE IF NOT EXISTS research_candidates (id TEXT NOT NULL, runId TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL, score REAL NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, createdAt INTEGER NOT NULL, trendPhase TEXT NOT NULL DEFAULT 'UNKNOWN', trendSignal TEXT NOT NULL DEFAULT 'UNKNOWN', volumePriceSignal TEXT NOT NULL DEFAULT 'UNKNOWN', capitalActivityProxy REAL, freshness TEXT NOT NULL DEFAULT 'UNKNOWN', PRIMARY KEY(id))",
                 "CREATE TABLE IF NOT EXISTS simulation_portfolios (id TEXT NOT NULL, runId TEXT NOT NULL, name TEXT NOT NULL, holdingsJson TEXT NOT NULL, score REAL NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))",
                 "CREATE TABLE IF NOT EXISTS ai_providers (id TEXT NOT NULL, name TEXT NOT NULL, baseUrl TEXT NOT NULL, encryptedApiKey TEXT NOT NULL, model TEXT NOT NULL, organization TEXT, project TEXT, enabled INTEGER NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))",
                 "CREATE TABLE IF NOT EXISTS chat_sessions (id TEXT NOT NULL, title TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))",

@@ -25,4 +25,9 @@ class SharedDataStoreAppearanceTest {
         assertTrue(!settings.shareGlassEffect)
         assertTrue(settings.shareFullAnimations)
     }
+
+    @Test
+    fun themeDefaultsIncludeAccentColor() {
+        assertTrue(SharedDataStore.SharedValues().accentColor.matches(Regex("#[0-9A-F]{6}")))
+    }
 }

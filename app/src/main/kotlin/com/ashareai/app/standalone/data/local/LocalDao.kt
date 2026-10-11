@@ -110,6 +110,24 @@ interface LocalDao {
     @Query("DELETE FROM local_notifications")
     suspend fun clearNotifications()
 
+    @Query("SELECT * FROM monitoring_events ORDER BY occurredAt DESC LIMIT :limit")
+    fun observeMonitoringEvents(limit: Int = 100): Flow<List<MonitoringEventEntity>>
+
+    @Query("SELECT * FROM monitoring_events ORDER BY occurredAt DESC")
+    suspend fun monitoringEvents(): List<MonitoringEventEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMonitoringEvent(event: MonitoringEventEntity)
+
+    @Query("SELECT * FROM monitoring_events WHERE id = :id LIMIT 1")
+    suspend fun monitoringEvent(id: String): MonitoringEventEntity?
+
+    @Query("UPDATE monitoring_events SET isRead = 1 WHERE id = :id")
+    suspend fun markMonitoringEventRead(id: String)
+
+    @Query("DELETE FROM monitoring_events WHERE occurredAt < :before")
+    suspend fun deleteMonitoringEventsBefore(before: Long)
+
     @Query("SELECT * FROM research_runs ORDER BY updatedAt DESC")
     fun observeResearchRuns(): Flow<List<ResearchRunEntity>>
 

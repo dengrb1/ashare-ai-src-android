@@ -9,6 +9,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -133,6 +135,7 @@ val AppTypography = Typography(
 @Composable
 fun HybridTheme(
     darkModePref: String = "system",
+    accentColor: String = "#006B5F",
     glassEnabled: Boolean = true,
     fullAnimationsEnabled: Boolean = true,
     powerSaveMode: Boolean = false,
@@ -143,13 +146,15 @@ fun HybridTheme(
         "light" -> false
         else -> isSystemInDarkTheme()
     }
+    val accent = parseAccentColor(accentColor)
+    val scheme = (if (dark) DarkColors else LightColors).withAccent(accent, dark)
     androidx.compose.runtime.CompositionLocalProvider(
         LocalGlassEnabled provides glassEnabled,
         LocalFullAnimationsEnabled provides fullAnimationsEnabled,
         LocalPowerSaveMode provides powerSaveMode,
     ) {
         MaterialTheme(
-            colorScheme = if (dark) DarkColors else LightColors,
+            colorScheme = scheme,
         shapes = AppShapes,
         typography = AppTypography,
         content = content,
@@ -163,12 +168,14 @@ fun HybridTheme(
 @Composable
 fun AShareTheme(
     darkModePref: String = "system",
+    accentColor: String = "#006B5F",
     glassEnabled: Boolean = true,
     fullAnimationsEnabled: Boolean = true,
     powerSaveMode: Boolean = false,
     content: @Composable () -> Unit,
 ) = HybridTheme(
     darkModePref = darkModePref,
+    accentColor = accentColor,
     glassEnabled = glassEnabled,
     fullAnimationsEnabled = fullAnimationsEnabled,
     powerSaveMode = powerSaveMode,
@@ -182,3 +189,29 @@ fun changeColor(value: Double?): Color = when {
     value < 0 -> StockDown
     else -> StockFlat
 }
+
+private fun parseAccentColor(value: String): Color = runCatching {
+    Color(android.graphics.Color.parseColor(value))
+}.getOrDefault(Color(0xFF006B5F))
+
+private fun androidx.compose.material3.ColorScheme.withAccent(accent: Color, dark: Boolean): androidx.compose.material3.ColorScheme {
+    // Resolve the transparent container over the active surface before selecting its
+    // foreground. This keeps custom accents readable in both theme modes.
+    val containerAlpha = if (dark) 0.32f else 0.16f
+    val containerSurface = if (dark) DarkColors.surface else LightColors.surface
+    val accentContainer = accent.copy(alpha = containerAlpha).compositeOver(containerSurface)
+    val containerContent = accentContainer.contentColor()
+    return copy(
+        primary = accent,
+        onPrimary = accent.contentColor(),
+        primaryContainer = accentContainer,
+        onPrimaryContainer = containerContent,
+        inversePrimary = accent,
+        tertiary = accent,
+        onTertiary = accent.contentColor(),
+        tertiaryContainer = accentContainer,
+        onTertiaryContainer = containerContent,
+    )
+}
+
+private fun Color.contentColor(): Color = if (luminance() > 0.52f) Color.Black else Color.White

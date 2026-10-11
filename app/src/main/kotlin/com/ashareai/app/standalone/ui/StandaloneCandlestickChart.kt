@@ -238,7 +238,7 @@ fun StandaloneCandlestickChart(
 
             when (subChart) {
                 StandaloneSubChart.VOLUME -> drawVolume(visibleCandles, slotWidth, bodyWidth, subTop, subHeight)
-                StandaloneSubChart.MACD -> drawMacd(visibleIndicators, slotWidth, bodyWidth, subTop, subHeight)
+                StandaloneSubChart.MACD -> drawMacd(visibleIndicators, slotWidth, bodyWidth, subTop, subHeight, gridColor)
                 StandaloneSubChart.KDJ -> drawKdj(visibleIndicators, slotWidth, subTop, subHeight)
             }
 
@@ -404,13 +404,14 @@ private fun DrawScope.drawMacd(
     bodyWidth: Float,
     top: Float,
     height: Float,
+    gridColor: Color,
 ) {
     val maximum = (indicators.macdDif + indicators.macdDea + indicators.macdHist)
         .maxOf { abs(it) }
         .takeIf { it > 0 } ?: 1.0
     val middle = top + height / 2
     fun yOf(value: Double): Float = (middle - value / maximum * height / 2).toFloat()
-    drawLine(Color.Gray.copy(alpha = 0.35f), Offset(0f, middle), Offset(size.width, middle), 1f)
+    drawLine(gridColor.copy(alpha = 0.7f), Offset(0f, middle), Offset(size.width, middle), 1f)
     indicators.macdHist.forEachIndexed { index, value ->
         val x = slotWidth * index + slotWidth / 2
         drawLine(if (value >= 0) STOCK_UP else STOCK_DOWN, Offset(x, middle), Offset(x, yOf(value)), bodyWidth * 0.5f)

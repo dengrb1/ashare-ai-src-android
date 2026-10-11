@@ -98,6 +98,7 @@ class StandaloneViewModel(
     val quotes = local.quotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val alerts = local.alerts.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val notifications = local.notifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val monitoringEvents = local.monitoringEvents.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val unreadNotifications = local.unreadNotificationCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val researchRuns = local.researchRuns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val reports = local.reports.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -452,7 +453,13 @@ class StandaloneViewModel(
     fun setMonitoringEnabled(enabled: Boolean) {
         viewModelScope.launch {
             app.localContainer.settings.setMonitoringEnabled(enabled)
-            if (enabled) MarketMonitorService.start(app) else MarketMonitorService.stop(app)
+            if (enabled) {
+                MarketMonitorService.start(app)
+                app.localContainer.monitoringFallbackScheduler.schedule()
+            } else {
+                MarketMonitorService.stop(app)
+                app.localContainer.monitoringFallbackScheduler.cancel()
+            }
         }
     }
 
@@ -527,6 +534,18 @@ class StandaloneViewModel(
 
     fun setDarkMode(mode: String) {
         viewModelScope.launch { app.localContainer.settings.setDarkMode(mode) }
+    }
+
+    fun setAccentColor(hex: String) {
+        viewModelScope.launch { app.localContainer.settings.setAccentColor(hex) }
+    }
+
+    fun exportReportJson(reportId: String?, onResult: (Result<ByteArray>) -> Unit) {
+        viewModelScope.launch { onResult(runCatching { app.localContainer.reportExports.json(reportId) }) }
+    }
+
+    fun exportReportCsv(reportId: String?, onResult: (Result<ByteArray>) -> Unit) {
+        viewModelScope.launch { onResult(runCatching { app.localContainer.reportExports.csv(reportId) }) }
     }
 
     fun setGlassEnabled(enabled: Boolean) {

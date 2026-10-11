@@ -17,7 +17,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +76,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -104,13 +105,17 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashareai.app.standalone.data.ai.AiProviderDraft
+import com.ashareai.app.standalone.data.ai.LocalQwenRuntime
+import com.ashareai.app.standalone.data.ai.QwenModelInfo
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.ui.components.LiquidGlassBottomBar
 import com.ashareai.app.ui.components.LiquidGlassTab
@@ -126,9 +131,14 @@ import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.Holding
 import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
+import com.ashareai.app.standalone.domain.MonitoringEvent
 import com.ashareai.app.standalone.domain.NotificationPriority
 import com.ashareai.app.standalone.domain.ResearchRunState
 import com.ashareai.app.standalone.domain.ResearchScope
+import com.ashareai.app.standalone.domain.ResearchCandidate
+import com.ashareai.app.standalone.domain.TrendPhase
+import com.ashareai.app.standalone.domain.TrendSignal
+import com.ashareai.app.standalone.domain.VolumePriceSignal
 import com.ashareai.app.standalone.island.FocusCapabilities
 import com.ashareai.app.standalone.island.FocusNotification
 import com.mikepenz.markdown.m3.Markdown
@@ -381,9 +391,10 @@ private val bottomDestinations = listOf(
 
 @Composable
 private fun GlassTopBar(route: String, onBack: () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
+    val highlightColor = MaterialTheme.colorScheme.onSurface
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -417,7 +428,7 @@ private fun GlassTopBar(route: String, onBack: () -> Unit) {
                         brush = Brush.horizontalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = if (dark) 0.12f else 0.38f),
+                                highlightColor.copy(alpha = if (dark) 0.12f else 0.38f),
                                 Color.Transparent,
                             ),
                         ),
@@ -479,6 +490,7 @@ private fun HomeScreen(
     val reports by viewModel.reports.collectAsState()
     val runs by viewModel.researchRuns.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
+    val monitoringEvents by viewModel.monitoringEvents.collectAsState()
     val providers by viewModel.aiProviders.collectAsState()
     val agents by viewModel.aiAgents.collectAsState()
     val aiStatus by viewModel.aiStatus.collectAsState()
@@ -494,7 +506,7 @@ private fun HomeScreen(
         InfoCard(
             title = "持仓监控",
             text = if (settings.monitoringEnabled) {
-                "交易时段每 " + settings.monitoringIntervalSeconds + " 秒检查实际持仓；非交易时段无网络轮询。"
+                "交易时段每 " + settings.monitoringIntervalSeconds + " 秒检查持仓、自选、报告候选和模拟组合；非交易时段无网络请求。"
             } else {
                 "已关闭。"
             },
@@ -595,6 +607,42 @@ private fun HomeScreen(
                         }
                     }
                     Text("数据更新时间：${formatTime(market.indexQuotes.maxOf { it.fetchedAt })}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        SectionTitle("实时研究监控", trailing = {
+            TextButton(onClick = { navigate("reports") }) { Text("查看报告") }
+        })
+        monitoringEvents.take(5).forEach { event ->
+            ListItemSurface(onClick = { navigate("reports") }) {
+                Column(Modifier.weight(1f)) {
+                    Text("${event.name} · ${event.symbol}", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        monitoringEventLabel(event.type) + " · " + formatTime(event.occurredAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (event.severity == NotificationPriority.WARNING) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(if (event.isRead) "已读" else "新", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        val monitoredCandidates = candidates
+            .filter { it.trendSignal != TrendSignal.UNKNOWN || it.volumePriceSignal != VolumePriceSignal.UNKNOWN }
+            .take(6)
+        if (monitoredCandidates.isEmpty()) {
+            EmptyState("暂无研究信号", "完成一次研究后，这里会显示趋势、量价和风险变化。")
+        } else {
+            monitoredCandidates.forEach { candidate ->
+                ListItemSurface(onClick = { navigate("reports") }) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${candidate.name} · ${candidate.symbol}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${trendSignalLabel(candidate.trendSignal)} · ${volumeSignalLabel(candidate.volumePriceSignal)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text("${candidate.score.toInt()} 分", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -860,7 +908,7 @@ private fun GlassKlineRangeSelector(
             1.dp,
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = if (isSystemInDarkTheme()) 0.18f else 0.72f),
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
                 ),
             ),
@@ -891,7 +939,7 @@ private fun LiquidGlassSegmentedControl(
     scrollable: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -902,7 +950,7 @@ private fun LiquidGlassSegmentedControl(
             1.dp,
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = if (dark) 0.18f else 0.72f),
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = if (dark) 0.18f else 0.38f),
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
                 ),
             ),
@@ -1696,6 +1744,7 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ReportsScreen(
     viewModel: StandaloneViewModel,
     modifier: Modifier,
@@ -1705,7 +1754,30 @@ private fun ReportsScreen(
     val runs by viewModel.researchRuns.collectAsState()
     val candidates by viewModel.candidates.collectAsState()
     val portfolios by viewModel.portfolios.collectAsState()
+    val monitoringEvents by viewModel.monitoringEvents.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedCandidate by remember { mutableStateOf<ResearchCandidate?>(null) }
+    var selectedEvent by remember { mutableStateOf<MonitoringEvent?>(null) }
+    var exportFormat by rememberSaveable { mutableStateOf("json") }
+    var exportStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri != null) {
+            val reportId = selectedId
+            val onBytes: (Result<ByteArray>) -> Unit = { result ->
+                result.onSuccess { bytes ->
+                    runCatching {
+                        viewModel.appContext.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                            ?: error("无法写入所选文件")
+                    }.onSuccess { exportStatus = "报告数据已导出" }
+                        .onFailure { exportStatus = it.message ?: "导出失败" }
+                }.onFailure { exportStatus = it.message ?: "导出失败" }
+            }
+            if (exportFormat == "json") viewModel.exportReportJson(reportId, onBytes)
+            else viewModel.exportReportCsv(reportId, onBytes)
+        }
+    }
     LaunchedEffect(reports) {
         if (reports.none { it.id == selectedId }) selectedId = reports.firstOrNull()?.id
     }
@@ -1713,6 +1785,8 @@ private fun ReportsScreen(
     val run = selected?.let { report -> runs.firstOrNull { it.id == report.runId } }
     val runCandidates = selected?.let { report -> candidates.filter { it.runId == report.runId } }.orEmpty()
     val portfolio = selected?.let { report -> portfolios.firstOrNull { it.runId == report.runId } }
+    val reportEvents = monitoringEvents
+        .filter { it.reportId == selected?.id }
     ScreenColumn(modifier) {
         if (reports.isEmpty()) EmptyState("尚无本地报告", "研究完成后会生成确定性模板报告。")
         if (reports.isNotEmpty()) {
@@ -1722,6 +1796,7 @@ private fun ReportsScreen(
                     FilterChip(
                         selected = report.id == selectedId,
                         onClick = { selectedId = report.id },
+                        modifier = Modifier.testTag("standalone.reports.select.${report.id}"),
                         label = {
                             Text(
                                 (reportRun?.automaticReportSlot?.let { "报告 $it · " }.orEmpty()) + formatTime(report.createdAt),
@@ -1737,10 +1812,12 @@ private fun ReportsScreen(
                 InfoCard(
                     title = run?.let { researchScopeLabel(it.scope) } ?: "研究报告",
                     text = "${run?.completedCount ?: 0} / ${run?.totalCount ?: 0} 只 · ${run?.triggerSource?.name ?: "MANUAL"}",
+                    onClick = { selectedCandidate = runCandidates.firstOrNull() },
                 )
                 InfoCard(
                     title = "${runCandidates.count { it.reason.contains("名 · 买入") }} 只买入",
                     text = portfolio?.let { "模拟组合分 ${it.score}" } ?: "未形成组合",
+                    onClick = { selectedCandidate = runCandidates.firstOrNull() },
                 )
             }
             ContentCard(modifier = Modifier.fillMaxWidth()) {
@@ -1750,10 +1827,37 @@ private fun ReportsScreen(
                     Markdown(report.deterministicBody)
                 }
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    exportFormat = "json"
+                    exportLauncher.launch("research-report-${report.id}.json")
+                }, modifier = Modifier.weight(1f).testTag("standalone.reports.export.json")) { Text("导出 JSON") }
+                OutlinedButton(onClick = {
+                    exportFormat = "csv"
+                    exportLauncher.launch("research-report-${report.id}.csv")
+                }, modifier = Modifier.weight(1f).testTag("standalone.reports.export.csv")) { Text("导出 CSV") }
+            }
+            exportStatus?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+            if (reportEvents.isNotEmpty()) {
+                SectionTitle("监控时间线")
+                reportEvents.take(12).forEach { event ->
+                    ListItemSurface(onClick = { selectedEvent = event }) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${event.name} · ${monitoringEventLabel(event.type)}", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                formatTime(event.occurredAt),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (event.severity == NotificationPriority.WARNING) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(if (event.isRead) "已读" else "新", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
             if (runCandidates.isNotEmpty()) {
                 SectionTitle("股票工作台")
                 runCandidates.take(30).forEach { candidate ->
-                    ListItemSurface {
+                    ListItemSurface(onClick = { selectedCandidate = candidate }, modifier = Modifier.testTag("standalone.reports.candidate.${candidate.symbol}")) {
                         Column(Modifier.weight(1f)) {
                             Text("${candidate.name} · ${candidate.symbol}", fontWeight = FontWeight.SemiBold)
                             Text(candidate.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1770,6 +1874,53 @@ private fun ReportsScreen(
                         Markdown(explanation)
                     }
                 }
+            }
+        }
+    }
+    selectedCandidate?.let { candidate ->
+        ModalBottomSheet(onDismissRequest = { selectedCandidate = null }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("${candidate.name} · ${candidate.symbol}", style = MaterialTheme.typography.titleLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("综合分 ${"%.1f".format(Locale.US, candidate.score)}")
+                    Text("风险 ${candidate.risk}", color = MaterialTheme.colorScheme.primary)
+                }
+                KeyValueRow("趋势阶段", trendPhaseLabel(candidate.trendPhase))
+                KeyValueRow("趋势信号", trendSignalLabel(candidate.trendSignal))
+                KeyValueRow("量价关系", volumeSignalLabel(candidate.volumePriceSignal))
+                KeyValueRow(
+                    "资金活跃度代理",
+                    candidate.capitalActivityProxy?.let { "${it.toInt()} / 100" } ?: "数据不足",
+                )
+                Text("候选理由", style = MaterialTheme.typography.titleSmall)
+                Text(candidate.reason, style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(
+                    onClick = { selectedCandidate = null; openKline(candidate.symbol) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("打开 K 线与实时监控") }
+            }
+        }
+    }
+    selectedEvent?.let { event ->
+        ModalBottomSheet(onDismissRequest = { selectedEvent = null }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(monitoringEventLabel(event.type), style = MaterialTheme.typography.titleLarge)
+                Text("${event.name} · ${event.symbol}", style = MaterialTheme.typography.titleSmall)
+                Text("发生时间：${formatTime(event.occurredAt)}", style = MaterialTheme.typography.bodySmall)
+                Text(event.payload, style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = { selectedEvent = null }, modifier = Modifier.fillMaxWidth()) { Text("完成") }
             }
         }
     }
@@ -2013,8 +2164,25 @@ private fun SettingsScreen(
     var archiveConflictChoice by rememberSaveable { mutableStateOf("KEEP_LOCAL") }
     var archiveBusy by rememberSaveable { mutableStateOf(false) }
     var focusCapabilities by remember { mutableStateOf<FocusCapabilities?>(null) }
+    val qwenRuntime = remember { LocalQwenRuntime(context) }
+    var qwenInfo by remember { mutableStateOf<QwenModelInfo?>(null) }
+    var qwenEnabled by remember { mutableStateOf(qwenRuntime.isEnabled()) }
+    var qwenStatus by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         focusCapabilities = withContext(Dispatchers.IO) { FocusNotification.capabilities(context) }
+        qwenInfo = withContext(Dispatchers.IO) { qwenRuntime.currentModel() }
+    }
+    val qwenPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                qwenStatus = runCatching {
+                    qwenInfo = withContext(Dispatchers.IO) { qwenRuntime.importModel(uri) }
+                    qwenEnabled = false
+                    qwenRuntime.setEnabled(false)
+                    "模型已校验并保存，可在本机启用解释运行时"
+                }.getOrElse { it.message ?: "模型导入失败" }
+            }
+        }
     }
     val createArchive = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -2141,6 +2309,16 @@ private fun SettingsScreen(
                         )
                     }
                 }
+                Text("强调色", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("#006B5F" to "青绿", "#3D5AFE" to "靛蓝", "#B3261E" to "红棕", "#7A4EAB" to "紫灰").forEach { (hex, label) ->
+                        FilterChip(
+                            selected = settings.accentColor.equals(hex, ignoreCase = true),
+                            onClick = { viewModel.setAccentColor(hex) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
             }
         }
         SwitchRow("液态玻璃", settings.glassEnabled, onChange = viewModel::setGlassEnabled)
@@ -2217,6 +2395,40 @@ private fun SettingsScreen(
             title = "AI 配置说明",
             text = "系统会按任务、网络、电量和 Provider 可用性自动选择执行路径；密钥仅保存在本机 Keystore。",
         )
+
+        ContentCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("端侧 Qwen 2 0.5B", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "可选导入 GGUF 模型，仅用于报告解释和监控摘要，不参与评分或排序。当前构建未内置推理运行时时会自动回退到规则解释。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                qwenInfo?.let { info ->
+                    Text("${info.format} · ${info.sizeBytes / (1024 * 1024)} MB · ${info.status}", style = MaterialTheme.typography.labelSmall)
+                } ?: Text("尚未导入模型", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { qwenPicker.launch(arrayOf("application/octet-stream", "*/*")) }) {
+                        Text("导入模型")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            qwenRuntime.setEnabled(!qwenEnabled)
+                            qwenEnabled = !qwenEnabled
+                            qwenStatus = if (qwenEnabled) "已启用端侧模型（不可用时自动回退）" else "已关闭端侧模型"
+                        },
+                        enabled = qwenInfo?.status == com.ashareai.app.standalone.data.ai.QwenModelStatus.READY,
+                    ) { Text(if (qwenEnabled) "关闭" else "启用") }
+                    TextButton(onClick = {
+                        qwenRuntime.removeModel()
+                        qwenInfo = null
+                        qwenEnabled = false
+                        qwenStatus = "已删除本机模型"
+                    }, enabled = qwenInfo != null) { Text("删除") }
+                }
+                qwenStatus?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+            }
+        }
 
         aiTestResult?.let { Text("连接测试：" + it) }
         SwitchRow(
@@ -2343,10 +2555,13 @@ private fun InfoCard(
     title: String,
     text: String,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     actions: @Composable (() -> Unit)? = null,
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().let { base ->
+            if (onClick != null) base.clickable(onClick = onClick) else base
+        },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -2364,6 +2579,54 @@ private fun InfoCard(
                 )
             }
         }
+    }
+}
+
+private fun trendPhaseLabel(value: TrendPhase): String = when (value) {
+    TrendPhase.RISING -> "上升"
+    TrendPhase.RANGE_BOUND -> "震荡"
+    TrendPhase.FALLING -> "下降"
+    TrendPhase.TRANSITION -> "过渡"
+    TrendPhase.UNKNOWN -> "未知"
+}
+
+private fun trendSignalLabel(value: TrendSignal): String = when (value) {
+    TrendSignal.BULLISH -> "偏强"
+    TrendSignal.BEARISH -> "偏弱"
+    TrendSignal.BREAKOUT -> "突破"
+    TrendSignal.PULLBACK -> "回撤"
+    TrendSignal.REVERSAL -> "拐点"
+    TrendSignal.NEUTRAL -> "中性"
+    TrendSignal.UNKNOWN -> "未知"
+}
+
+private fun volumeSignalLabel(value: VolumePriceSignal): String = when (value) {
+    VolumePriceSignal.VOLUME_UP_PRICE_UP -> "放量上涨"
+    VolumePriceSignal.VOLUME_DOWN_PRICE_UP -> "缩量上涨"
+    VolumePriceSignal.VOLUME_UP_PRICE_DOWN -> "放量下跌"
+    VolumePriceSignal.VOLUME_DOWN_PRICE_DOWN -> "缩量下跌"
+    VolumePriceSignal.DIVERGENCE -> "量价背离"
+    VolumePriceSignal.NEUTRAL -> "中性"
+    VolumePriceSignal.UNKNOWN -> "未知"
+}
+
+private fun monitoringEventLabel(value: com.ashareai.app.standalone.domain.MonitoringEventType): String = when (value) {
+    com.ashareai.app.standalone.domain.MonitoringEventType.PRICE_BREAKOUT -> "价格突破"
+    com.ashareai.app.standalone.domain.MonitoringEventType.TREND_REVERSAL -> "趋势拐点"
+    com.ashareai.app.standalone.domain.MonitoringEventType.VOLUME_PRICE_DIVERGENCE -> "量价背离"
+    com.ashareai.app.standalone.domain.MonitoringEventType.VOLATILITY_SPIKE -> "波动异常"
+    com.ashareai.app.standalone.domain.MonitoringEventType.SCORE_CHANGED -> "评分变化"
+    com.ashareai.app.standalone.domain.MonitoringEventType.REPORT_UPDATED -> "报告更新"
+}
+
+@Composable
+private fun KeyValueRow(key: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(key, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -2473,7 +2736,7 @@ private fun PermissionRow(
 }
 
 @Composable
-private fun SectionTitle(value: String) {
+private fun SectionTitle(value: String, trailing: (@Composable () -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2486,6 +2749,8 @@ private fun SectionTitle(value: String) {
         )
         Spacer(Modifier.width(8.dp))
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.weight(1f))
+        trailing?.invoke()
     }
 }
 

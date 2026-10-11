@@ -216,11 +216,17 @@ fun statusColor(status: String?): Color = when (status?.uppercase()) {
 
 /** 键值行 */
 @Composable
-fun KeyValueRow(key: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+fun KeyValueRow(
+    key: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(key, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

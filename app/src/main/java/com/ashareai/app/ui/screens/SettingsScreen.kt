@@ -51,6 +51,7 @@ fun SettingsScreen(
     val marketViewModel: com.ashareai.app.ui.MarketViewModel = viewModel()
     val foregroundRefreshIntervalSeconds by marketViewModel.refreshIntervalSeconds.collectAsState()
     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
+    val accentColor by appViewModel.settings.accentColor.collectAsState(initial = "#006B5F")
     val glassEnabled by appViewModel.settings.glassEnabled.collectAsState(initial = true)
     val fullAnimationsEnabled by appViewModel.settings.fullAnimationsEnabled.collectAsState(initial = true)
     val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
@@ -229,6 +230,20 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = darkMode == v,
                                 onClick = { scope.launch { appViewModel.settings.setDarkMode(v) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("强调色", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf("#006B5F" to "青绿", "#3D5AFE" to "靛蓝", "#B3261E" to "红棕", "#7A4EAB" to "紫灰").forEach { (hex, label) ->
+                            FilterChip(
+                                selected = accentColor.equals(hex, ignoreCase = true),
+                                onClick = { scope.launch { appViewModel.settings.setAccentColor(hex) } },
                                 label = { Text(label) },
                             )
                         }
@@ -422,6 +437,7 @@ fun SettingsScreen(
                                     sharedDataStore.updateSharedSettings(sharedSettings.copy(shareTheme = enabled))
                                     if (enabled) {
                                         sharedDataStore.syncThemeMode(darkMode)
+                            sharedDataStore.syncAccentColor(accentColor)
                                     }
                                 }
                             },
@@ -551,6 +567,7 @@ fun SettingsScreen(
                                 // Use per-setting sync methods so disabled sharing options
                                 // keep each workspace's local preference isolated.
                                 sharedDataStore.syncThemeMode(darkMode)
+                                        sharedDataStore.syncAccentColor(accentColor)
                                 sharedDataStore.syncIslandEnabled(islandEnabled)
                                 sharedDataStore.syncNotificationsEnabled(islandEnabled)
                                 sharedDataStore.syncAppearance(glassEnabled, fullAnimationsEnabled)

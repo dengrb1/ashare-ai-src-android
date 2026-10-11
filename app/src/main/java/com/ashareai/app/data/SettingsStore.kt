@@ -35,6 +35,7 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
         private val KEY_REMEMBER_PASSWORD = booleanPreferencesKey("remember_password")
         private val KEY_REMEMBERED_PASSWORD = stringPreferencesKey("remembered_password")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode") // system | light | dark
+        private val KEY_ACCENT_COLOR = stringPreferencesKey("accent_color")
         private val KEY_GLASS_ENABLED = booleanPreferencesKey("glass_enabled")
         private val KEY_FULL_ANIMATIONS_ENABLED = booleanPreferencesKey("full_animations_enabled")
         private val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
@@ -52,6 +53,7 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
     val username: Flow<String?> = context.dataStore.data.map { it[KEY_USERNAME] }
     val rememberPassword: Flow<Boolean> = context.dataStore.data.map { it[KEY_REMEMBER_PASSWORD] ?: false }
     val darkMode: Flow<String> = context.dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
+    val accentColor: Flow<String> = context.dataStore.data.map { it[KEY_ACCENT_COLOR] ?: "#006B5F" }
     val glassEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GLASS_ENABLED] ?: true }
     val fullAnimationsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_FULL_ANIMATIONS_ENABLED] ?: true }
     val islandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_ISLAND_ENABLED] ?: false }
@@ -104,6 +106,11 @@ class SettingsStore(context: Context) : ConnectionSettings, SessionSettings {
 
     suspend fun setDarkMode(mode: String) {
         context.dataStore.edit { it[KEY_DARK_MODE] = mode }
+    }
+
+    suspend fun setAccentColor(hex: String) {
+        require(hex.matches(Regex("#[0-9A-Fa-f]{6}")))
+        context.dataStore.edit { it[KEY_ACCENT_COLOR] = hex.uppercase() }
     }
 
     suspend fun setGlassEnabled(enabled: Boolean) {

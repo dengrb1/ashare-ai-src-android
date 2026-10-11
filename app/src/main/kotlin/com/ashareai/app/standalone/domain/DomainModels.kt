@@ -173,6 +173,92 @@ data class ResearchScore(
     val factorFormulaVersion: String? = null,
     val factorParameterSha256: String? = null,
     val factorDecision: com.ashareai.app.scoring.FactorDecision? = null,
+    val engineVersion: String = "research-v2",
+    val trendAnalysis: TrendAnalysis = TrendAnalysis.unknown(),
+    val volumePrice: VolumePriceAnalysis = VolumePriceAnalysis.unknown(),
+    val riskLevel: RiskLevel = RiskLevel.UNKNOWN,
+    val signalFreshness: SignalFreshness = SignalFreshness.UNKNOWN,
+    val monitoringTriggers: List<MonitoringTrigger> = emptyList(),
+)
+
+enum class TrendPhase {
+    RISING,
+    RANGE_BOUND,
+    FALLING,
+    TRANSITION,
+    UNKNOWN,
+}
+
+enum class TrendSignal {
+    BULLISH,
+    BEARISH,
+    BREAKOUT,
+    PULLBACK,
+    REVERSAL,
+    NEUTRAL,
+    UNKNOWN,
+}
+
+enum class VolumePriceSignal {
+    VOLUME_UP_PRICE_UP,
+    VOLUME_DOWN_PRICE_UP,
+    VOLUME_UP_PRICE_DOWN,
+    VOLUME_DOWN_PRICE_DOWN,
+    DIVERGENCE,
+    NEUTRAL,
+    UNKNOWN,
+}
+
+enum class RiskLevel {
+    LOW,
+    MEDIUM,
+    HIGH,
+    UNKNOWN,
+}
+
+enum class SignalFreshness {
+    FRESH,
+    STALE,
+    UNKNOWN,
+}
+
+enum class MonitoringTrigger {
+    PRICE_BREAKOUT,
+    TREND_REVERSAL,
+    VOLUME_PRICE_DIVERGENCE,
+    VOLATILITY_SPIKE,
+    SCORE_CHANGED,
+    REPORT_UPDATED,
+}
+
+data class TrendAnalysis(
+    val phase: TrendPhase,
+    val signal: TrendSignal,
+    val confidence: Double,
+    val explanation: String,
+) {
+    companion object {
+        fun unknown() = TrendAnalysis(TrendPhase.UNKNOWN, TrendSignal.UNKNOWN, 0.0, "趋势数据不足")
+    }
+}
+
+data class VolumePriceAnalysis(
+    val signal: VolumePriceSignal,
+    val capitalActivityProxy: Double?,
+    val explanation: String,
+) {
+    companion object {
+        fun unknown() = VolumePriceAnalysis(VolumePriceSignal.UNKNOWN, null, "成交量数据不足")
+    }
+}
+
+data class ResearchSignalSnapshot(
+    val engineVersion: String,
+    val trend: TrendAnalysis,
+    val volumePrice: VolumePriceAnalysis,
+    val risk: RiskLevel,
+    val freshness: SignalFreshness,
+    val triggers: List<MonitoringTrigger> = emptyList(),
 )
 
 data class ResearchResult(
@@ -182,6 +268,13 @@ data class ResearchResult(
     val risk: String,
     val summary: String,
     val quote: MarketQuote?,
+    val signals: ResearchSignalSnapshot = ResearchSignalSnapshot(
+        engineVersion = "research-v2",
+        trend = TrendAnalysis.unknown(),
+        volumePrice = VolumePriceAnalysis.unknown(),
+        risk = RiskLevel.UNKNOWN,
+        freshness = SignalFreshness.UNKNOWN,
+    ),
 )
 
 data class ResearchReport(
@@ -191,6 +284,9 @@ data class ResearchReport(
     val deterministicBody: String,
     val aiExplanation: String?,
     val createdAt: Long,
+    val engineVersion: String = "research-v2",
+    val signalSummaryJson: String? = null,
+    val monitoringEventCount: Int = 0,
 )
 
 data class ResearchCandidate(
@@ -202,6 +298,47 @@ data class ResearchCandidate(
     val risk: String,
     val reason: String,
     val createdAt: Long,
+    val trendPhase: TrendPhase = TrendPhase.UNKNOWN,
+    val trendSignal: TrendSignal = TrendSignal.UNKNOWN,
+    val volumePriceSignal: VolumePriceSignal = VolumePriceSignal.UNKNOWN,
+    val capitalActivityProxy: Double? = null,
+    val freshness: SignalFreshness = SignalFreshness.UNKNOWN,
+)
+
+enum class MonitoringSource {
+    WATCHLIST,
+    REPORT_CANDIDATE,
+    SIMULATION_PORTFOLIO,
+}
+
+data class MonitoringTarget(
+    val symbol: String,
+    val name: String,
+    val source: MonitoringSource,
+    val enabled: Boolean = true,
+    val priceBreakoutPercent: Double? = null,
+    val scoreChangeThreshold: Double = 5.0,
+)
+
+enum class MonitoringEventType {
+    PRICE_BREAKOUT,
+    TREND_REVERSAL,
+    VOLUME_PRICE_DIVERGENCE,
+    VOLATILITY_SPIKE,
+    SCORE_CHANGED,
+    REPORT_UPDATED,
+}
+
+data class MonitoringEvent(
+    val id: String,
+    val symbol: String,
+    val name: String,
+    val type: MonitoringEventType,
+    val occurredAt: Long,
+    val severity: NotificationPriority,
+    val reportId: String? = null,
+    val payload: String = "{}",
+    val isRead: Boolean = false,
 )
 
 data class SimulationPortfolio(

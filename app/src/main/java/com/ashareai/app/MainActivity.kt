@@ -149,6 +149,7 @@ class MainActivity : ComponentActivity() {
                     }
                     com.ashareai.app.standalone.ui.StandaloneTheme(
                         darkModePref = settings.darkMode,
+                        accentColor = settings.accentColor,
                         glassEnabled = settings.glassEnabled,
                         fullAnimationsEnabled = settings.fullAnimationsEnabled,
                         powerSaveMode = isPowerSaveMode,
@@ -191,6 +192,7 @@ class MainActivity : ComponentActivity() {
                     val appViewModel: com.ashareai.app.ui.AppViewModel = viewModel()
                     val marketViewModel: com.ashareai.app.ui.MarketViewModel = viewModel()
                     val darkMode by appViewModel.settings.darkMode.collectAsState(initial = "system")
+                    val accentColor by appViewModel.settings.accentColor.collectAsState(initial = "#006B5F")
                     val glassEnabled by appViewModel.settings.glassEnabled.collectAsState(initial = true)
                     val fullAnimationsEnabled by appViewModel.settings.fullAnimationsEnabled.collectAsState(initial = true)
                     val isPowerSaveMode by appViewModel.isPowerSaveMode.collectAsState()
@@ -256,6 +258,7 @@ class MainActivity : ComponentActivity() {
 
                     com.ashareai.app.ui.theme.AShareTheme(
                         darkModePref = darkMode,
+                        accentColor = accentColor,
                         glassEnabled = glassEnabled,
                         fullAnimationsEnabled = fullAnimationsEnabled,
                         powerSaveMode = isPowerSaveMode,

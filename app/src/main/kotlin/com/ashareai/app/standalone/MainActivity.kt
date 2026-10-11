@@ -25,6 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ashareai.app.standalone.monitor.MarketMonitorService
+import com.ashareai.app.HybridApp
 import com.ashareai.app.standalone.ui.DevicePermissionState
 import com.ashareai.app.standalone.ui.StandaloneAppRoot
 import com.ashareai.app.standalone.ui.StandaloneTheme
@@ -64,13 +65,19 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(settings.monitoringEnabled) {
                 if (settings.monitoringEnabled) {
                     MarketMonitorService.start(this@MainActivity)
+                    HybridApp.from(this@MainActivity).localContainer.monitoringFallbackScheduler.schedule()
                 } else {
                     MarketMonitorService.stop(this@MainActivity)
+                    HybridApp.from(this@MainActivity).localContainer.monitoringFallbackScheduler.cancel()
                 }
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                if (settings.monitoringEnabled) MarketMonitorService.start(this@MainActivity)
             }
             val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
             StandaloneTheme(
                 darkModePref = settings.darkMode,
+                accentColor = settings.accentColor,
                 glassEnabled = settings.glassEnabled,
                 fullAnimationsEnabled = settings.fullAnimationsEnabled,
                 powerSaveMode = isPowerSaveMode,

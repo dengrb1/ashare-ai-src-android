@@ -9,6 +9,7 @@ import com.ashareai.app.standalone.data.ai.AiStreamEvent
 import com.ashareai.app.standalone.data.ai.AiAgentRouter
 import com.ashareai.app.standalone.data.ai.AiTaskType
 import com.ashareai.app.standalone.data.ai.LocalInferenceDetector
+import com.ashareai.app.standalone.data.ai.LocalQwenRuntime
 import com.ashareai.app.standalone.data.ai.OpenAiCompatibleClient
 import com.ashareai.app.standalone.search.WebSearchHit
 import com.ashareai.app.standalone.search.WebSearchRepository
@@ -16,6 +17,9 @@ import com.ashareai.app.standalone.data.market.MarketRepository
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.standalone.data.settings.SettingsStore
 import com.ashareai.app.standalone.domain.ResearchCandidate
+import com.ashareai.app.standalone.domain.MonitoringEvent
+import com.ashareai.app.standalone.domain.MonitoringEventType
+import com.ashareai.app.standalone.domain.NotificationPriority
 import com.ashareai.app.standalone.domain.ResearchReport
 import com.ashareai.app.standalone.domain.ResearchRequest
 import com.ashareai.app.standalone.domain.ResearchResult
@@ -36,6 +40,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 class ResearchCoordinator(
     private val context: Context,
@@ -206,8 +215,12 @@ class ResearchCoordinator(
                 deterministicBody = reportBody(original, ranked, marketContext, buyAdvices, exitAdvices, webSearchHits),
                 aiExplanation = aiExplanation,
                 createdAt = clock(),
+                engineVersion = ranked.firstOrNull()?.result?.score?.engineVersion ?: "research-v2",
+                signalSummaryJson = signalSummaryJson(ranked),
+                monitoringEventCount = 1 + ranked.take(30).sumOf { it.result.signals.triggers.size },
             )
             local.saveReport(report)
+            saveMonitoringEvents(report, ranked)
             local.updateResearchRun(
                 id = original.id,
                 state = ResearchRunState.SUCCEEDED,
@@ -310,6 +323,11 @@ class ResearchCoordinator(
                     append(item.result.summary)
                 },
                 createdAt = clock(),
+                trendPhase = item.result.signals.trend.phase,
+                trendSignal = item.result.signals.trend.signal,
+                volumePriceSignal = item.result.signals.volumePrice.signal,
+                capitalActivityProxy = item.result.signals.volumePrice.capitalActivityProxy,
+                freshness = item.result.signals.freshness,
             )
         }
         local.replaceCandidates(run.id, candidates)
@@ -342,6 +360,79 @@ class ResearchCoordinator(
         }
     }
 
+    private suspend fun saveMonitoringEvents(report: ResearchReport, ranked: List<AnalysedSecurity>) {
+        val reportId = report.id
+        ranked.take(30).forEach { item ->
+            item.result.signals.triggers.forEach { trigger ->
+                val type = when (trigger) {
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.PRICE_BREAKOUT -> MonitoringEventType.PRICE_BREAKOUT
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.TREND_REVERSAL -> MonitoringEventType.TREND_REVERSAL
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.VOLUME_PRICE_DIVERGENCE -> MonitoringEventType.VOLUME_PRICE_DIVERGENCE
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.VOLATILITY_SPIKE -> MonitoringEventType.VOLATILITY_SPIKE
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.SCORE_CHANGED -> MonitoringEventType.SCORE_CHANGED
+                    com.ashareai.app.standalone.domain.MonitoringTrigger.REPORT_UPDATED -> MonitoringEventType.REPORT_UPDATED
+                }
+                local.saveMonitoringEvent(
+                    MonitoringEvent(
+                        id = "$reportId:${item.result.symbol}:${type.name}",
+                        symbol = item.result.symbol,
+                        name = item.result.name,
+                        type = type,
+                        occurredAt = clock(),
+                        severity = if (type == MonitoringEventType.VOLUME_PRICE_DIVERGENCE || type == MonitoringEventType.VOLATILITY_SPIKE) {
+                            NotificationPriority.WARNING
+                        } else {
+                            NotificationPriority.NORMAL
+                        },
+                        reportId = reportId,
+                        payload = item.result.summary,
+                    ),
+                )
+            }
+        }
+        local.saveMonitoringEvent(
+            MonitoringEvent(
+                id = "$reportId:REPORT_UPDATED",
+                symbol = "REPORT",
+                name = report.title,
+                type = MonitoringEventType.REPORT_UPDATED,
+                occurredAt = report.createdAt,
+                severity = NotificationPriority.NORMAL,
+                reportId = reportId,
+                payload = "研究报告已更新，包含 ${ranked.size} 只股票的确定性信号。",
+            ),
+        )
+    }
+
+    private fun signalSummaryJson(ranked: List<AnalysedSecurity>): String = buildJsonObject {
+        put("candidate_count", ranked.size)
+        put("engine_version", ranked.firstOrNull()?.result?.score?.engineVersion ?: "research-v2")
+        putJsonArray("signals") {
+            ranked.take(30).forEach { item ->
+                val result = item.result
+                add(buildJsonObject {
+                    put("symbol", result.symbol)
+                    put("name", result.name)
+                    put("score", result.score.total)
+                    put("risk", result.score.riskLevel.name)
+                    putJsonObject("trend") {
+                        put("phase", result.signals.trend.phase.name)
+                        put("signal", result.signals.trend.signal.name)
+                        put("confidence", result.signals.trend.confidence)
+                        put("explanation", result.signals.trend.explanation)
+                    }
+                    putJsonObject("volume_price") {
+                        put("signal", result.signals.volumePrice.signal.name)
+                        result.signals.volumePrice.capitalActivityProxy?.let { put("capital_activity_proxy", it) }
+                        put("explanation", result.signals.volumePrice.explanation)
+                    }
+                    put("freshness", result.signals.freshness.name)
+                    putJsonArray("triggers") { result.signals.triggers.forEach { trigger -> add(kotlinx.serialization.json.JsonPrimitive(trigger.name)) } }
+                })
+            }
+        }
+    }.toString()
+
     private suspend fun requestAiExplanation(
         run: ResearchRun,
         ranked: List<AnalysedSecurity>,
@@ -363,14 +454,7 @@ class ResearchCoordinator(
             routing.provider == null -> DeterministicExplanationFallback.Reason.NO_PROVIDER
             else -> DeterministicExplanationFallback.Reason.UNAVAILABLE
         }
-        val providerId = routing.provider?.id ?: return deterministicExplanation(ranked, marketContext, fallbackReason)
-        if (routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.LOCAL ||
-            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.CACHE ||
-            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.DETERMINISTIC
-        ) return deterministicExplanation(ranked, marketContext, fallbackReason)
-        val output = StringBuilder()
-        var failure: String? = null
-        val context = buildString {
+        val prompt = buildString {
             append("请为以下本地确定性研究写简洁解释。不得修改评分、风险或交易门槛；不可用数据必须保持不可用。\n")
             append(marketContext.reportSummary())
             append("\n")
@@ -388,11 +472,30 @@ class ResearchCoordinator(
                 append("用户已授权本次研究使用持仓信息，但本次自动研究未附带成本与数量。\n")
             }
         }
+        val localQwen = LocalQwenRuntime(context = this@ResearchCoordinator.context)
+        if (localQwen.isEnabled()) {
+            val localOutput = localQwen.explain(prompt)
+            if (localOutput.isSuccess) return localOutput.getOrThrow()
+            // An explicitly enabled local model must not silently fall through to a
+            // remote provider when its runtime is unavailable or out of memory.
+            return deterministicExplanation(
+                ranked,
+                marketContext,
+                DeterministicExplanationFallback.Reason.LOCAL_ENGINE_UNAVAILABLE,
+            )
+        }
+        val providerId = routing.provider?.id ?: return deterministicExplanation(ranked, marketContext, fallbackReason)
+        if (routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.LOCAL ||
+            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.CACHE ||
+            routing.target == com.ashareai.app.standalone.data.ai.AiExecutionTarget.DETERMINISTIC
+        ) return deterministicExplanation(ranked, marketContext, fallbackReason)
+        val output = StringBuilder()
+        var failure: String? = null
         aiClient.streamWithFallback(
             AiRequest(
                 providerId = providerId,
                 systemInstruction = "你是 A 股本地研究的解释助手。只解释已有确定性数据。",
-                prompt = context,
+                prompt = prompt,
             ),
             routing.fallbackProviders.map { it.id },
         ).collect { event ->
@@ -473,7 +576,15 @@ class ResearchCoordinator(
         }
         appendLine()
         appendLine("## 确定性评分明细")
-        ranked.take(30).forEachIndexed { index, item -> appendLine("${index + 1}. ${item.result.summary}") }
+        ranked.take(30).forEachIndexed { index, item ->
+            appendLine("${index + 1}. ${item.result.summary}")
+            appendLine("   - 为什么进入候选：${candidateReason(item.result)}")
+            appendLine("   - 当前趋势：${item.result.signals.trend.explanation}")
+            appendLine("   - 支持信号：${item.result.signals.trend.signal.name}；${item.result.signals.volumePrice.explanation}")
+            appendLine("   - 风险与反例：风险 ${item.result.risk}；${item.result.score.unavailable.firstOrNull() ?: "当前没有额外数据缺口"}")
+            appendLine("   - 接下来观察：${nextObservation(item.result)}")
+            appendLine("   - 数据完整度：${dataCompleteness(item.result)}；更新时间：${item.result.quote?.fetchedAt ?: "未知"}")
+        }
         if (webSearchHits.isNotEmpty()) {
             appendLine()
             appendLine("## Agent 网络搜索参考（不参与评分）")
@@ -484,6 +595,26 @@ class ResearchCoordinator(
         }
         appendLine()
         appendLine("> 所有买卖建议仅用于研究、回测和模拟，不会自动交易，也不构成投资建议。")
+    }
+
+    private fun candidateReason(result: ResearchResult): String = when {
+        result.score.total >= 70.0 -> "确定性因子综合分达到候选区间"
+        result.signals.trend.signal == com.ashareai.app.standalone.domain.TrendSignal.BREAKOUT -> "出现价格突破信号"
+        result.signals.trend.phase == com.ashareai.app.standalone.domain.TrendPhase.RISING -> "处于上升趋势阶段"
+        else -> "保留为观察对象，等待更多数据确认"
+    }
+
+    private fun nextObservation(result: ResearchResult): String = when {
+        result.signals.triggers.contains(com.ashareai.app.standalone.domain.MonitoringTrigger.PRICE_BREAKOUT) -> "观察突破后能否站稳并保持量价配合"
+        result.signals.triggers.contains(com.ashareai.app.standalone.domain.MonitoringTrigger.VOLUME_PRICE_DIVERGENCE) -> "观察量价背离是否收敛"
+        result.signals.trend.phase == com.ashareai.app.standalone.domain.TrendPhase.FALLING -> "等待趋势重新站回短期均线"
+        else -> "关注下一次行情更新和评分变化"
+    }
+
+    private fun dataCompleteness(result: ResearchResult): String {
+        val total = 8
+        val missing = result.score.unavailable.size.coerceAtMost(total)
+        return "${((total - missing).toDouble() / total * 100).toInt()}%"
     }
 
     private suspend fun buildExitAdvices(ranked: List<AnalysedSecurity>): List<ExitResearch> {

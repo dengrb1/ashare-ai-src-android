@@ -74,6 +74,19 @@ data class LocalNotificationEntity(
     val payloadJson: String,
 )
 
+@Entity(tableName = "monitoring_events")
+data class MonitoringEventEntity(
+    @PrimaryKey val id: String,
+    val symbol: String,
+    val name: String,
+    val type: String,
+    val occurredAt: Long,
+    val severity: String,
+    val reportId: String?,
+    val payloadJson: String,
+    val isRead: Boolean,
+)
+
 @Entity(tableName = "research_runs")
 data class ResearchRunEntity(
     @PrimaryKey val id: String,
@@ -104,6 +117,9 @@ data class ResearchReportEntity(
     val deterministicBody: String,
     val aiExplanation: String?,
     val createdAt: Long,
+    val engineVersion: String = "research-v2",
+    val signalSummaryJson: String? = null,
+    val monitoringEventCount: Int = 0,
 )
 
 @Entity(tableName = "research_candidates")
@@ -116,6 +132,11 @@ data class ResearchCandidateEntity(
     val risk: String,
     val reason: String,
     val createdAt: Long,
+    val trendPhase: String = "UNKNOWN",
+    val trendSignal: String = "UNKNOWN",
+    val volumePriceSignal: String = "UNKNOWN",
+    val capitalActivityProxy: Double? = null,
+    val freshness: String = "UNKNOWN",
 )
 
 @Entity(tableName = "simulation_portfolios")

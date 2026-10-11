@@ -8,6 +8,7 @@ import com.ashareai.app.standalone.data.local.ChatSessionEntity
 import com.ashareai.app.standalone.data.local.HoldingEntity
 import com.ashareai.app.standalone.data.local.LocalDao
 import com.ashareai.app.standalone.data.local.LocalNotificationEntity
+import com.ashareai.app.standalone.data.local.MonitoringEventEntity
 import com.ashareai.app.standalone.data.local.QuoteEntity
 import com.ashareai.app.standalone.data.local.ResearchCandidateEntity
 import com.ashareai.app.standalone.data.local.ResearchReportEntity
@@ -46,9 +47,15 @@ import com.ashareai.app.standalone.domain.Holding
 import com.ashareai.app.standalone.domain.LocalNotification
 import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
+import com.ashareai.app.standalone.domain.MonitoringEvent
+import com.ashareai.app.standalone.domain.MonitoringEventType
 import com.ashareai.app.standalone.domain.NotificationPriority
 import com.ashareai.app.standalone.domain.ResearchCandidate
 import com.ashareai.app.standalone.domain.ResearchReport
+import com.ashareai.app.standalone.domain.SignalFreshness
+import com.ashareai.app.standalone.domain.TrendPhase
+import com.ashareai.app.standalone.domain.TrendSignal
+import com.ashareai.app.standalone.domain.VolumePriceSignal
 import com.ashareai.app.standalone.domain.ResearchRun
 import com.ashareai.app.standalone.domain.ResearchRunState
 import com.ashareai.app.standalone.domain.ResearchScope
@@ -77,6 +84,9 @@ class LocalRepository(
     val notifications: Flow<List<LocalNotification>> = dao.observeNotifications().map {
         entities -> entities.map { it.toDomain() }
     }
+    val monitoringEvents: Flow<List<MonitoringEvent>> = dao.observeMonitoringEvents().map { events ->
+        events.map { it.toDomain() }
+    }
     val unreadNotificationCount: Flow<Int> = dao.observeUnreadNotificationCount()
     val researchRuns: Flow<List<ResearchRun>> = dao.observeResearchRuns().map { entities -> entities.map { it.toDomain() } }
     val reports: Flow<List<ResearchReport>> = dao.observeReports().map { entities -> entities.map { it.toDomain() } }
@@ -90,6 +100,26 @@ class LocalRepository(
     val chatSessions: Flow<List<ChatSession>> = dao.observeChatSessions().map { entities -> entities.map { it.toDomain() } }
 
     suspend fun holdingsNow(): List<Holding> = dao.holdings().map { it.toDomain() }
+
+    suspend fun saveMonitoringEvent(event: MonitoringEvent) = dao.upsertMonitoringEvent(
+        MonitoringEventEntity(
+            id = event.id,
+            symbol = event.symbol,
+            name = event.name,
+            type = event.type.name,
+            occurredAt = event.occurredAt,
+            severity = event.severity.name,
+            reportId = event.reportId,
+            payloadJson = event.payload,
+            isRead = event.isRead,
+        ),
+    )
+
+    suspend fun markMonitoringEventRead(id: String) = dao.markMonitoringEventRead(id)
+
+    suspend fun monitoringEvent(id: String): MonitoringEvent? = dao.monitoringEvent(id)?.toDomain()
+
+    suspend fun allMonitoringEvents(): List<MonitoringEvent> = dao.monitoringEvents().map { it.toDomain() }
 
     suspend fun watchlistNow(): List<WatchlistItem> = dao.watchlist().map { it.toDomain() }
 
@@ -252,6 +282,9 @@ class LocalRepository(
             deterministicBody = report.deterministicBody,
             aiExplanation = report.aiExplanation,
             createdAt = report.createdAt,
+            engineVersion = report.engineVersion,
+            signalSummaryJson = report.signalSummaryJson,
+            monitoringEventCount = report.monitoringEventCount,
         ),
     )
 
@@ -270,6 +303,11 @@ class LocalRepository(
                     risk = it.risk,
                     reason = it.reason,
                     createdAt = it.createdAt,
+                    trendPhase = it.trendPhase.name,
+                    trendSignal = it.trendSignal.name,
+                    volumePriceSignal = it.volumePriceSignal.name,
+                    capitalActivityProxy = it.capitalActivityProxy,
+                    freshness = it.freshness.name,
                 )
             },
         )
@@ -786,6 +824,9 @@ class LocalRepository(
         deterministicBody = deterministicBody,
         aiExplanation = aiExplanation,
         createdAt = createdAt,
+        engineVersion = engineVersion,
+        signalSummaryJson = signalSummaryJson,
+        monitoringEventCount = monitoringEventCount,
     )
 
     private fun ResearchCandidateEntity.toDomain() = ResearchCandidate(
@@ -797,6 +838,23 @@ class LocalRepository(
         risk = risk,
         reason = reason,
         createdAt = createdAt,
+        trendPhase = runCatching { TrendPhase.valueOf(trendPhase) }.getOrDefault(TrendPhase.UNKNOWN),
+        trendSignal = runCatching { TrendSignal.valueOf(trendSignal) }.getOrDefault(TrendSignal.UNKNOWN),
+        volumePriceSignal = runCatching { VolumePriceSignal.valueOf(volumePriceSignal) }.getOrDefault(VolumePriceSignal.UNKNOWN),
+        capitalActivityProxy = capitalActivityProxy,
+        freshness = runCatching { SignalFreshness.valueOf(freshness) }.getOrDefault(SignalFreshness.UNKNOWN),
+    )
+
+    private fun MonitoringEventEntity.toDomain() = MonitoringEvent(
+        id = id,
+        symbol = symbol,
+        name = name,
+        type = runCatching { MonitoringEventType.valueOf(type) }.getOrDefault(MonitoringEventType.REPORT_UPDATED),
+        occurredAt = occurredAt,
+        severity = runCatching { NotificationPriority.valueOf(severity) }.getOrDefault(NotificationPriority.NORMAL),
+        reportId = reportId,
+        payload = payloadJson,
+        isRead = isRead,
     )
 
     private fun SimulationPortfolioEntity.toDomain() = SimulationPortfolio(

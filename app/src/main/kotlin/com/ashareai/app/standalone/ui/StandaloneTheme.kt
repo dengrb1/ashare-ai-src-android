@@ -9,12 +9,14 @@ import com.ashareai.app.ui.theme.HybridTheme
 @Composable
 fun StandaloneTheme(
     darkModePref: String = "system",
+    accentColor: String = "#006B5F",
     glassEnabled: Boolean = true,
     fullAnimationsEnabled: Boolean = true,
     powerSaveMode: Boolean = false,
     content: @Composable () -> Unit,
 ) = HybridTheme(
     darkModePref = darkModePref,
+    accentColor = accentColor,
     glassEnabled = glassEnabled,
     fullAnimationsEnabled = fullAnimationsEnabled,
     powerSaveMode = powerSaveMode,

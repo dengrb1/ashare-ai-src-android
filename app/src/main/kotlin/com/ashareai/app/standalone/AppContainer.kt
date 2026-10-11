@@ -60,6 +60,7 @@ class AppContainer(
     val aiCache = com.ashareai.app.standalone.data.ai.AiCacheManager(appContext)
     val aiClient = OpenAiCompatibleClient(aiProviders, httpClient, cacheManager = aiCache)
     val archive = LocalArchiveService(local)
+    val reportExports = com.ashareai.app.standalone.data.export.ResearchReportExportService(local)
     val backtest = com.ashareai.app.standalone.backtest.BacktestService(
         engine = com.ashareai.app.standalone.backtest.LocalBacktestEngine(
             market = market,
@@ -89,6 +90,7 @@ class AppContainer(
     val monitoring = MarketMonitoringCoordinator(
         local = local,
         market = market,
+        engine = DeterministicResearchEngine(),
         settings = settings,
         alerts = alertEvaluator,
         notifications = notifications,

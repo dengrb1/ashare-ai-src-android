@@ -249,7 +249,7 @@ fun CandlestickChart(
             // 副图
             when (subChart) {
                 SubChart.VOLUME -> drawVolume(visibleBars, slot, bodyW, subTop, subH)
-                SubChart.MACD -> drawMacd(indicators, visibleBars.size, slot, bodyW, subTop, subH)
+                SubChart.MACD -> drawMacd(indicators, visibleBars.size, slot, bodyW, subTop, subH, gridColor)
                 SubChart.KDJ -> drawKdj(indicators, visibleBars.size, slot, subTop, subH)
             }
 
@@ -343,13 +343,21 @@ private fun DrawScope.drawVolume(bars: List<KlineBar>, slot: Float, bodyW: Float
     }
 }
 
-private fun DrawScope.drawMacd(ind: Indicators, count: Int, slot: Float, bodyW: Float, top: Float, height: Float) {
+private fun DrawScope.drawMacd(
+    ind: Indicators,
+    count: Int,
+    slot: Float,
+    bodyW: Float,
+    top: Float,
+    height: Float,
+    gridColor: Color,
+) {
     val all = ind.macdDif + ind.macdDea + ind.macdHist
     val maxAbs = all.maxOf { kotlin.math.abs(it) }.takeIf { it > 0 } ?: 1.0
     val mid = top + height / 2
     fun yOf(v: Double): Float = (mid - v / maxAbs * height / 2).toFloat()
 
-    drawLine(Color.Gray.copy(alpha = 0.4f), Offset(0f, mid), Offset(size.width, mid), 1f)
+    drawLine(gridColor.copy(alpha = 0.7f), Offset(0f, mid), Offset(size.width, mid), 1f)
     for (i in 0 until count) {
         val x = slot * i + slot / 2
         val v = ind.macdHist[i]

@@ -3,8 +3,17 @@ package com.ashareai.app.standalone.research
 import com.ashareai.app.standalone.domain.DailyCandle
 import com.ashareai.app.standalone.domain.MarketFreshness
 import com.ashareai.app.standalone.domain.MarketQuote
+import com.ashareai.app.standalone.domain.MonitoringTrigger
+import com.ashareai.app.standalone.domain.RiskLevel
 import com.ashareai.app.standalone.domain.ResearchResult
 import com.ashareai.app.standalone.domain.ResearchScore
+import com.ashareai.app.standalone.domain.ResearchSignalSnapshot
+import com.ashareai.app.standalone.domain.SignalFreshness
+import com.ashareai.app.standalone.domain.TrendAnalysis
+import com.ashareai.app.standalone.domain.TrendPhase
+import com.ashareai.app.standalone.domain.TrendSignal
+import com.ashareai.app.standalone.domain.VolumePriceAnalysis
+import com.ashareai.app.standalone.domain.VolumePriceSignal
 import com.ashareai.app.scoring.FactorEvidence
 import com.ashareai.app.scoring.FactorScoring
 import com.ashareai.app.scoring.Risk
@@ -45,6 +54,73 @@ class DeterministicResearchEngine : ResearchEngine {
         val volatility = TechnicalIndicators.volatility(closes)
         val volumeRatio = TechnicalIndicators.volumeRatio(candles)
         val lastClose = closes.lastOrNull()
+        val previousClose = closes.dropLast(1).lastOrNull()
+        val previousHigh = candles.dropLast(1).takeLast(20).maxOfOrNull { it.high }
+
+        val trendPhase = when {
+            lastClose == null || sma20 == null || sma60 == null -> TrendPhase.UNKNOWN
+            sma20 > sma60 && lastClose > sma20 -> TrendPhase.RISING
+            sma20 < sma60 && lastClose < sma20 -> TrendPhase.FALLING
+            kotlin.math.abs(sma20 - sma60) / sma60.coerceAtLeast(0.01) < 0.02 -> TrendPhase.RANGE_BOUND
+            else -> TrendPhase.TRANSITION
+        }
+        val trendSignal = when {
+            lastClose != null && previousHigh != null && lastClose > previousHigh -> TrendSignal.BREAKOUT
+            macd != null && macd.histogram > 0 && macd.macd > macd.signal -> TrendSignal.BULLISH
+            macd != null && macd.histogram < 0 && macd.macd < macd.signal -> TrendSignal.BEARISH
+            trendPhase == TrendPhase.TRANSITION -> TrendSignal.REVERSAL
+            else -> TrendSignal.NEUTRAL
+        }
+        val trendConfidence = when {
+            trendPhase == TrendPhase.UNKNOWN -> 0.0
+            sma20 != null && sma60 != null && macd != null -> 0.8
+            else -> 0.55
+        }
+        val priceDirection = when {
+            lastClose == null || previousClose == null -> 0
+            lastClose > previousClose -> 1
+            lastClose < previousClose -> -1
+            else -> 0
+        }
+        val volumeDirection = when {
+            volumeRatio == null -> 0
+            volumeRatio > 1.1 -> 1
+            volumeRatio < 0.9 -> -1
+            else -> 0
+        }
+        val volumeSignal = when {
+            volumeRatio == null || priceDirection == 0 -> VolumePriceSignal.UNKNOWN
+            priceDirection > 0 && volumeDirection > 0 -> VolumePriceSignal.VOLUME_UP_PRICE_UP
+            priceDirection > 0 && volumeDirection < 0 -> VolumePriceSignal.VOLUME_DOWN_PRICE_UP
+            priceDirection < 0 && volumeDirection > 0 -> VolumePriceSignal.VOLUME_UP_PRICE_DOWN
+            priceDirection < 0 && volumeDirection < 0 -> VolumePriceSignal.VOLUME_DOWN_PRICE_DOWN
+            else -> VolumePriceSignal.NEUTRAL
+        }
+        val activityProxy = volumeRatio?.let { ((it - 1.0) * 50.0 + 50.0).coerceIn(0.0, 100.0) }
+        val trendText = when (trendPhase) {
+            TrendPhase.RISING -> "价格位于短中期均线上方，处于上升阶段"
+            TrendPhase.FALLING -> "价格位于短中期均线下方，处于下降阶段"
+            TrendPhase.RANGE_BOUND -> "短中期均线接近，处于震荡阶段"
+            TrendPhase.TRANSITION -> "短中期趋势出现切换迹象"
+            TrendPhase.UNKNOWN -> "K 线不足，暂时无法判断趋势"
+        }
+        val volumeText = when (volumeSignal) {
+            VolumePriceSignal.VOLUME_UP_PRICE_UP -> "上涨伴随放量，资金活跃度代理偏强"
+            VolumePriceSignal.VOLUME_DOWN_PRICE_UP -> "上涨但成交量偏弱，需观察持续性"
+            VolumePriceSignal.VOLUME_UP_PRICE_DOWN -> "下跌伴随放量，抛压较明显"
+            VolumePriceSignal.VOLUME_DOWN_PRICE_DOWN -> "下跌但成交量收缩，暂未确认加速"
+            VolumePriceSignal.DIVERGENCE -> "量价出现背离，需观察持续性"
+            VolumePriceSignal.NEUTRAL -> "量价配合中性"
+            VolumePriceSignal.UNKNOWN -> "成交量数据不足"
+        }
+        val triggers = buildList {
+            if (trendSignal == TrendSignal.BREAKOUT) add(MonitoringTrigger.PRICE_BREAKOUT)
+            if (trendSignal == TrendSignal.REVERSAL) add(MonitoringTrigger.TREND_REVERSAL)
+            if (volumeSignal == VolumePriceSignal.VOLUME_DOWN_PRICE_UP ||
+                volumeSignal == VolumePriceSignal.VOLUME_UP_PRICE_DOWN
+            ) add(MonitoringTrigger.VOLUME_PRICE_DIVERGENCE)
+            if (volatility != null && volatility > 0.55) add(MonitoringTrigger.VOLATILITY_SPIKE)
+        }
 
         val trendScore = when {
             lastClose == null || sma60 == null -> {
@@ -182,6 +258,16 @@ class DeterministicResearchEngine : ResearchEngine {
             Risk.MEDIUM -> "中"
             Risk.HIGH -> "高"
         }
+        val riskLevel = when (factorDecision.risk) {
+            Risk.LOW -> RiskLevel.LOW
+            Risk.MEDIUM -> RiskLevel.MEDIUM
+            Risk.HIGH -> RiskLevel.HIGH
+        }
+        val signalFreshness = when (quote?.freshness) {
+            MarketFreshness.FRESH -> SignalFreshness.FRESH
+            MarketFreshness.STALE -> SignalFreshness.STALE
+            else -> SignalFreshness.UNKNOWN
+        }
         val summary = buildString {
             append(name)
             append(" 确定性因子评分 ")
@@ -195,6 +281,10 @@ class DeterministicResearchEngine : ResearchEngine {
             append("，风险乘数 ")
             append(marketContext.riskMultiplier)
             append("）")
+            append("；趋势：")
+            append(trendText)
+            append("；")
+            append(volumeText)
             if (quote?.freshness == MarketFreshness.STALE) append("；报价为陈旧缓存")
             if (unavailable.isNotEmpty()) {
                 append("；不可用：")
@@ -220,10 +310,24 @@ class DeterministicResearchEngine : ResearchEngine {
                 factorFormulaVersion = factorDecision.formulaVersion,
                 factorParameterSha256 = com.ashareai.app.scoring.FactorGenome().parameterSha256,
                 factorDecision = factorDecision,
+                engineVersion = "research-v2",
+                trendAnalysis = TrendAnalysis(trendPhase, trendSignal, trendConfidence, trendText),
+                volumePrice = VolumePriceAnalysis(volumeSignal, activityProxy, volumeText),
+                riskLevel = riskLevel,
+                signalFreshness = signalFreshness,
+                monitoringTriggers = triggers,
             ),
             risk = risk,
             summary = summary,
             quote = quote,
+            signals = ResearchSignalSnapshot(
+                engineVersion = "research-v2",
+                trend = TrendAnalysis(trendPhase, trendSignal, trendConfidence, trendText),
+                volumePrice = VolumePriceAnalysis(volumeSignal, activityProxy, volumeText),
+                risk = riskLevel,
+                freshness = signalFreshness,
+                triggers = triggers,
+            ),
         )
     }
 

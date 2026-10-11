@@ -30,6 +30,18 @@ class LocalDatabaseMigrationTest {
         ).close()
     }
 
+    @Test
+    fun migratesV6DatabaseToMonitoringEventsAndSignalColumns() {
+        helper.createDatabase("standalone-migration-v6", 6).close()
+        helper.runMigrationsAndValidate(
+            "standalone-migration-v6",
+            8,
+            true,
+            LocalDatabase.MIGRATION_6_7,
+            LocalDatabase.MIGRATION_7_8,
+        ).close()
+    }
+
     private companion object {
         const val TEST_DB = "standalone-migration-test"
     }
