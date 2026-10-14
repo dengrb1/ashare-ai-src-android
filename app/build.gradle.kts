@@ -159,6 +159,7 @@ dependencies {
     implementation(libs.markdown.material3)
     implementation(libs.focus.api)
     implementation(libs.jsoup)
+    implementation(project(":backdrop-compat"))
     ksp(libs.androidx.room.compiler)
 
     // Fusion 工作区依赖（始终包含）

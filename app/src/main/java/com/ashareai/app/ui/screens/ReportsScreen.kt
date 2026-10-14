@@ -1,5 +1,6 @@
 package com.ashareai.app.ui.screens
 
+import com.ashareai.app.ui.components.GlassButton as Button
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -173,6 +174,10 @@ private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>
     val eligible = result.arrayValue("formal_eligible_symbols")
     val quality = result.objectValue("quality_summary")
     val reason = result.stringValue("risk_reason_message")
+    val strategyVersion = result.stringValue("strategy_version")
+    val strategyFormula = result.stringValue("strategy_formula_version")
+    val strategyHash = result.stringValue("strategy_parameter_sha256")
+    val strategyDecisions = result.arrayValue("strategy_decisions")
 
     Column(
         Modifier
@@ -194,6 +199,12 @@ private fun StructuredReportView(result: JsonObject, symbols: List<ReportSymbol>
         KeyValueRow("最早 T+1 卖出日", formatReportValue(sellDate), onClick = { onFieldClick("最早 T+1 卖出日：${formatReportValue(sellDate)}") })
         KeyValueRow("正式候选", "${eligible.size} 只", onClick = { onFieldClick("正式候选：${eligible.size} 只") })
         KeyValueRow("研究个股", "${symbols.size} 只", onClick = { onFieldClick("研究个股：${symbols.size} 只") })
+        strategyVersion?.let { KeyValueRow("策略版本", it, onClick = { onFieldClick("策略版本：$it") }) }
+        strategyFormula?.let { KeyValueRow("策略公式", it, onClick = { onFieldClick("策略公式：$it") }) }
+        strategyHash?.let { KeyValueRow("参数哈希", it.take(16), onClick = { onFieldClick("参数哈希：$it") }) }
+        if (strategyDecisions.isNotEmpty()) {
+            KeyValueRow("策略决策", "${strategyDecisions.size} 条", onClick = { onFieldClick("策略决策：${strategyDecisions.size} 条") })
+        }
         reason?.takeIf(String::isNotBlank)?.let {
             Text("风险说明", style = MaterialTheme.typography.titleSmall)
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)

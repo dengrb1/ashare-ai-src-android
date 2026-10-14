@@ -1,5 +1,7 @@
 package com.ashareai.app.ui.screens
 
+import com.ashareai.app.ui.components.GlassFilterChip as FilterChip
+import com.ashareai.app.ui.components.GlassButton as Button
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +11,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.testTag
+import com.ashareai.app.ui.navigation.Routes
+import com.ashareai.app.ui.components.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,7 +47,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun SettingsScreen(
     appViewModel: AppViewModel,
-    onBack: () -> Unit = {},
+    initialCategory: String? = null,
+    onNavigate: (String) -> Unit = {},
+    onBack: (() -> Unit)? = null,
     onOpenStrategySettings: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -113,14 +124,42 @@ fun SettingsScreen(
         onDispose { owner?.lifecycle?.removeObserver(observer) }
     }
 
+    var categoryId by rememberSaveable { mutableStateOf(initialCategory) }
+    val category = SettingsCategory.entries.firstOrNull { it.id == categoryId }
+    val states = rememberSaveableStateHolder()
+    BackHandler(enabled = category != null) { categoryId = null }
     Column(Modifier.fillMaxSize()) {
-        TopAppBarSimple(title = "设置", onBack = onBack)
+        TopAppBarSimple(
+            title = category?.title ?: "设置",
+            onBack = if (category != null) ({ categoryId = null }) else onBack,
+        )
+        states.SaveableStateProvider(categoryId ?: "overview") {
+        val listState = rememberLazyListState()
 
         LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            state = listState,
+            modifier = Modifier.fillMaxWidth().testTag("settings.scroll"),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
+            if (category == null) item(key = "categories") { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { SettingsOverview(onSelect = { categoryId = it.id }, connected = true) } }
+            if (category == SettingsCategory.DATA) item(key = "data") { AppCard {
+                Text("数据与档案", style = MaterialTheme.typography.titleMedium)
+                Text("导入导出个人档案，或在两个工作区间核对和同步数据。", style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { onNavigate(Routes.PERSONAL_DATA) }) { Text("个人档案（导出/导入）") }
+                OutlinedButton(onClick = { onNavigate(Routes.WORKSPACE_SYNC) }) { Text("双工作区同步") }
+            } }
+            if (category == SettingsCategory.AI) item(key = "ai") { AppCard {
+                Text("AI 配置", style = MaterialTheme.typography.titleMedium)
+                Text("模型与密钥由服务端设置管理。", style = MaterialTheme.typography.bodyMedium)
+                val user = (appViewModel.authState.collectAsState().value as? AppViewModel.AuthState.LoggedIn)?.user
+                if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) {
+                    Button(onClick = { onNavigate(Routes.MODEL_SETTINGS) }) { Text("AI Agent 设置") }
+                } else Text("请联系服务端管理员调整模型配置。", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = { onNavigate(Routes.AI_CHAT) }) { Text("打开 AI 问答") }
+            } }
+            if (category == null) {
+            item(key = "settings.0") {
                 AppCard {
                     Text("策略与智能训练", style = MaterialTheme.typography.titleSmall)
                     Text(
@@ -134,7 +173,9 @@ fun SettingsScreen(
                     }
                 }
             }
-            item {
+            }
+            if (category == SettingsCategory.CONNECTION) {
+            item(key = "settings.1") {
                 AppCard {
                     Text("服务器地址", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
@@ -172,8 +213,10 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.CONNECTION) {
+            item(key = "settings.2") {
                 val probe = (connectionState as? ConnectionUiState.Result)?.probe
                 AppCard {
                     Text("Fusion 基础设施", style = MaterialTheme.typography.titleSmall)
@@ -190,8 +233,10 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.NOTIFICATIONS) {
+            item(key = "settings.3") {
                 AppCard {
                     Text("前台行情自动刷新", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
@@ -220,39 +265,24 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.APPEARANCE) {
+            item(key = "settings.4") {
                 AppCard {
                     Text("外观", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (v, label) ->
-                            FilterChip(
-                                selected = darkMode == v,
-                                onClick = { scope.launch { appViewModel.settings.setDarkMode(v) } },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("强调色", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        listOf("#006B5F" to "青绿", "#3D5AFE" to "靛蓝", "#B3261E" to "红棕", "#7A4EAB" to "紫灰").forEach { (hex, label) ->
-                            FilterChip(
-                                selected = accentColor.equals(hex, ignoreCase = true),
-                                onClick = { scope.launch { appViewModel.settings.setAccentColor(hex) } },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
+                    AppearanceChoices(darkMode, accentColor,
+                        onMode = { value -> scope.launch { appViewModel.settings.setDarkMode(value) } },
+                        onAccent = { value -> scope.launch { appViewModel.settings.setAccentColor(value) } },
+                    )
                 }
             }
+            }
 
-            item {
-                AppCard {
+            if (category == SettingsCategory.APPEARANCE) {
+            item(key = "settings.5") {
+                AppCard(modifier = Modifier.testTag("settings.appearance.anchor")) {
                     Text("外观与动效", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,7 +290,7 @@ fun SettingsScreen(
                             Text("液态玻璃", style = MaterialTheme.typography.bodyMedium)
                             Text("用于顶部栏、底部导航和临时操作层。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(checked = glassEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setGlassEnabled(enabled) } })
+                        GlassSwitch(modifier = Modifier.testTag("settings.glass"), checked = glassEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setGlassEnabled(enabled) } })
                     }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,7 +298,7 @@ fun SettingsScreen(
                             Text("完整动画", style = MaterialTheme.typography.bodyMedium)
                             Text("控制页面切换、底栏吸附和控件状态过渡。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(checked = fullAnimationsEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setFullAnimationsEnabled(enabled) } })
+                        GlassSwitch(modifier = Modifier.testTag("settings.animations"), checked = fullAnimationsEnabled, onCheckedChange = { enabled -> scope.launch { appViewModel.settings.setFullAnimationsEnabled(enabled) } })
                     }
                     if (isPowerSaveMode) {
                         Text(
@@ -279,8 +309,10 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.NOTIFICATIONS) {
+            item(key = "settings.6") {
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -292,7 +324,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.autoOptimizeInPowerSaver,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -327,8 +359,10 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.NOTIFICATIONS) {
+            item(key = "settings.7") {
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -340,7 +374,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = islandEnabled,
                             onCheckedChange = { enabled ->
                                 if (!enabled) {
@@ -385,8 +419,10 @@ fun SettingsScreen(
                     }) { Text("打开系统通知设置") }
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.NOTIFICATIONS) {
+            item(key = "settings.8") {
                 AppCard {
                     Text("无需设备数据测试", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
@@ -409,8 +445,10 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
-            item {
+            if (category == SettingsCategory.SHARING) {
+            item(key = "settings.9") {
                 AppCard {
                     Text("工作区数据共享", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
@@ -430,7 +468,7 @@ fun SettingsScreen(
                             Text("主题设置", style = MaterialTheme.typography.bodyMedium)
                             Text("深色模式偏好", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareTheme,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -455,7 +493,7 @@ fun SettingsScreen(
                             Text("超级岛开关", style = MaterialTheme.typography.bodyMedium)
                             Text("后台监控通知", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareIsland,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -479,7 +517,7 @@ fun SettingsScreen(
                             Text("AI 配置", style = MaterialTheme.typography.bodyMedium)
                             Text("提供商和模型选择", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareAiConfig,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -500,7 +538,7 @@ fun SettingsScreen(
                             Text("通知偏好", style = MaterialTheme.typography.bodyMedium)
                             Text("通知总开关状态", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareNotifications,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -524,7 +562,7 @@ fun SettingsScreen(
                             Text("玻璃态材质", style = MaterialTheme.typography.bodyMedium)
                             Text("UI 高级视觉效果", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareGlassEffect,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -548,7 +586,7 @@ fun SettingsScreen(
                             Text("完整动画", style = MaterialTheme.typography.bodyMedium)
                             Text("页面和控件的非必要动效", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(
+                        GlassSwitch(
                             checked = sharedSettings.shareFullAnimations,
                             onCheckedChange = { enabled ->
                                 scope.launch {
@@ -586,6 +624,7 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
 
             message?.let {
                 item {
@@ -593,6 +632,7 @@ fun SettingsScreen(
                 }
             }
         }
+    }
     }
 }
 

@@ -29,3 +29,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ashare-ai-android"
 include(":app")
+include(":backdrop-compat")

@@ -1,5 +1,6 @@
 package com.ashareai.app.ui.screens
 
+import com.ashareai.app.ui.components.GlassFilterChip as FilterChip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*

@@ -8,6 +8,7 @@ import com.ashareai.app.data.KlinePeriod
 import com.ashareai.app.data.KlineRange
 import com.ashareai.app.data.KlineRepository
 import com.ashareai.app.data.KlineSource
+import com.ashareai.app.data.AdjustedKlineSource
 import com.ashareai.app.data.model.Candidate
 import com.ashareai.app.data.model.FinancialSearchResult
 import com.ashareai.app.data.model.KlineBar
@@ -104,6 +105,9 @@ class KlineViewModel(application: Application) : AndroidViewModel(application) {
         KlineSource { symbol, period, limit, start, end ->
             (application as AShareApp).container.marketRepository.klines(symbol, period, limit, start, end)
         },
+        AdjustedKlineSource { symbol, period, adjust, limit, start, end ->
+            (application as AShareApp).container.marketRepository.klines(symbol, period, limit, start, end, adjust)
+        },
     )
     private val _state = MutableStateFlow<ScreenState<KlineContent>>(ScreenState.Loading)
     val state: StateFlow<ScreenState<KlineContent>> = _state.asStateFlow()
@@ -112,14 +116,14 @@ class KlineViewModel(application: Application) : AndroidViewModel(application) {
 
     private var loadJob: kotlinx.coroutines.Job? = null
 
-    fun load(symbol: String, period: KlinePeriod, range: KlineRange) {
+    fun load(symbol: String, period: KlinePeriod, range: KlineRange, adjust: String = "hfq") {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             val previous = (_state.value as? ScreenState.Content)?.value
             _state.value = ScreenState.Loading
             _requestCount.value = 0
             runCatching {
-                repository.load(symbol, period, range) { count ->
+                repository.load(symbol, period, range, adjust = adjust) { count ->
                     _requestCount.value = count
                 }
             }.onSuccess { result ->

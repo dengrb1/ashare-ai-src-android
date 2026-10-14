@@ -97,8 +97,14 @@ class MarketRepository(private val services: ApiServiceProvider) {
     suspend fun marketIndices(refresh: Boolean? = null) = api.marketIndices(refresh)
     suspend fun marketStatus() = api.marketStatus()
     suspend fun resolveSecurity(query: String) = api.resolveSecurity(query)
-    suspend fun klines(symbol: String, period: String, limit: Int, start: String, end: String) =
-        api.klines(symbol, period, limit, start = start, end = end)
+    suspend fun klines(
+        symbol: String,
+        period: String,
+        limit: Int,
+        start: String,
+        end: String,
+        adjust: String = "hfq",
+    ) = api.klines(symbol, period, limit, adjust, start = start, end = end)
     suspend fun financialSearch(query: String) = api.financialSearch(query)
     suspend fun searchStatus() = api.searchStatus()
 }

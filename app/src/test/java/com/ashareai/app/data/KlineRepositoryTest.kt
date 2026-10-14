@@ -41,6 +41,28 @@ class KlineRepositoryTest {
     }
 
     @Test
+    fun passesSelectedAdjustmentToBackendSource() = runTest {
+        var selectedAdjustment = ""
+        val repository = KlineRepository(
+            source = KlineSource { _, period, _, _, _ -> KlineResponse("600000.SH", period) },
+            adjustedSource = AdjustedKlineSource { _, period, adjust, _, _, _ ->
+                selectedAdjustment = adjust
+                KlineResponse("600000.SH", period, bars = listOf(bar("2026-07-27T09:30:00+08:00", 12.0)))
+            },
+        )
+
+        repository.load(
+            symbol = "600000.SH",
+            period = KlinePeriod.DAY,
+            range = KlineRange.DAY_1,
+            adjust = "qfq",
+            now = Instant.parse("2026-07-27T08:00:00Z"),
+        )
+
+        assertEquals("qfq", selectedAdjustment)
+    }
+
+    @Test
     fun chunksMinuteDataAndDeduplicatesBoundaries() = runTest {
         var call = 0
         val source = KlineSource { _, period, _, start, end ->

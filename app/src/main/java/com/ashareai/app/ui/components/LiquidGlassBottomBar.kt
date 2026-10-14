@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -59,7 +62,7 @@ fun nearestTabIndex(startIndex: Int, dragDistancePx: Float, tabWidthPx: Float, t
 }
 
 @Composable
-fun LiquidGlassBottomBar(
+fun GlassBottomBar(
     tabs: List<LiquidGlassTab>,
     selectedKey: String,
     onSelect: (String) -> Unit,
@@ -67,6 +70,8 @@ fun LiquidGlassBottomBar(
     powerSaveMode: Boolean = false,
 ) {
     if (tabs.isEmpty()) return
+    val fontScale = LocalDensity.current.fontScale
+    val barHeight = (64 + 20 * (fontScale - 1).coerceAtLeast(0f)).dp
     val selectedIndex = tabs.indexOfFirst { it.key == selectedKey }.coerceAtLeast(0)
     val effectivePowerSave = powerSaveMode || com.ashareai.app.ui.theme.LocalPowerSaveMode.current
     val motionEnabled = LocalFullAnimationsEnabled.current && !effectivePowerSave
@@ -93,13 +98,14 @@ fun LiquidGlassBottomBar(
         LiquidGlassSurface(
             modifier = Modifier.fillMaxWidth(),
             style = LiquidGlassDefaults.Medium,
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(32.dp),
             powerSaveMode = effectivePowerSave,
+            sampleContent = true,
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(barHeight)
                     .padding(5.dp)
                     .pointerInput(tabs.size, selectedIndex, motionEnabled) {
                         var dragStart = selectedIndex.toFloat()
@@ -144,17 +150,17 @@ fun LiquidGlassBottomBar(
                     modifier = Modifier
                         .offset(x = cellWidth * (if (dragging) dragPosition else capsulePosition.value))
                         .width(cellWidth)
-                        .height(54.dp)
+                        .height(barHeight - 10.dp)
                         .zIndex(0f)
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(28.dp))
                         .then(
                             if (glassEnabled) {
                                 Modifier.background(
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
-                                    RoundedCornerShape(20.dp),
+                                    RoundedCornerShape(28.dp),
                                 )
                             } else {
-                                Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp))
+                                Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(28.dp))
                             },
                         ),
                 )
@@ -164,8 +170,9 @@ fun LiquidGlassBottomBar(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(54.dp)
-                                .clip(RoundedCornerShape(20.dp))
+                                .height(barHeight - 10.dp)
+                                .clip(RoundedCornerShape(28.dp))
+                                .testTag("nav.${tab.key}")
                                 .semantics { this.selected = selected }
                                 .clickable(role = Role.Tab) { onSelect(tab.key) }
                                 .padding(horizontal = 2.dp, vertical = 5.dp),
@@ -197,3 +204,6 @@ fun LiquidGlassBottomBar(
         }
     }
 }
+
+@Composable
+fun LiquidGlassBottomBar(tabs: List<LiquidGlassTab>, selectedKey: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier, powerSaveMode: Boolean = false) = GlassBottomBar(tabs, selectedKey, onSelect, modifier, powerSaveMode)

@@ -1,5 +1,8 @@
 package com.ashareai.app.standalone.ui
 
+import com.ashareai.app.ui.components.GlassSwitch as Switch
+import com.ashareai.app.ui.components.GlassFilterChip as FilterChip
+import com.ashareai.app.ui.components.GlassButton as Button
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +42,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -65,12 +69,10 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,7 +86,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -95,6 +96,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -118,7 +121,12 @@ import com.ashareai.app.standalone.data.ai.LocalQwenRuntime
 import com.ashareai.app.standalone.data.ai.QwenModelInfo
 import com.ashareai.app.standalone.data.settings.AutomaticResearchReportConfig
 import com.ashareai.app.ui.components.LiquidGlassBottomBar
+import com.ashareai.app.ui.components.*
+import com.ashareai.app.ui.theme.glassBackdropSource
 import com.ashareai.app.ui.components.LiquidGlassTab
+import com.ashareai.app.ui.components.GlassSwitch
+import com.ashareai.app.ui.components.KlineAdjustment
+import com.ashareai.app.ui.components.KlineInterval
 import com.ashareai.app.ui.theme.LocalGlassEnabled
 import com.ashareai.app.ui.theme.LocalPowerSaveMode
 import com.ashareai.app.ui.theme.LiquidGlassBackground
@@ -213,6 +221,7 @@ fun StandaloneAppRoot(
     val settings by viewModel.settings.collectAsState()
     val isPowerSaveMode by viewModel.isPowerSaveMode.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
+    val routeStates = rememberSaveableStateHolder()
     var route by rememberSaveable { mutableStateOf(initialRoute?.takeIf { it in routes } ?: "home") }
     var lastNavigationAt by remember { mutableLongStateOf(0L) }
     fun navigateTo(destination: String) {
@@ -246,7 +255,8 @@ fun StandaloneAppRoot(
             viewModel.dismissMessage()
         }
     }
-    // 全局液体玻璃动画背景
+    val workspaceChrome = LocalWorkspaceChrome.current
+    CompositionLocalProvider(LocalWorkspaceChrome provides workspaceChrome?.copy(onNotifications = { navigateTo("notifications") }, unread = unread)) {
     LiquidGlassBackground(
         modifier = Modifier.fillMaxSize(),
         intensity = 0.18f,
@@ -273,6 +283,7 @@ fun StandaloneAppRoot(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         AnimatedContent(
+            modifier = Modifier.glassBackdropSource(),
             targetState = route,
             transitionSpec = {
                 if (!settings.fullAnimationsEnabled || isPowerSaveMode) {
@@ -291,6 +302,7 @@ fun StandaloneAppRoot(
             },
             label = "standalone_route_transition",
         ) { targetRoute ->
+        routeStates.SaveableStateProvider(targetRoute) {
         when (targetRoute) {
             "home" -> HomeScreen(
                 viewModel = viewModel,
@@ -323,7 +335,7 @@ fun StandaloneAppRoot(
                 Modifier.padding(padding),
                 onNavigate = ::navigateTo,
             )
-            "chat" -> ChatScreen(viewModel, Modifier.padding(padding))
+            "chat", "ai_chat" -> ChatScreen(viewModel, Modifier.padding(padding))
             "ai_agents" -> AiAgentConfigScreen(
                 providers = viewModel.aiProviders.collectAsState().value,
                 agents = viewModel.aiAgents.collectAsState().value,
@@ -372,6 +384,8 @@ fun StandaloneAppRoot(
         }
     }
     }
+    }
+    }
 }
 
 private data class BottomDestination(
@@ -381,99 +395,21 @@ private data class BottomDestination(
 )
 
 private val bottomDestinations = listOf(
-    BottomDestination("home", "主页", Icons.Outlined.Home),
+    BottomDestination("home", "总览", Icons.Outlined.Home),
     BottomDestination("market", "行情", Icons.Outlined.CandlestickChart),
     BottomDestination("research", "研究", Icons.Outlined.QueryStats),
     BottomDestination("reports", "报告", Icons.AutoMirrored.Outlined.Article),
-    BottomDestination("notifications", "通知", Icons.Outlined.Notifications),
     BottomDestination("settings", "设置", Icons.Outlined.Settings),
 )
 
 @Composable
 private fun GlassTopBar(route: String, onBack: () -> Unit) {
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val glassEnabled = LocalGlassEnabled.current && !LocalPowerSaveMode.current
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant
-    val highlightColor = MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-    ) {
-        // 毛玻璃背景层
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .then(
-                    if (glassEnabled) {
-                        Modifier.background(
-                            Brush.horizontalGradient(
-                                listOf(
-                        MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.70f else 0.68f),
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (dark) 0.22f else 0.28f),
-                        MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.68f else 0.64f),
-                                ),
-                            ),
-                        )
-                    } else {
-                        Modifier.background(MaterialTheme.colorScheme.surface)
-                    }
-                )
-                .drawWithContent {
-                    drawContent()
-                    if (glassEnabled) {
-                    // 顶部高光边框
-                    drawLine(
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                highlightColor.copy(alpha = if (dark) 0.12f else 0.38f),
-                                Color.Transparent,
-                            ),
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(size.width, 0f),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                    // 底部分隔线
-                    drawLine(
-                        color = outlineColor.copy(alpha = 0.5f),
-                        start = Offset(0f, size.height),
-                        end = Offset(size.width, size.height),
-                        strokeWidth = 0.5.dp.toPx(),
-                    )
-                    } else {
-                        drawLine(outlineColor, Offset(0f, size.height), Offset(size.width, size.height), 0.5.dp.toPx())
-                    }
-                }
-        )
-
-        // 内容层
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (route !in bottomDestinations.map { it.route }) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                }
-            } else {
-                Spacer(Modifier.width(12.dp))
-            }
-            Text(
-                text = routeTitle(route),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-            )
-            Spacer(Modifier.width(116.dp))
-        }
-    }
+    CompactTopBar(
+        title = routeTitle(route),
+        navigation = if (route !in bottomDestinations.map { it.route }) ({
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回") }
+        }) else null,
+    )
 }
 
 @Composable
@@ -712,7 +648,7 @@ private fun HomeScreen(
 private fun HomeMetric(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -990,7 +926,7 @@ private fun MarketQuotePanel(
     val changeColor = stockChangeColor(quote.changePercent)
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1085,6 +1021,8 @@ private fun MarketDetailScreen(
     val candidates by viewModel.candidates.collectAsState()
     var subChart by rememberSaveable { mutableStateOf(StandaloneSubChart.VOLUME) }
     var range by rememberSaveable { mutableStateOf(StandaloneKlineRange.MONTH_3) }
+    var interval by rememberSaveable { mutableStateOf(KlineInterval.DAY) }
+    var adjustment by rememberSaveable { mutableStateOf(KlineAdjustment.BACKWARD) }
     val candles = remember(state.candles, range) { selectKlineRange(state.candles, range) }
     val quote = state.quote
     ScreenColumn(modifier) {
@@ -1102,7 +1040,7 @@ private fun MarketDetailScreen(
         }
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
@@ -1116,16 +1054,31 @@ private fun MarketDetailScreen(
                     MarketDetailStat("今开", candles.lastOrNull()?.open?.formatMarketNumber() ?: "--")
                     MarketDetailStat("最高", candles.maxOfOrNull { it.high }?.formatMarketNumber() ?: "--")
                     MarketDetailStat("最低", candles.minOfOrNull { it.low }?.formatMarketNumber() ?: "--")
+                    MarketDetailStat("昨收", quote.previousClose?.formatMarketNumber() ?: "--")
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     MarketDetailStat("成交量", formatMarketVolume(quote.volume))
+                    MarketDetailStat("K线日期", candles.lastOrNull()?.tradingDate?.toString() ?: "--")
+                    MarketDetailStat("来源", candles.lastOrNull()?.provider ?: "--")
+                    MarketDetailStat("采集时间", candles.lastOrNull()?.fetchedAt?.let(::formatTime) ?: "--")
                 }
             }
         }
         SectionTitle("K 线走势")
+        StandaloneKlineIntervalSelector(interval, { selected ->
+            interval = selected
+            range = when (selected) {
+                KlineInterval.INTRADAY, KlineInterval.FIVE_DAYS -> StandaloneKlineRange.DAY_5
+                KlineInterval.DAY -> StandaloneKlineRange.MONTH_3
+                KlineInterval.WEEK, KlineInterval.MONTH -> StandaloneKlineRange.YEAR_1
+            }
+        })
+        StandaloneAdjustmentSelector(adjustment) { adjustment = it }
         GlassKlineRangeSelector(selected = range, onSelected = { range = it })
         GlassSubChartSelector(selected = subChart, onSelected = { subChart = it })
         Surface(
             modifier = Modifier.fillMaxWidth().height(470.dp),
-            shape = RoundedCornerShape(8.dp),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
@@ -1147,7 +1100,7 @@ private fun MarketDetailScreen(
         if (relatedReport != null) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
@@ -1169,6 +1122,46 @@ private fun MarketDetailStat(label: String, value: String) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(2.dp))
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun StandaloneKlineIntervalSelector(
+    selected: KlineInterval,
+    onSelected: (KlineInterval) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        KlineInterval.entries.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelected(option) },
+                label = { Text(option.label) },
+                modifier = Modifier.testTag("standalone.detail.interval.${option.name}"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StandaloneAdjustmentSelector(
+    selected: KlineAdjustment,
+    onSelected: (KlineAdjustment) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        KlineAdjustment.entries.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelected(option) },
+                label = { Text(option.label) },
+                modifier = Modifier.testTag("standalone.detail.adjustment.${option.name}"),
+            )
+        }
     }
 }
 
@@ -1224,7 +1217,7 @@ private fun MarketCatalogRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1250,7 +1243,7 @@ private fun MarketCatalogRow(
 private fun EmptyState(title: String, description: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1279,7 +1272,7 @@ private fun ListItemSurface(
         modifier = modifier.fillMaxWidth().let { base ->
             if (onClick != null) base.clickable(onClick = onClick) else base
         },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1368,7 +1361,7 @@ private fun AssetsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
         if (symbol.isNotBlank()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
             ) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1449,7 +1442,7 @@ private fun AlertsScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
         SectionTitle("新建提醒")
         OutlinedTextField(symbol, { symbol = it }, label = { Text("证券代码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(name, { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AlertKind.entries.forEach {
                 FilterChip(selected = kind == it, onClick = { kind = it }, label = { Text(alertKindLabel(it)) })
             }
@@ -1641,7 +1634,7 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
         ) { Text("保存自动报告 A/B") }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         SectionTitle("研究范围")
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ResearchScope.entries.forEach {
                 FilterChip(selected = scope == it, onClick = { scope = it }, label = { Text(researchScopeLabel(it)) })
             }
@@ -1689,7 +1682,7 @@ private fun ResearchScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             singleLine = true,
         )
         SectionTitle("AI 解释（可选）")
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FilterChip(selected = providerId == null, onClick = { providerId = null }, label = { Text("仅本地规则") })
             providers.filter { it.enabled }.forEach {
                 FilterChip(selected = providerId == it.id, onClick = { providerId = it.id }, label = { Text(it.name) })
@@ -2084,7 +2077,7 @@ private fun ChatScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             title = "应用内 AI 问答",
             text = "默认仅发送所选股票的报价、K 线和本地研究摘要。成本与数量必须同时打开全局和本次授权才会发送。",
         )
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FilterChip(selected = providerId == null, onClick = { providerId = null }, label = { Text("未选择") })
             providers.filter { it.enabled }.forEach {
                 FilterChip(selected = providerId == it.id, onClick = { providerId = it.id }, label = { Text(it.name) })
@@ -2096,7 +2089,7 @@ private fun ChatScreen(viewModel: StandaloneViewModel, modifier: Modifier) {
             enabled = settings.portfolioDataAllowedForAi && providerId != null,
             onChange = { includePortfolio = it },
         )
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Button(onClick = viewModel::createChatSession) { Text("新会话") }
             sessions.forEach {
                 FilterChip(selected = false, onClick = { viewModel.selectChatSession(it.id) }, label = { Text(it.title) })
@@ -2215,7 +2208,17 @@ private fun SettingsScreen(
             }
         }
     }
-    ScreenColumn(modifier) {
+    var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    val category = SettingsCategory.entries.firstOrNull { it.id == categoryId }
+    val categoryStates = rememberSaveableStateHolder()
+    BackHandler(enabled = category != null) { categoryId = null }
+    categoryStates.SaveableStateProvider(categoryId ?: "overview") {
+    val scrollState = rememberScrollState()
+    ScreenColumn(modifier.testTag("settings.scroll"), scrollState) {
+        if (category == null) {
+            SettingsOverview(onSelect = { categoryId = it.id })
+        } else SettingsCategoryHeading(category) { categoryId = null }
+        if (category == null) {
         ContentCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("当前工作区：独立版", fontWeight = FontWeight.SemiBold)
@@ -2234,11 +2237,15 @@ private fun SettingsScreen(
                 }
             }
         }
+        }
+        if (category == SettingsCategory.NOTIFICATIONS) {
         PermissionCard(
             state = permissionState,
             onRequestNotifications = onRequestNotifications,
             onOpenBatterySettings = onOpenBatterySettings,
         )
+        }
+        if (category == null) {
         ContentCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("策略与智能训练", fontWeight = FontWeight.SemiBold)
@@ -2248,6 +2255,8 @@ private fun SettingsScreen(
                 }
             }
         }
+        }
+        if (category == SettingsCategory.NOTIFICATIONS) {
         SectionTitle("通知与后台")
         SwitchRow("持仓监控", settings.monitoringEnabled, onChange = viewModel::setMonitoringEnabled)
         SwitchRow("提醒开关", settings.alertsEnabled, onChange = viewModel::setAlertsEnabled)
@@ -2296,30 +2305,11 @@ private fun SettingsScreen(
                 )
             }
         }
+        }
+        if (category == SettingsCategory.APPEARANCE) {
         SectionTitle("外观与动效")
-        ContentCard(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("主题", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value, label) ->
-                        FilterChip(
-                            selected = settings.darkMode == value,
-                            onClick = { viewModel.setDarkMode(value) },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-                Text("强调色", style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("#006B5F" to "青绿", "#3D5AFE" to "靛蓝", "#B3261E" to "红棕", "#7A4EAB" to "紫灰").forEach { (hex, label) ->
-                        FilterChip(
-                            selected = settings.accentColor.equals(hex, ignoreCase = true),
-                            onClick = { viewModel.setAccentColor(hex) },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-            }
+        ContentCard(modifier = Modifier.fillMaxWidth().testTag("settings.appearance.anchor")) {
+            AppearanceChoices(settings.darkMode, settings.accentColor, viewModel::setDarkMode, viewModel::setAccentColor)
         }
         SwitchRow("液态玻璃", settings.glassEnabled, onChange = viewModel::setGlassEnabled)
         SwitchRow("完整动画", settings.fullAnimationsEnabled, onChange = viewModel::setFullAnimationsEnabled)
@@ -2330,6 +2320,8 @@ private fun SettingsScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        }
+        if (category == SettingsCategory.SHARING) {
         ContentCard(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("工作区共享", style = MaterialTheme.typography.titleSmall)
@@ -2366,11 +2358,15 @@ private fun SettingsScreen(
                 ) { Text("立即同步外观偏好") }
             }
         }
+        }
+        if (category == SettingsCategory.DATA) {
         AdaptiveActionRow {
             OutlinedButton(onClick = viewModel::clearMarketCache) { Text("清除缓存") }
             OutlinedButton(onClick = viewModel::testMarketProvider) { Text("测试行情源") }
             OutlinedButton(onClick = viewModel::showIslandTest) { Text("测试超级岛") }
         }
+        }
+        if (category == SettingsCategory.NOTIFICATIONS) {
         OutlinedButton(
             onClick = onOpenAppSettings,
             modifier = Modifier.fillMaxWidth(),
@@ -2380,6 +2376,8 @@ private fun SettingsScreen(
             style = MaterialTheme.typography.labelMedium,
         )
 
+        }
+        if (category == SettingsCategory.AI) {
         SectionTitle("AI Agent（Provider 密钥由本机 Keystore 加密）")
 
         OutlinedButton(
@@ -2437,6 +2435,8 @@ private fun SettingsScreen(
             onChange = viewModel::setPortfolioDataAllowedForAi,
         )
 
+        }
+        if (category == SettingsCategory.DATA) {
         SectionTitle("加密本机档案")
         Text("档案不含 API Key、行情/K 线缓存或临时文件。导入仅在本机执行。")
         OutlinedTextField(exportPassphrase, { exportPassphrase = it }, label = { Text("导出档案口令") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -2511,11 +2511,13 @@ private fun SettingsScreen(
             }
         }
         archiveStatus?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+        }
+    }
     }
 }
 
 @Composable
-private fun ScreenColumn(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun ScreenColumn(modifier: Modifier, scrollState: ScrollState = rememberScrollState(), content: @Composable ColumnScope.() -> Unit) {
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -2523,10 +2525,10 @@ private fun ScreenColumn(modifier: Modifier, content: @Composable ColumnScope.()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 720.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .widthIn(max = 840.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )
     }
@@ -2541,11 +2543,11 @@ private fun ContentCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         colors = colors,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        content = { content() },
+        content = { Box(Modifier.padding(20.dp)) { content() } },
     )
 }
 
@@ -2562,7 +2564,7 @@ private fun InfoCard(
         modifier = modifier.fillMaxWidth().let { base ->
             if (onClick != null) base.clickable(onClick = onClick) else base
         },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2637,7 +2639,7 @@ private fun AdaptiveActionRow(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = { content() },
+        content = { Box(Modifier.padding(20.dp)) { content() } },
     )
 }
 
@@ -2650,7 +2652,7 @@ private fun PermissionCard(
     val allReady = state.notificationsGranted && state.batteryUnrestricted
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (allReady) {
                 MaterialTheme.colorScheme.secondaryContainer
@@ -2763,7 +2765,7 @@ private fun SwitchRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2773,7 +2775,7 @@ private fun SwitchRow(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+            GlassSwitch(checked = checked, onCheckedChange = onChange, enabled = enabled, modifier = Modifier.testTag(if (label == "液态玻璃") "settings.glass" else if (label == "完整动画") "settings.animations" else "settings.switch.$label"))
         }
     }
 }
@@ -2790,7 +2792,7 @@ private fun routeTitle(route: String): String = when (route) {
     "portfolio" -> "模拟组合"
     "exit" -> "卖出研究"
     "notifications" -> "通知中心"
-    "chat" -> "AI 问答"
+    "chat", "ai_chat" -> "AI 问答"
     "ai_agents" -> "AI Agent 配置"
     "ai_providers" -> "AI 服务商配置"
     "settings" -> "设置与本机档案"
@@ -2811,6 +2813,7 @@ private val routes = setOf(
     "exit",
     "notifications",
     "chat",
+    "ai_chat",
     "ai_agents",
     "ai_providers",
     "settings",

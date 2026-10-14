@@ -52,12 +52,14 @@ enum class StandaloneSubChart(val label: String) {
     VOLUME("成交量"),
     MACD("MACD"),
     KDJ("KDJ"),
+    CAPITAL_ACTIVITY("量价活跃度"),
 }
 
 private data class CandleIndicators(
     val ma5: List<Double?>,
     val ma10: List<Double?>,
     val ma20: List<Double?>,
+    val ma60: List<Double?>,
     val macdDif: List<Double>,
     val macdDea: List<Double>,
     val macdHist: List<Double>,
@@ -196,7 +198,7 @@ fun StandaloneCandlestickChart(
             val bodyWidth = (slotWidth * 0.68f).coerceAtLeast(1f)
             var minimumPrice = visibleCandles.minOf(DailyCandle::low)
             var maximumPrice = visibleCandles.maxOf(DailyCandle::high)
-            listOf(visibleIndicators.ma5, visibleIndicators.ma10, visibleIndicators.ma20).forEach { series ->
+            listOf(visibleIndicators.ma5, visibleIndicators.ma10, visibleIndicators.ma20, visibleIndicators.ma60).forEach { series ->
                 series.filterNotNull().forEach { value ->
                     minimumPrice = min(minimumPrice, value)
                     maximumPrice = max(maximumPrice, value)
@@ -235,11 +237,13 @@ fun StandaloneCandlestickChart(
             drawMovingAverage(visibleIndicators.ma5, slotWidth, ::priceY, MA5_COLOR)
             drawMovingAverage(visibleIndicators.ma10, slotWidth, ::priceY, MA10_COLOR)
             drawMovingAverage(visibleIndicators.ma20, slotWidth, ::priceY, MA20_COLOR)
+            drawMovingAverage(visibleIndicators.ma60, slotWidth, ::priceY, MA60_COLOR)
 
             when (subChart) {
                 StandaloneSubChart.VOLUME -> drawVolume(visibleCandles, slotWidth, bodyWidth, subTop, subHeight)
                 StandaloneSubChart.MACD -> drawMacd(visibleIndicators, slotWidth, bodyWidth, subTop, subHeight, gridColor)
                 StandaloneSubChart.KDJ -> drawKdj(visibleIndicators, slotWidth, subTop, subHeight)
+                StandaloneSubChart.CAPITAL_ACTIVITY -> drawUnavailableIndicator(textMeasurer, subTop, subHeight)
             }
 
             listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { ratio ->
@@ -270,6 +274,7 @@ fun StandaloneCandlestickChart(
             Text("MA10", style = MaterialTheme.typography.labelSmall, color = MA10_COLOR)
             Spacer(Modifier.padding(horizontal = 4.dp))
             Text("MA20", style = MaterialTheme.typography.labelSmall, color = MA20_COLOR)
+            Text("MA60", style = MaterialTheme.typography.labelSmall, color = MA60_COLOR)
             Spacer(Modifier.weight(1f))
             IconButton(
                 onClick = { viewport = viewport.zoom(candles.size, 1.4f) },
@@ -324,6 +329,7 @@ private fun computeIndicators(candles: List<DailyCandle>): CandleIndicators {
         ma5 = movingAverage(closes, 5),
         ma10 = movingAverage(closes, 10),
         ma20 = movingAverage(closes, 20),
+        ma60 = movingAverage(closes, 60),
         macdDif = dif,
         macdDea = dea,
         macdHist = histogram,
@@ -351,6 +357,7 @@ private fun CandleIndicators.slice(range: IntRange) = CandleIndicators(
     ma5 = ma5.slice(range),
     ma10 = ma10.slice(range),
     ma20 = ma20.slice(range),
+    ma60 = ma60.slice(range),
     macdDif = macdDif.slice(range),
     macdDea = macdDea.slice(range),
     macdHist = macdHist.slice(range),
@@ -436,6 +443,19 @@ private fun DrawScope.drawKdj(
     drawSeries(indicators.j, slotWidth, ::yOf, MA20_COLOR)
 }
 
+private fun DrawScope.drawUnavailableIndicator(
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    top: Float,
+    height: Float,
+) {
+    drawText(
+        textMeasurer,
+        "暂无资金流/主力数据",
+        style = TextStyle(fontSize = 11.sp, color = Color.Gray),
+        topLeft = Offset(12.dp.toPx(), top + (height - 14.dp.toPx()).coerceAtLeast(0f) / 2),
+    )
+}
+
 private fun DrawScope.drawSeries(
     values: List<Double>,
     slotWidth: Float,
@@ -459,3 +479,4 @@ private val STOCK_DOWN = Color(0xFF00A86B)
 private val MA5_COLOR = Color(0xFFF2A93B)
 private val MA10_COLOR = Color(0xFF3D5AFE)
 private val MA20_COLOR = Color(0xFFAB47BC)
+private val MA60_COLOR = Color(0xFF00897B)

@@ -68,7 +68,7 @@ fun AppCard(
             color = MaterialTheme.colorScheme.surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            Column(modifier = Modifier.padding(12.dp), content = content)
+            Column(modifier = Modifier.padding(20.dp), content = content)
         }
     }
 }
@@ -81,33 +81,7 @@ fun CompactTopBar(
     navigation: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    LiquidGlassSurface(
-        modifier = modifier.fillMaxWidth(),
-        style = LiquidGlassDefaults.Light,
-        shape = RectangleShape,
-    ) {
-        Row(
-            modifier = Modifier
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .height(48.dp)
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (navigation != null) {
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { navigation() }
-            } else {
-                Spacer(Modifier.width(12.dp))
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-            )
-            actions()
-            Spacer(Modifier.width(112.dp))
-        }
-    }
+    GlassTopBar(title, modifier, navigation, actions)
 }
 
 /** 只读日期字段，避免无效格式输入；允许历史日期且禁止未来日期。 */

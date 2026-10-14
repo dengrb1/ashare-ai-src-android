@@ -18,6 +18,8 @@ enum class KlinePeriod(val apiValue: String, val label: String, val chunkDays: L
     MINUTE_30("30m", "30分", 180),
     MINUTE_60("60m", "60分", 365),
     DAY("day", "日线", null),
+    WEEK("week", "周线", null),
+    MONTH("month", "月线", null),
 }
 
 enum class KlineRange(val label: String, val months: Long? = null, val tradingDays: Int? = null) {
@@ -46,10 +48,27 @@ fun interface KlineSource {
     ): KlineResponse
 }
 
-class KlineRepository(private val source: KlineSource) {
+fun interface AdjustedKlineSource {
+    suspend fun load(
+        symbol: String,
+        period: String,
+        adjust: String,
+        limit: Int,
+        start: String,
+        end: String,
+    ): KlineResponse
+}
+
+class KlineRepository(
+    private val source: KlineSource,
+    private val adjustedSource: AdjustedKlineSource? = null,
+) {
     constructor(api: ApiService) : this(
         KlineSource { symbol, period, limit, start, end ->
             api.klines(symbol, period = period, limit = limit, start = start, end = end)
+        },
+        AdjustedKlineSource { symbol, period, adjust, limit, start, end ->
+            api.klines(symbol, period = period, adjust = adjust, limit = limit, start = start, end = end)
         },
     )
 
@@ -57,6 +76,7 @@ class KlineRepository(private val source: KlineSource) {
         symbol: String,
         period: KlinePeriod,
         range: KlineRange,
+        adjust: String = "hfq",
         now: Instant = Instant.now(),
         onProgress: (requestCount: Int) -> Unit = {},
     ): KlineLoadResult {
@@ -75,7 +95,14 @@ class KlineRepository(private val source: KlineSource) {
 
         while (requestCount < MAX_CHUNKS) {
             val window = nextWindow(period, start, end, before) ?: break
-            val response = source.load(symbol, period.apiValue, BARS_PER_REQUEST, window.start.toString(), window.end.toString())
+            val response = adjustedSource?.load(
+                symbol,
+                period.apiValue,
+                adjust,
+                BARS_PER_REQUEST,
+                window.start.toString(),
+                window.end.toString(),
+            ) ?: source.load(symbol, period.apiValue, BARS_PER_REQUEST, window.start.toString(), window.end.toString())
             requestCount += 1
             onProgress(requestCount)
             response.bars.forEach { bar ->

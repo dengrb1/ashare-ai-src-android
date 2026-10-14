@@ -27,7 +27,15 @@ data class FactorGenome(
 ) {
     init {
         require(formulaVersion.isNotBlank()) { "formula version is required" }
-        require(schemaVersion.isNotBlank()) { "schema version is required" }
+        require(schemaVersion == FACTOR_GENOME_SCHEMA_VERSION) { "unsupported factor genome schema" }
+        require(formulaVersion == FACTOR_FORMULA_VERSION || formulaVersion == SHADOW_FACTOR_FORMULA_VERSION) {
+            "unsupported factor formula"
+        }
+        if (formulaVersion == FACTOR_FORMULA_VERSION) {
+            require(momentumWeight == 0.0 && volatilityWeight == 0.0 && liquidityWeight == 0.0) {
+                "v1 factor genomes must keep shadow weights at zero"
+            }
+        }
         require(
             listOf(fundamentalWeight, technicalWeight, sentimentWeight, qualityWeight)
                 .all { it.isFinite() && it in 0.05..0.60 },

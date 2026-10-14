@@ -1,288 +1,154 @@
 package com.ashareai.app.ui.screens
 
+import com.ashareai.app.ui.components.GlassFilterChip as FilterChip
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.ashareai.app.data.KlinePeriod
 import com.ashareai.app.data.KlineRange
 import com.ashareai.app.data.model.AssetStateRequest
 import com.ashareai.app.data.model.Quote
 import com.ashareai.app.data.sameSymbol
-import com.ashareai.app.ui.*
-import com.ashareai.app.ui.components.*
+import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.KlineViewModel
+import com.ashareai.app.ui.ScreenState
+import com.ashareai.app.ui.components.CandlestickChart
+import com.ashareai.app.ui.components.KlineAdjustment
+import com.ashareai.app.ui.components.KlineInterval
+import com.ashareai.app.ui.components.SubChart
+import com.ashareai.app.ui.components.EmptyPlaceholder
+import com.ashareai.app.ui.fmt2
+import com.ashareai.app.ui.fmtAmount
+import com.ashareai.app.ui.fmtPercent
+import com.ashareai.app.ui.fmtSigned
+import com.ashareai.app.ui.fmtTime
+import com.ashareai.app.ui.fmtVolume
+import com.ashareai.app.ui.theme.BackdropLiquidGlassSurface
 import com.ashareai.app.ui.theme.changeColor
 
-/** 个股详情：报价 + K线（周期/副图切换）+ 明细字段。 */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StockDetailScreen(appViewModel: AppViewModel, navController: NavHostController, symbol: String) {
-    val klineViewModel: KlineViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val klineViewModel: KlineViewModel = viewModel()
     val klineState by klineViewModel.state.collectAsState()
     val requestCount by klineViewModel.requestCount.collectAsState()
-    val marketViewModel = LocalMarketViewModel.current
+    val marketViewModel = com.ashareai.app.ui.LocalMarketViewModel.current
     val quotes by marketViewModel.quotes.collectAsState()
     val assets by marketViewModel.assets.collectAsState()
     var fetchedQuote by remember(symbol) { mutableStateOf<Quote?>(null) }
     val quote = quotes[symbol] ?: fetchedQuote
-
-    var period by remember { mutableStateOf(KlinePeriod.DAY) }
-    var range by remember { mutableStateOf(KlineRange.MONTH_3) }
-    var subChart by remember { mutableStateOf(SubChart.VOLUME) }
-    var showPeriodSheet by remember { mutableStateOf(false) }
-    var showRangeSheet by remember { mutableStateOf(false) }
+    var interval by rememberSaveable(symbol) { mutableStateOf(KlineInterval.DAY) }
+    var range by rememberSaveable(symbol) { mutableStateOf(KlineRange.MONTH_3) }
+    var adjustment by rememberSaveable(symbol) { mutableStateOf(KlineAdjustment.BACKWARD) }
+    var subChart by rememberSaveable(symbol) { mutableStateOf(SubChart.VOLUME) }
     var savingWatchlist by remember(symbol) { mutableStateOf(false) }
     var watchlistError by remember(symbol) { mutableStateOf<String?>(null) }
-
-    val klineContent = when (val state = klineState) {
-        is ScreenState.Content -> state.value
-        is ScreenState.Error -> state.previous ?: KlineContent()
-        ScreenState.Loading, ScreenState.Empty -> KlineContent()
-    }
-    val bars = klineContent.bars
+    val content = (klineState as? ScreenState.Content)?.value
+    val bars = content?.bars.orEmpty()
     val loading = klineState is ScreenState.Loading
     val error = (klineState as? ScreenState.Error)?.message
+    val inWatchlist = assets?.watchlist.orEmpty().any { sameSymbol(it, symbol) }
 
-    val inWatchlist = (assets?.watchlist ?: emptyList()).any { sameSymbol(it, symbol) }
-
-    LaunchedEffect(symbol, period, range) { klineViewModel.load(symbol, period, range) }
-
-    LaunchedEffect(symbol) {
-        // 进入详情立即拉一次最新报价
-        marketViewModel.refreshQuote(symbol) { quote, _ -> fetchedQuote = quote }
-    }
+    LaunchedEffect(symbol, interval, range, adjustment) { klineViewModel.load(symbol, interval.period, range, adjustment.apiValue) }
+    LaunchedEffect(symbol) { marketViewModel.refreshQuote(symbol) { refreshed, _ -> fetchedQuote = refreshed } }
 
     Column(Modifier.fillMaxSize()) {
-        CompactTopBar(
-            title = listOfNotNull(quote?.name, symbol).distinct().joinToString("  "),
-            navigation = {
-                IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                }
-            },
-            actions = {
-                IconButton(onClick = {
-                    val current = assets ?: return@IconButton
-                    val newList = if (inWatchlist) current.watchlist.filterNot { sameSymbol(it, symbol) } else current.watchlist + symbol
+        DetailTopBar(quote, inWatchlist, { navController.popBackStack() },
+            { marketViewModel.refreshQuote(symbol) { refreshed, _ -> fetchedQuote = refreshed } },
+            {
+                val current = assets
+                if (current != null) {
+                    val next = if (inWatchlist) current.watchlist.filterNot { sameSymbol(it, symbol) } else current.watchlist + symbol
                     savingWatchlist = true
-                    watchlistError = null
-                    marketViewModel.saveAssets(
-                        AssetStateRequest(
-                            watchlist = newList,
-                            positions = current.positions,
-                            total_assets = current.total_assets,
-                            exit_monitor_enabled = current.exit_monitor_enabled,
-                            default_profit_trigger = current.default_profit_trigger,
-                            stop_loss_monitor_enabled = current.stop_loss_monitor_enabled,
-                            buy_monitor_enabled = current.buy_monitor_enabled,
-                            market_refresh_interval_seconds = current.market_refresh_interval_seconds,
-                        )
-                    ) { errorMessage ->
+                    marketViewModel.saveAssets(AssetStateRequest(next, current.positions, current.total_assets, current.exit_monitor_enabled, current.default_profit_trigger, current.stop_loss_monitor_enabled, current.buy_monitor_enabled, current.market_refresh_interval_seconds)) { message ->
                         savingWatchlist = false
-                        watchlistError = errorMessage
+                        watchlistError = message
                     }
-                }, enabled = !savingWatchlist) {
-                    Icon(
-                        if (inWatchlist) Icons.Outlined.Star else Icons.Outlined.StarBorder,
-                        contentDescription = if (inWatchlist) "取消自选" else "加入自选",
-                        tint = if (inWatchlist) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    )
                 }
-            },
-        )
-
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // 报价头
-            AppCard {
-                watchlistError?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.height(6.dp))
+            }, savingWatchlist)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuoteHeader(quote, watchlistError)
+                KlineToolbar(interval, adjustment, subChart, { selected -> interval = selected; range = selected.defaultRange }, { adjustment = it }, { subChart = it })
+                Surface(Modifier.fillMaxWidth().height(430.dp).testTag("stock.detail.chart.surface"), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    when {
+                        loading && bars.isEmpty() -> LoadingBox(Modifier.fillMaxSize(), "正在加载 ${adjustment.label} K 线…")
+                        error != null && bars.isEmpty() -> ErrorBanner(error) { klineViewModel.load(symbol, interval.period, range, adjustment.apiValue) }
+                        bars.isEmpty() -> EmptyPlaceholder("暂无 K 线数据", Modifier.fillMaxSize())
+                        else -> CandlestickChart(bars, interval.period, subChart, if (range != KlineRange.YEAR_1) { { range = KlineRange.entries[(KlineRange.entries.indexOf(range) + 1).coerceAtMost(KlineRange.entries.lastIndex)] } } else null, Modifier.fillMaxSize().padding(12.dp))
+                    }
                 }
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        quote?.price.fmt2(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = changeColor(quote?.change_percent),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    ChangeText(quote?.change, quote?.change.fmtSigned(), MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.width(6.dp))
-                    ChangeText(quote?.change_percent, quote?.change_percent.fmtPercent(), MaterialTheme.typography.titleSmall)
-                }
-                Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DetailStat("今开", quote?.open.fmt2())
-                    DetailStat("最高", quote?.high.fmt2())
-                    DetailStat("最低", quote?.low.fmt2())
-                    DetailStat("昨收", quote?.previous_close.fmt2())
+                    Text("${bars.size} 根 · ${requestCount} 段 · ${adjustment.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (error != null && bars.isNotEmpty()) Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DetailStat("成交量", quote?.volume.fmtVolume())
-                    DetailStat("成交额", quote?.amount.fmtAmount())
-                    DetailStat(
-                        "数据源",
-                        quote?.status?.source ?: "--",
-                    )
-                    DetailStat("采集", quote?.status?.collected_at.fmtTime())
-                }
-                if (quote?.status?.stale == true || quote?.status?.delayed == true) {
-                    Spacer(Modifier.height(8.dp))
-                    TagPill(if (quote.status.stale) "数据延迟（stale）" else "延迟行情", MaterialTheme.colorScheme.error)
-                }
-            }
-
-            // K线工具区
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { showPeriodSheet = true },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Outlined.Schedule, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("周期  ${period.label}")
-                    }
-                    OutlinedButton(
-                        onClick = { showRangeSheet = true },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("范围  ${range.label}")
-                    }
-                }
-                if (loading) {
-                    Column(Modifier.height(320.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        LoadingBox(Modifier.weight(1f))
-                        Text("正在加载第 ${requestCount + 1} 段", style = MaterialTheme.typography.labelSmall)
-                    }
-                } else if (error != null) {
-                    ErrorBanner(requireNotNull(error)) {
-                        klineViewModel.load(symbol, period, range)
-                    }
-                } else {
-                    CandlestickChart(
-                        bars = bars,
-                        period = period,
-                        subChart = subChart,
-                        onLoadEarlier = if (range != KlineRange.YEAR_1) {
-                            { range = KlineRange.entries[(KlineRange.entries.indexOf(range) + 1).coerceAtMost(KlineRange.entries.lastIndex)] }
-                        } else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(340.dp),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SubChart.entries.forEach { sc ->
-                        FilterChip(
-                            selected = subChart == sc,
-                            onClick = { subChart = sc },
-                            label = { Text(sc.label) },
-                        )
-                    }
-                }
-                Text(
-                    "已加载 ${bars.size} 根 · ${requestCount} 段 · 后复权(hfq)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("数据仅用于研究、回测和模拟，不构成交易指令。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-    }
-
-    if (showPeriodSheet) {
-        KlineSelectionSheet(
-            title = "选择 K 线周期",
-            options = KlinePeriod.entries,
-            selected = period,
-            label = { it.label },
-            onDismiss = { showPeriodSheet = false },
-            onSelect = { period = it; showPeriodSheet = false },
-        )
-    }
-    if (showRangeSheet) {
-        KlineSelectionSheet(
-            title = "选择数据范围",
-            options = KlineRange.entries,
-            selected = range,
-            label = { it.label },
-            onDismiss = { showRangeSheet = false },
-            onSelect = { range = it; showRangeSheet = false },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun <T> KlineSelectionSheet(
-    title: String,
-    options: List<T>,
-    selected: T,
-    label: (T) -> String,
-    onDismiss: () -> Unit,
-    onSelect: (T) -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            title,
-            modifier = Modifier.padding(horizontal = 20.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(16.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 320.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(options) { option ->
-                FilterChip(
-                    selected = option == selected,
-                    onClick = { onSelect(option) },
-                    label = { Text(label(option), modifier = Modifier.fillMaxWidth()) },
-                )
-            }
-        }
-        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun DetailStat(label: String, value: String) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(2.dp))
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+private fun DetailTopBar(quote: Quote?, inWatchlist: Boolean, onBack: () -> Unit, onRefresh: () -> Unit, onToggleWatchlist: () -> Unit, savingWatchlist: Boolean) {
+    BackdropLiquidGlassSurface(Modifier.fillMaxWidth().statusBarsPadding(), MaterialTheme.shapes.medium) {
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, Modifier.testTag("stock.detail.back")) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回") }
+            Column(Modifier.weight(1f)) { Text(quote?.name ?: "行情详情", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text(quote?.symbol ?: "--", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = onRefresh, Modifier.testTag("stock.detail.refresh")) { Icon(Icons.Outlined.Refresh, "刷新行情") }
+            IconButton(onClick = onToggleWatchlist, enabled = !savingWatchlist, modifier = Modifier.testTag("stock.detail.watchlist")) { Icon(if (inWatchlist) Icons.Outlined.Star else Icons.Outlined.StarBorder, if (inWatchlist) "取消自选" else "加入自选") }
+        }
     }
 }
+
+@Composable
+private fun QuoteHeader(quote: Quote?, error: String?) {
+    Surface(Modifier.fillMaxWidth().testTag("stock.detail.quote"), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(quote?.price.fmt2(), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = changeColor(quote?.change_percent))
+                Spacer(Modifier.width(10.dp)); Text(quote?.change.fmtSigned(), style = MaterialTheme.typography.titleMedium, color = changeColor(quote?.change_percent)); Spacer(Modifier.width(6.dp)); Text(quote?.change_percent.fmtPercent(), style = MaterialTheme.typography.titleMedium, color = changeColor(quote?.change_percent))
+            }
+            StatGrid(listOf("今开" to quote?.open.fmt2(), "最高" to quote?.high.fmt2(), "最低" to quote?.low.fmt2(), "昨收" to quote?.previous_close.fmt2(), "成交量" to quote?.volume.fmtVolume(), "成交额" to quote?.amount.fmtAmount(), "来源" to (quote?.status?.source ?: "--"), "采集" to quote?.status?.collected_at.fmtTime()))
+            val status = quote?.status
+            if (status?.stale == true || status?.delayed == true || status?.message != null) Text(status.message ?: if (status.stale) "数据已过期，请刷新后再参考" else "当前为延迟行情", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+            error?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@Composable
+private fun StatGrid(items: List<Pair<String, String>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { items.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { row.forEach { (label, value) -> Column(Modifier.weight(1f)) { Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) } }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } } } }
+}
+
+@Composable
+private fun KlineToolbar(interval: KlineInterval, adjustment: KlineAdjustment, subChart: SubChart, onInterval: (KlineInterval) -> Unit, onAdjustment: (KlineAdjustment) -> Unit, onSubChart: (SubChart) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        BackdropLiquidGlassSurface(Modifier.fillMaxWidth(), MaterialTheme.shapes.medium) { Row(Modifier.horizontalScroll(rememberScrollState()).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) { KlineInterval.entries.forEach { option -> FilterChip(option == interval, { onInterval(option) }, label = { Text(option.label) }, modifier = Modifier.testTag("stock.detail.interval.${option.name}")) } } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { KlineAdjustment.entries.forEach { option -> FilterChip(option == adjustment, { onAdjustment(option) }, label = { Text(option.label) }, modifier = Modifier.testTag("stock.detail.adjustment.${option.name}")) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { SubChart.entries.forEach { option -> FilterChip(option == subChart, { onSubChart(option) }, label = { Text(option.label) }, modifier = Modifier.testTag("stock.detail.indicator.${option.name}")) } }
+        }
+    }
+}
+
+private val KlineInterval.defaultRange: KlineRange get() = when (this) { KlineInterval.INTRADAY -> KlineRange.DAY_1; KlineInterval.FIVE_DAYS -> KlineRange.DAY_5; KlineInterval.DAY -> KlineRange.MONTH_3; KlineInterval.WEEK, KlineInterval.MONTH -> KlineRange.YEAR_1 }
+
+@Composable private fun LoadingBox(modifier: Modifier, text: String) { Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { CircularProgressIndicator(); Spacer(Modifier.height(10.dp)); Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+@Composable private fun ErrorBanner(message: String, onRetry: () -> Unit) { Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(message, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(10.dp)); OutlinedButton(onClick = onRetry, modifier = Modifier.testTag("stock.detail.retry")) { Text("重新加载") } } }

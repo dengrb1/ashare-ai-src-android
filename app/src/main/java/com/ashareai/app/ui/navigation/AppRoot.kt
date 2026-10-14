@@ -22,6 +22,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ashareai.app.ui.AppViewModel
+import com.ashareai.app.ui.components.LocalWorkspaceChrome
+import com.ashareai.app.ui.theme.glassBackdropSource
+import com.ashareai.app.ui.LocalMarketViewModel
 import com.ashareai.app.ui.components.LiquidGlassBottomBar
 import com.ashareai.app.ui.components.LiquidGlassTab
 import com.ashareai.app.ui.theme.LiquidGlassBackground
@@ -64,11 +67,11 @@ object Routes {
 private data class BottomTab(val route: String, val label: String, val icon: ImageVector)
 
 private val bottomTabs = listOf(
-    BottomTab(Routes.HOME, "监控", Icons.Outlined.Home),
-    BottomTab(Routes.RESEARCH_HUB, "研究 / 回测", Icons.Outlined.Science),
+    BottomTab(Routes.HOME, "总览", Icons.Outlined.Home),
+    BottomTab(Routes.MARKET, "行情", androidx.compose.material.icons.Icons.Outlined.Science),
+    BottomTab(Routes.RESEARCH_HUB, "研究", Icons.Outlined.Science),
     BottomTab(Routes.REPORTS, "报告", Icons.AutoMirrored.Outlined.Article),
-    BottomTab(Routes.AI_CHAT, "AI 诊断", Icons.AutoMirrored.Outlined.Chat),
-    BottomTab(Routes.PROFILE, "设置", Icons.Outlined.AccountCircle),
+    BottomTab(Routes.SETTINGS, "设置", Icons.Outlined.AccountCircle),
 )
 
 @Composable
@@ -111,7 +114,11 @@ private fun MainScaffold(
     initialRoute: String?,
     onRouteChanged: (String) -> Unit,
 ) {
-    val startRoute = initialRoute?.takeIf { it in bottomTabs.map(BottomTab::route) } ?: Routes.HOME
+    val startRoute = when (initialRoute) {
+        // PROFILE was the settings tab before the five-entry navigation redesign.
+        Routes.PROFILE -> Routes.SETTINGS
+        else -> initialRoute?.takeIf { it in bottomTabs.map(BottomTab::route) } ?: Routes.HOME
+    }
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -136,7 +143,9 @@ private fun MainScaffold(
 
     val showBottomBar = currentRootRoute in bottomTabs.map { it.route }
 
-    // 全局液体玻璃动画背景
+    val workspaceChrome = LocalWorkspaceChrome.current
+    val unread by LocalMarketViewModel.current.unreadCount.collectAsState()
+    CompositionLocalProvider(LocalWorkspaceChrome provides workspaceChrome?.copy(onNotifications = { navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true } }, unread = unread)) {
     LiquidGlassBackground(
         modifier = Modifier.fillMaxSize(),
         intensity = 0.18f,
@@ -165,7 +174,8 @@ private fun MainScaffold(
             startDestination = startRoute,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .glassBackdropSource(),
         ) {
             composable(Routes.HOME) { DashboardScreen(appViewModel, navController) }
             composable(Routes.MARKET) { MarketScreen(appViewModel, navController) }
@@ -174,6 +184,14 @@ private fun MainScaffold(
             composable(Routes.STRATEGY_SETTINGS) { StrategySettingsScreen(appViewModel, navController) }
             composable(Routes.AI_CHAT) { AIChatScreen(appViewModel) }
             composable(Routes.PROFILE) { ProfileScreen(appViewModel, navController, onSwitchToLocal) }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    appViewModel = appViewModel,
+                    onNavigate = { route -> navController.navigate(route) },
+                    onBack = {},
+                    onOpenStrategySettings = { navController.navigate(Routes.STRATEGY_SETTINGS) },
+                )
+            }
 
             composable(Routes.ASSETS) { AssetsScreen(appViewModel, navController) }
             composable(Routes.RESEARCH) { ResearchScreen(appViewModel, navController) }
@@ -200,9 +218,11 @@ private fun MainScaffold(
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(appViewModel, navController) }
             composable(Routes.PERSONAL_DATA) { PersonalDataScreen(appViewModel) }
             composable(Routes.WORKSPACE_SYNC) { WorkspaceSyncScreen(appViewModel, navController) }
-            composable(Routes.SETTINGS) {
+            composable("settings?category={category}", arguments = listOf(androidx.navigation.navArgument("category") { nullable = true; defaultValue = null })) { entry ->
                 SettingsScreen(
                     appViewModel = appViewModel,
+                    initialCategory = entry.arguments?.getString("category"),
+                    onNavigate = { route -> navController.navigate(route) },
                     onBack = { navController.popBackStack() },
                     onOpenStrategySettings = { navController.navigate(Routes.STRATEGY_SETTINGS) },
                 )
@@ -218,6 +238,7 @@ private fun MainScaffold(
                 )
             }
         }
+    }
     }
     }
 }

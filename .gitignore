@@ -1,6 +1,7 @@
 # Project-specific
 /build
 /app/build
+/backdrop-compat/build
 /.gradle
 /.kotlin
 /local.properties

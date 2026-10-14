@@ -154,6 +154,22 @@ class MainActivity : ComponentActivity() {
                         fullAnimationsEnabled = settings.fullAnimationsEnabled,
                         powerSaveMode = isPowerSaveMode,
                     ) {
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            com.ashareai.app.ui.components.LocalWorkspaceChrome provides com.ashareai.app.ui.components.WorkspaceChrome(
+                                workspace = targetWorkspace,
+                                enabled = !workspaceSwitchInFlight,
+                                onSelect = { selected ->
+                                    if (selected != targetWorkspace && !workspaceSwitchInFlight) {
+                                        workspaceSwitchInFlight = true
+                                        lifecycleScope.launch {
+                                            if (selected == Workspace.LOCAL) com.ashareai.app.island.MonitorService.stop(this@MainActivity)
+                                            else com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
+                                            app.workspaceStore.setWorkspace(selected)
+                                        }
+                                    }
+                                },
+                            ),
+                        ) {
                         com.ashareai.app.standalone.ui.StandaloneAppRoot(
                             viewModel = viewModel,
                             pendingRoute = pendingRoute,
@@ -184,6 +200,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                         )
+                        }
                     }
                 }
 
@@ -264,6 +281,22 @@ class MainActivity : ComponentActivity() {
                         powerSaveMode = isPowerSaveMode,
                     ) {
                         androidx.compose.runtime.CompositionLocalProvider(
+                            com.ashareai.app.ui.components.LocalWorkspaceChrome provides com.ashareai.app.ui.components.WorkspaceChrome(
+                                workspace = targetWorkspace,
+                                enabled = !workspaceSwitchInFlight,
+                                onSelect = { selected ->
+                                    if (selected != targetWorkspace && !workspaceSwitchInFlight) {
+                                        workspaceSwitchInFlight = true
+                                        lifecycleScope.launch {
+                                            if (selected == Workspace.LOCAL) com.ashareai.app.island.MonitorService.stop(this@MainActivity)
+                                            else com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
+                                            app.workspaceStore.setWorkspace(selected)
+                                        }
+                                    }
+                                },
+                            ),
+                        ) {
+                        androidx.compose.runtime.CompositionLocalProvider(
                             com.ashareai.app.ui.LocalAppContainer provides appViewModel.container,
                             com.ashareai.app.ui.LocalMarketViewModel provides marketViewModel,
                         ) {
@@ -285,29 +318,12 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                         }
+                        }
                     }
                 }
                 }
                 }
-                WorkspaceSwitcher(
-                    workspace = workspace,
-                    onWorkspaceSelected = { selected ->
-                        if (selected == workspace || workspaceSwitchInFlight) return@WorkspaceSwitcher
-                        workspaceSwitchInFlight = true
-                        lifecycleScope.launch {
-                            if (selected == Workspace.LOCAL) {
-                                com.ashareai.app.island.MonitorService.stop(this@MainActivity)
-                            } else {
-                                com.ashareai.app.standalone.monitor.MarketMonitorService.stop(this@MainActivity)
-                            }
-                            app.workspaceStore.setWorkspace(selected)
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(top = 6.dp, end = 12.dp),
-                )
+
             }
         }
     }

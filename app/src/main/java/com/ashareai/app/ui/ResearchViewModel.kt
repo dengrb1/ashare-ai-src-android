@@ -92,13 +92,13 @@ private fun ResearchSettings.migrateLegacyDefaults(): ResearchSettings {
     fun migrate(value: Double, legacy: Double, current: Double): Double =
         if (value == legacy) current else value
     return copy(
-        automatic_total_budget = migrate(automatic_total_budget, 1_000_000.0, 100_000.0),
-        automatic_per_symbol_budget = migrate(automatic_per_symbol_budget, 80_000.0, 10_000.0),
+        automatic_total_budget = automatic_total_budget,
+        automatic_per_symbol_budget = automatic_per_symbol_budget,
         automatic_reports = automatic_reports.map { report ->
             if (report.config_version <= 1) {
                 report.copy(
-                    total_budget = migrate(report.total_budget, 1_000_000.0, 100_000.0),
-                    per_symbol_budget = migrate(report.per_symbol_budget, 80_000.0, 10_000.0),
+                    total_budget = report.total_budget,
+                    per_symbol_budget = report.per_symbol_budget,
                 )
             } else {
                 report

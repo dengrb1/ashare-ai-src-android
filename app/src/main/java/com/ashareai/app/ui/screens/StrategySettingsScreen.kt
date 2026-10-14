@@ -1,5 +1,7 @@
 package com.ashareai.app.ui.screens
 
+import com.ashareai.app.ui.components.GlassSwitch as Switch
+import com.ashareai.app.ui.components.GlassButton as Button
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,7 +64,15 @@ fun StrategySettingsScreen(appViewModel: AppViewModel, navController: NavHostCon
         scope.launch {
             runCatching {
                 appViewModel.screenContext().contentResolver.openInputStream(uri)?.use { stream ->
-                    Json.parseToJsonElement(stream.readBytes().decodeToString()).jsonObject
+                    val bytes = stream.readBytes()
+                    require(bytes.size <= 128 * 1024) { "训练配置文件过大" }
+                    val objectValue = Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+                    val allowed = setOf(
+                        "scope", "symbols", "training_sessions", "history_sessions",
+                        "entry_discounts", "use_real_watchlist_quotes", "monitor_buy_entry_alerts",
+                    )
+                    require(objectValue.keys.all { it in allowed }) { "训练配置包含不支持的字段" }
+                    objectValue
                 } ?: error("无法读取训练包")
             }.onSuccess { imported ->
                 trainingConfig = imported
@@ -89,6 +99,7 @@ fun StrategySettingsScreen(appViewModel: AppViewModel, navController: NavHostCon
                     name = trainingName.ifBlank { "自选股智能训练" },
                     start_date = LocalDate.now().minusYears(2).toString(),
                     end_date = LocalDate.now().toString(),
+                    mode = "WATCHLIST_HISTORICAL",
                     config = config,
                 ),
             )

@@ -30,6 +30,9 @@ import com.ashareai.app.data.model.KlineBar
 import com.ashareai.app.data.KlinePeriod
 import com.ashareai.app.data.KlineRepository
 import com.ashareai.app.ui.fmt2
+import com.ashareai.app.ui.fmtAmount
+import com.ashareai.app.ui.fmtPercent
+import com.ashareai.app.ui.fmtVolume
 import com.ashareai.app.ui.theme.StockDown
 import com.ashareai.app.ui.theme.StockUp
 import kotlin.math.max
@@ -37,12 +40,13 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import java.time.format.DateTimeFormatter
 
-enum class SubChart(val label: String) { VOLUME("成交量"), MACD("MACD"), KDJ("KDJ") }
+enum class SubChart(val label: String) { VOLUME("成交量"), MACD("MACD"), KDJ("KDJ"), CAPITAL_ACTIVITY("量价活跃度") }
 
 private data class Indicators(
     val ma5: List<Double?>,
     val ma10: List<Double?>,
     val ma20: List<Double?>,
+    val ma60: List<Double?>,
     val macdDif: List<Double>,
     val macdDea: List<Double>,
     val macdHist: List<Double>,
@@ -90,7 +94,7 @@ private fun computeIndicators(bars: List<KlineBar>): Indicators {
         d = d * 2 / 3 + k / 3
         kList.add(k); dList.add(d); jList.add(3 * k - 2 * d)
     }
-    return Indicators(ma(closes, 5), ma(closes, 10), ma(closes, 20), dif, dea, hist, kList, dList, jList)
+    return Indicators(ma(closes, 5), ma(closes, 10), ma(closes, 20), ma(closes, 60), dif, dea, hist, kList, dList, jList)
 }
 
 /**
@@ -154,6 +158,28 @@ fun CandlestickChart(
                 color = if (legendBar.close >= legendBar.open) StockUp else StockDown,
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val selectedIndicators = if (idx != null && idx in indicators.ma5.indices) indicators else indicators
+            listOf(
+                Triple("MA5", selectedIndicators.ma5.getOrNull(idx ?: selectedIndicators.ma5.lastIndex), ma5Color),
+                Triple("MA10", selectedIndicators.ma10.getOrNull(idx ?: selectedIndicators.ma10.lastIndex), ma10Color),
+                Triple("MA20", selectedIndicators.ma20.getOrNull(idx ?: selectedIndicators.ma20.lastIndex), ma20Color),
+                Triple("MA60", selectedIndicators.ma60.getOrNull(idx ?: selectedIndicators.ma60.lastIndex), Color(0xFF00897B)),
+            ).forEach { (label, value, color) ->
+                Text("$label ${value?.fmt2() ?: "--"}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = color)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("量 ${legendBar.volume.fmtVolume()}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text("额 ${legendBar.amount.fmtAmount()}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text("换手 ${legendBar.turnover_rate?.fmtPercent() ?: "--"}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = textColor)
+        }
 
         Canvas(
             modifier = Modifier
@@ -196,7 +222,7 @@ fun CandlestickChart(
 
             var minP = visibleBars.minOf { it.low }
             var maxP = visibleBars.maxOf { it.high }
-            listOf(indicators.ma5, indicators.ma10, indicators.ma20).forEach { series ->
+            listOf(indicators.ma5, indicators.ma10, indicators.ma20, indicators.ma60).forEach { series ->
                 series.filterNotNull().forEach { v -> minP = min(minP, v); maxP = max(maxP, v) }
             }
             val range = (maxP - minP).takeIf { it > 0 } ?: 1.0
@@ -245,12 +271,14 @@ fun CandlestickChart(
             drawMa(indicators.ma5, ma5Color)
             drawMa(indicators.ma10, ma10Color)
             drawMa(indicators.ma20, ma20Color)
+            drawMa(indicators.ma60, Color(0xFF00897B))
 
             // 副图
             when (subChart) {
                 SubChart.VOLUME -> drawVolume(visibleBars, slot, bodyW, subTop, subH)
                 SubChart.MACD -> drawMacd(indicators, visibleBars.size, slot, bodyW, subTop, subH, gridColor)
                 SubChart.KDJ -> drawKdj(indicators, visibleBars.size, slot, subTop, subH)
+                SubChart.CAPITAL_ACTIVITY -> drawUnavailableIndicator(textMeasurer, subTop, subH)
             }
 
             listOf(0f, .25f, .5f, .75f, 1f).forEach { ratio ->
@@ -264,7 +292,7 @@ fun CandlestickChart(
 
             // 十字光标
             crosshair?.let { ci ->
-                if (ci in bars.indices) {
+                if (ci in visibleBars.indices) {
                     val x = slot * ci + slot / 2
                     drawLine(crossColor, Offset(x, 0f), Offset(x, size.height), 1f)
                     val y = yOf(visibleBars[ci].close)
@@ -282,6 +310,7 @@ fun CandlestickChart(
             Text("MA5", style = MaterialTheme.typography.labelSmall, color = ma5Color)
             Text("MA10", style = MaterialTheme.typography.labelSmall, color = ma10Color)
             Text("MA20", style = MaterialTheme.typography.labelSmall, color = ma20Color)
+            Text("MA60", style = MaterialTheme.typography.labelSmall, color = Color(0xFF00897B))
             Spacer(Modifier.weight(1f))
             IconButton(
                 onClick = { viewport = viewport.zoom(bars.size, 1.4f) },
@@ -308,6 +337,7 @@ private fun Indicators.slice(range: IntRange): Indicators = Indicators(
     ma5 = ma5.slice(range),
     ma10 = ma10.slice(range),
     ma20 = ma20.slice(range),
+    ma60 = ma60.slice(range),
     macdDif = macdDif.slice(range),
     macdDea = macdDea.slice(range),
     macdHist = macdHist.slice(range),
@@ -393,4 +423,17 @@ private fun DrawScope.drawKdj(ind: Indicators, count: Int, slot: Float, top: Flo
     line(ind.k, Color(0xFFF2A93B))
     line(ind.d, Color(0xFF3D5AFE))
     line(ind.j, Color(0xFFAB47BC))
+}
+
+private fun DrawScope.drawUnavailableIndicator(
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    top: Float,
+    height: Float,
+) {
+    drawText(
+        textMeasurer,
+        "暂无资金流/主力数据",
+        style = TextStyle(fontSize = 11.sp, color = Color.Gray),
+        topLeft = Offset(12.dp.toPx(), top + (height - 14.dp.toPx()).coerceAtLeast(0f) / 2),
+    )
 }

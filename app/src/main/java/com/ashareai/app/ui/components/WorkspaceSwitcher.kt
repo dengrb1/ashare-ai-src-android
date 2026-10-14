@@ -3,6 +3,8 @@ package com.ashareai.app.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -32,11 +34,9 @@ fun WorkspaceSwitcher(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Surface(
+    com.ashareai.app.ui.theme.LiquidGlassSurface(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(3.dp),
@@ -76,7 +76,8 @@ private fun WorkspaceChoice(
                 if (selected) Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                 else Modifier
             )
-            .clickable(enabled = enabled, role = Role.Tab, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = Role.Tab, onClick = onClick)
+            .heightIn(min = 48.dp)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,

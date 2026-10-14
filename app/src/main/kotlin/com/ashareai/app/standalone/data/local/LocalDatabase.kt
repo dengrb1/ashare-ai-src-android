@@ -48,8 +48,8 @@ abstract class LocalDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE research_runs ADD COLUMN triggerSource TEXT NOT NULL DEFAULT 'MANUAL'")
                 db.execSQL("ALTER TABLE research_runs ADD COLUMN automaticReportSlot TEXT")
-                db.execSQL("ALTER TABLE research_runs ADD COLUMN totalBudget REAL NOT NULL DEFAULT 1000000")
-                db.execSQL("ALTER TABLE research_runs ADD COLUMN perSymbolBudget REAL NOT NULL DEFAULT 80000")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN totalBudget REAL NOT NULL DEFAULT 100000")
+                db.execSQL("ALTER TABLE research_runs ADD COLUMN perSymbolBudget REAL NOT NULL DEFAULT 10000")
                 db.execSQL("ALTER TABLE research_runs ADD COLUMN maxStockPrice REAL")
                 db.execSQL("ALTER TABLE research_runs ADD COLUMN configVersion INTEGER NOT NULL DEFAULT 1")
             }

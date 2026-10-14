@@ -66,6 +66,13 @@ class FactorScoringTest {
             { FactorGenome(buyThreshold = 101.0) },
             { FactorGenome(riskBudget = 0.0) },
             { FactorGenome(mutationSeed = -1) },
+            {
+                FactorGenome(
+                    fundamentalWeight = 0.35,
+                    technicalWeight = 0.30,
+                    momentumWeight = 0.05,
+                )
+            },
         ).forEach { create ->
             try {
                 create()

@@ -13,7 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.ashareai.app.ui.AppViewModel
-import com.ashareai.app.ui.components.AppCard
+import com.ashareai.app.ui.components.*
 import com.ashareai.app.ui.navigation.Routes
 
 /** 我的页：用户信息 + 设置入口 + 退出登录。 */
@@ -28,7 +28,7 @@ fun ProfileScreen(
     var confirmLogout by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBarSimple(title = "我的")
+        TopAppBarSimple(title = "设置")
 
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
@@ -46,12 +46,9 @@ fun ProfileScreen(
                 }
             }
 
-            item { ProfileEntry("通知中心") { navController.navigate(Routes.NOTIFICATIONS) } }
-            item { ProfileEntry("个人档案（导出/导入）") { navController.navigate(Routes.PERSONAL_DATA) } }
-            item { ProfileEntry("双工作区同步") { navController.navigate(Routes.WORKSPACE_SYNC) } }
-            item { ProfileEntry("切换到独立版") { onSwitchToLocal() } }
-            item { ProfileEntry("设置") { navController.navigate(Routes.SETTINGS) } }
+            item { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { SettingsOverview(onSelect = { category -> navController.navigate("settings?category=${category.id}") }, connected = true) } }
             item { ProfileEntry("策略设置与智能训练") { navController.navigate(Routes.STRATEGY_SETTINGS) } }
+            item { ProfileEntry("切换到独立版") { onSwitchToLocal() } }
             if (user?.role?.equals("ADMIN", ignoreCase = true) == true || user?.is_admin_account == true) {
                 item {
                     Text(

@@ -34,6 +34,7 @@ private val primaryResearchEntries = listOf(
 )
 
 private val toolEntries = listOf(
+    HubEntry("AI 问答", "解释研究结果与股票诊断", Routes.AI_CHAT, Icons.Outlined.SmartToy),
     HubEntry("退出研究", "盘中触发的退出与止损方案", Routes.EXIT_ADVICE, Icons.AutoMirrored.Outlined.ExitToApp),
     HubEntry("金融搜索", "按公司、证券和财务问题检索", Routes.SEARCH, Icons.Outlined.Search),
     HubEntry("回测工作台", "在版本快照上模拟事件回测", Routes.BACKTEST, Icons.Outlined.Timeline),
